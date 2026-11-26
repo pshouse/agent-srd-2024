@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node / Frontend
+node_modules/
+
+# SQLite transient journals
+dist/*.sqlite-journal
+dist/*.sqlite-wal
+dist/*.sqlite-shm
+
+# OS
+.DS_Store
