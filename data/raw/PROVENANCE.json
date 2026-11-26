@@ -1,0 +1,23 @@
+{
+  "upstream_repo": "https://github.com/5e-bits/5e-srd-api",
+  "upstream_path": "packages/5e-database/src/2024/en",
+  "upstream_commit": "8a339e73ed5bba9ffec2ad6be9e76b5afa9c1b24",
+  "upstream_commit_date": "2026-11-23T10:39:23-08:00",
+  "upstream_database_version": "7.10.0",
+  "ruleset": "2024",
+  "srd_version": "5.2",
+  "locale": "en",
+  "file_count": 25,
+  "entity_count": 2029,
+  "total_bytes": 3214127,
+  "content_license": {
+    "name": "CC-BY-4.0",
+    "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+    "attribution": "This work includes material from the System Reference Document 5.2 (\"SRD 5.2\") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode."
+  },
+  "dataset_packaging_license": {
+    "name": "MIT",
+    "copyright": "Copyright (c) [2018-2020] [Adrian Padua, Christopher Ward]",
+    "file": "data/raw/LICENSE.md"
+  }
+}
