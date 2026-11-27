@@ -302,6 +302,11 @@ def build_observation(
             )
 
     legal = compute_legal_actions(state, rules)
+    hint = legal.get("reroll_hint")
+    if isinstance(hint, dict):
+        target = combatants.get(str(hint.get("target_id") or ""))
+        if isinstance(target, dict) and str(target.get("side")) != side:
+            hint.pop("target_ac", None)
     if actor.get("kind") == "monster":
         legal["weapons"] = list(avail_monster_actions) if (actor.get("turn_resources") or {}).get("action") else []
     reaction_spells = _reaction_spells_for(actor, rules)
@@ -632,6 +637,7 @@ def run_match(
                             "turn_index": turn_counter,
                             "actor_id": active_id,
                             "side": side,
+                            "action_index": action_index,
                             "attempt": attempt,
                             "intent": {},
                             "error": err_msg,
@@ -653,8 +659,9 @@ def run_match(
                             "turn_index": turn_counter,
                             "actor_id": active_id,
                             "side": side,
+                            "action_index": action_index,
                             "attempt": attempt,
-                            "intent": {"type": itype},
+                            "intent": intent,
                             "error": rejection,
                         }
                     )
@@ -681,6 +688,7 @@ def run_match(
                                     "turn_index": turn_counter,
                                     "actor_id": active_id,
                                     "side": side,
+                                    "action_index": action_index,
                                     "attempt": attempt,
                                     "intent": intent,
                                     "error": err_msg,
@@ -757,6 +765,7 @@ def run_match(
                         "turn_index": turn_counter,
                         "actor_id": active_id,
                         "side": side,
+                        "action_index": action_index,
                         "attempt": attempt,
                         "intent": intent,
                         "error": err_msg,
@@ -843,7 +852,7 @@ def run_match(
     rounds_played = max((int(a["round"]) for a in actions), default=min(int(state["round"]), effective_max_rounds))
 
     transcript: dict[str, Any] = {
-        "schema_version": "3",
+        "schema_version": "4",
         "dataset_id": rules.dataset_id,
         "scenario": {
             "id": compiled["id"],
@@ -974,6 +983,35 @@ def replay_match(
     scenario_override: str | Path | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Replay a recorded MatchTranscript through `ReplayDriver` + `srd2024.engine.combat.step()`."""
+    schema = str(transcript.get("schema_version") or "")
+    if schema == "3":
+        message = (
+            "unsupported schema_version '3'. v0.3 traces cannot be replayed; expected schema_version 4."
+        )
+        return {
+            "status": "error",
+            "error": message,
+            "scenario_id": str((transcript.get("scenario") or {}).get("id") or ""),
+            "seed": int((transcript.get("config") or {}).get("seed", 0) or 0),
+            "deterministic_match": False,
+            "original_digest": str(transcript.get("digest") or ""),
+            "replayed_digest": "",
+            "diffs": [message],
+            "replayed_transcript": None,
+        }
+    if schema not in ("4", ""):
+        message = f"unsupported schema_version {schema!r}. Expected schema_version 4."
+        return {
+            "status": "error",
+            "error": message,
+            "scenario_id": str((transcript.get("scenario") or {}).get("id") or ""),
+            "seed": int((transcript.get("config") or {}).get("seed", 0) or 0),
+            "deterministic_match": False,
+            "original_digest": str(transcript.get("digest") or ""),
+            "replayed_digest": "",
+            "diffs": [message],
+            "replayed_transcript": None,
+        }
     sc_meta = transcript.get("scenario") or {}
     cfg = transcript.get("config") or {}
     scenario_id = str(sc_meta.get("id") or (transcript.get("initial_state") or {}).get("encounter_id") or "")
@@ -981,6 +1019,12 @@ def replay_match(
     max_rounds = int(cfg.get("max_rounds") or sc_meta.get("max_rounds") or 10)
     max_actions = int(cfg.get("max_actions_per_turn", 6))
     max_retries = int(cfg.get("max_retries_per_action", 2))
+    peak_attempt = 1
+    for entry in list(transcript.get("violations") or []) + list(transcript.get("actions") or []):
+        if not isinstance(entry, dict):
+            continue
+        peak_attempt = max(peak_attempt, int(entry.get("attempt") or entry.get("attempts") or 1))
+    max_retries = max(max_retries, peak_attempt - 1)
 
     if scenario_override is not None:
         scenario_input: str | Path | dict[str, Any] = scenario_override
@@ -1211,7 +1255,7 @@ def run_benchmark(
         row["rank"] = rank_idx
 
     return {
-        "schema_version": "3",
+        "schema_version": "4",
         "status": "ok",
         "scenarios": scenario_ids,
         "seeds": seed_list,

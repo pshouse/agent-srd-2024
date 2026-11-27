@@ -169,7 +169,13 @@ class TestHumanMenuAndHud(unittest.TestCase):
         in_fn, out_fn, outputs = _make_scripted_io(
             ["", "999", "bogus", "help", "status", "say Hold the line!", "move 10 0"]
         )
-        drv = create_driver("human", rules=self.rules, input_fn=in_fn, output_fn=out_fn)
+        drv = create_driver(
+            "human",
+            rules=self.rules,
+            input_fn=in_fn,
+            output_fn=out_fn,
+            allow_human=True,
+        )
         self.assertIsInstance(drv, HumanDriver)
         dec = drv.decide(obs)
 
@@ -207,12 +213,14 @@ class TestHumanMenuAndHud(unittest.TestCase):
         self.assertEqual(menu[0]["intent"], {"type": "reroll", "actor_id": "pc-bram"})
         self.assertEqual(
             menu[0]["label"],
-            "Spend Heroic Inspiration — reroll Javelin vs Goblin Scout A (was 14 vs AC 15)",
+            "Spend Heroic Inspiration — reroll Javelin vs Goblin Scout A (was 14)",
         )
+        self.assertNotIn("target_ac", menu[0]["meta"]["reroll_hint"])
 
         hud = render_tactical_hud(obs, menu)
         self.assertIn("Heroic Inspiration: Ready", hud)
-        self.assertIn("Spend Heroic Inspiration — reroll Javelin vs Goblin Scout A (was 14 vs AC 15)", hud)
+        self.assertIn("Spend Heroic Inspiration — reroll Javelin vs Goblin Scout A (was 14)", hud)
+        self.assertNotIn("vs AC", hud)
 
         # Verify all reroll shortcuts emit {"type": "reroll", "actor_id": "pc-bram"}
         for shortcut in ("r", "reroll", "inspiration", "heroic inspiration"):
@@ -547,7 +555,7 @@ class TestInteractiveSessionsAndSeats(unittest.TestCase):
         joined_out = "\n".join(outputs)
         self.assertIn("Heroic Inspiration: Ready", joined_out)
         self.assertIn(
-            "Spend Heroic Inspiration — reroll Javelin vs Goblin Scout B (was 14 vs AC 15)",
+            "Spend Heroic Inspiration — reroll Javelin vs Goblin Scout B (was 14)",
             joined_out,
         )
         self.assertIn("Bram Ironhand spends Heroic Inspiration to reroll Javelin", joined_out)

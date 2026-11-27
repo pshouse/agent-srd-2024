@@ -2659,7 +2659,7 @@ class HeuristicTacticalDriver:
 
 
 class ReplayDriver:
-    """Replays recorded decisions verbatim from a `MatchTranscript['actions']` list."""
+    """Replays recorded decisions, including rejected attempts, from a MatchTranscript."""
 
     name: str = "replay"
 
@@ -2667,7 +2667,31 @@ class ReplayDriver:
         if not isinstance(transcript, dict) or not isinstance(transcript.get("actions"), list):
             raise ValueError("ReplayDriver requires a MatchTranscript dict with an 'actions' list.")
         self._side: str | None = side
-        self._queue: list[dict[str, Any]] = []
+        queued: list[tuple[tuple[int, int, int, int, int], dict[str, Any]]] = []
+        for entry in transcript.get("violations") or []:
+            if not isinstance(entry, dict):
+                continue
+            if side is not None and entry.get("side") != side:
+                continue
+            intent = entry.get("intent") if isinstance(entry.get("intent"), dict) else {"type": ""}
+            queued.append(
+                (
+                    (
+                        int(entry.get("round") or 0),
+                        int(entry.get("turn_index") or 0),
+                        int(entry.get("action_index") or 0),
+                        int(entry.get("attempt") or 1),
+                        0,
+                    ),
+                    {
+                        "actor_id": entry.get("actor_id"),
+                        "intent": copy.deepcopy(intent),
+                        "rationale": "",
+                        "table_talk": None,
+                        "usage": {},
+                    },
+                )
+            )
         for entry in transcript["actions"]:
             if not isinstance(entry, dict):
                 continue
@@ -2677,7 +2701,20 @@ class ReplayDriver:
                 continue
             if not isinstance(entry.get("intent"), dict):
                 continue
-            self._queue.append(copy.deepcopy(entry))
+            queued.append(
+                (
+                    (
+                        int(entry.get("round") or 0),
+                        int(entry.get("turn_index") or 0),
+                        int(entry.get("action_index") or 0),
+                        int(entry.get("attempts") or 1),
+                        1,
+                    ),
+                    copy.deepcopy(entry),
+                )
+            )
+        queued.sort(key=lambda item: item[0])
+        self._queue: list[dict[str, Any]] = [item[1] for item in queued]
         self._index: int = 0
 
     @property
@@ -3152,6 +3189,7 @@ def create_driver(
     http_transport: HttpTransport | None = None,
     replay_transcript: dict[str, Any] | None = None,
     replay_side: str | None = None,
+    allow_human: bool = False,
     input_fn: Callable[[str], str] | None = None,
     output_fn: Callable[[str], Any] | None = None,
     nl_driver: BaseLLMDriver | None = None,
@@ -3191,6 +3229,7 @@ def create_driver(
             http_transport=cfg.get("http_transport", http_transport),
             replay_transcript=cfg.get("replay_transcript", replay_transcript),
             replay_side=cfg.get("replay_side", replay_side),
+            allow_human=bool(cfg.get("allow_human", allow_human)),
             input_fn=cfg.get("input_fn", input_fn),
             output_fn=cfg.get("output_fn", output_fn),
             nl_driver=cfg.get("nl_driver", nl_driver),
@@ -3209,6 +3248,11 @@ def create_driver(
     if lower == "heuristic-tactical":
         return HeuristicTacticalDriver(rules=rules)
     if lower == "human":
+        if not allow_human:
+            raise ValueError(
+                "Driver spec 'human' is only available in interactive play "
+                "(`srd arena play` / `srd-arena play`)."
+            )
         from .human import HumanDriver
 
         return HumanDriver(

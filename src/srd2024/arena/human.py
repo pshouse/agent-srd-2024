@@ -186,7 +186,11 @@ def build_human_action_menu(
         r_target = hint.get("target_name") or hint.get("target_id")
         prev_total = hint.get("previous_total")
         prev_d20 = hint.get("previous_d20")
+        enemy_ids = {str(e.get("id") or "") for e in enemies}
+        target_id = str(hint.get("target_id") or "")
         target_ac = hint.get("target_ac")
+        if target_id in enemy_ids:
+            target_ac = None
         if r_target and prev_total is not None and target_ac is not None:
             menu_label = (
                 f"Spend Heroic Inspiration — reroll {r_label} vs {r_target} "
@@ -208,7 +212,11 @@ def build_human_action_menu(
             {"type": "reroll", "actor_id": actor_id},
             {
                 "action_kind": "reroll",
-                "reroll_hint": copy.deepcopy(hint) if isinstance(hint, dict) else {},
+                "reroll_hint": {
+                    k: v
+                    for k, v in (hint.items() if isinstance(hint, dict) else [])
+                    if not (k == "target_ac" and target_id in enemy_ids)
+                },
             },
         )
 

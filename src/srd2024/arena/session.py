@@ -25,11 +25,13 @@ from srd2024.engine.combat import step
 from srd2024.engine.dice import DeterministicRNG
 from srd2024.engine.store import RulesStore
 
-from .agents import AgentDriver, BaseLLMDriver, create_driver
+from .agents import AgentDriver, BaseLLMDriver, create_driver, scrub_secrets
 from .human import HumanDriver, HumanSessionPause
 from .runner import (
+    _arena_intent_rejection,
     _cannot_act,
     _describe_driver_config,
+    _driver_visible_error,
     _find_monster_action,
     _is_action_on_cooldown,
     _is_match_over,
@@ -194,9 +196,18 @@ def resolve_seat_drivers(
     return party_map, enemy_map
 
 
-def save_session_checkpoint(path: str | Path, checkpoint: dict[str, Any]) -> Path:
+def save_session_checkpoint(
+    path: str | Path,
+    checkpoint: dict[str, Any],
+    *,
+    force: bool = False,
+) -> Path:
     """Persist an interactive session checkpoint JSON cleanly to disk."""
     out_path = Path(path).expanduser()
+    if out_path.exists() and not force:
+        raise FileExistsError(
+            f"Refusing to overwrite '{out_path}'. Pass --force to replace it."
+        )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
         json.dumps(checkpoint, ensure_ascii=False, indent=2) + "\n",
@@ -284,6 +295,7 @@ def run_interactive_session(
     save_path: str | Path | None = None,
     resume_path: str | Path | None = None,
     out_trace: str | Path | None = None,
+    force: bool = False,
     api_base: str | None = None,
     api_key_env: str | None = None,
     temperature: float = 0.0,
@@ -305,14 +317,18 @@ def run_interactive_session(
         )
         eff_max_actions = int(saved_cfg.get("max_actions_per_turn", max_actions_per_turn))
         eff_max_retries = int(saved_cfg.get("max_retries_per_action", max_retries_per_action))
-        eff_play_as = play_as if play_as is not None else saved_cfg.get("play_as")
-        eff_seat_overrides = (
-            _parse_seat_overrides(seat_overrides)
-            if seat_overrides is not None
-            else dict(saved_cfg.get("seat_overrides") or {})
-        )
-        eff_party_agent = saved_cfg.get("party_agent", party_agent)
-        eff_enemy_agent = saved_cfg.get("enemy_agent", enemy_agent)
+        eff_play_as = play_as
+        eff_seat_overrides = _parse_seat_overrides(seat_overrides) if seat_overrides is not None else {}
+        eff_party_agent = party_agent
+        eff_enemy_agent = enemy_agent
+        saved_party = saved_cfg.get("party_agent")
+        saved_enemy = saved_cfg.get("enemy_agent")
+        if saved_party != party_agent or saved_enemy != enemy_agent or saved_cfg.get("seat_overrides"):
+            output_fn(
+                "Warning: checkpoint driver settings (drivers, seats, base URLs, "
+                "api_key_env) were ignored. Only the current command line is used. "
+                "Checkpoints contain RNG state and exact HP and are for the player's own use."
+            )
 
         initial_state: dict[str, Any] = copy.deepcopy(ckpt["initial_state"])
         state: dict[str, Any] = copy.deepcopy(ckpt["state"])
@@ -606,7 +622,7 @@ def run_interactive_session(
                     )
                     saved_str: str | None = None
                     if save_path is not None:
-                        saved_p = save_session_checkpoint(save_path, ckpt_payload)
+                        saved_p = save_session_checkpoint(save_path, ckpt_payload, force=force)
                         saved_str = str(saved_p)
                         output_fn(f"[Session paused ({pause.reason}) — checkpoint saved to {saved_str}]")
                     else:
@@ -624,19 +640,20 @@ def run_interactive_session(
                         "actions_taken": len(actions),
                     }
                 except Exception as exc:
-                    err_msg = str(exc) or type(exc).__name__
+                    err_msg = scrub_secrets(str(exc) or type(exc).__name__)
                     violations.append(
                         {
                             "round": cur_round,
                             "turn_index": turn_counter,
                             "actor_id": active_id,
                             "side": side,
+                            "action_index": action_index,
                             "attempt": attempt,
                             "intent": {},
                             "error": err_msg,
                         }
                     )
-                    retry_feedback = (
+                    retry_feedback = scrub_secrets(
                         f"Attempt {attempt} decision error: {err_msg}. "
                         "Emit a valid legal intent."
                     )
@@ -644,18 +661,27 @@ def run_interactive_session(
 
                 itype = str(intent["type"]).strip().lower()
                 intent["type"] = itype
-                if not intent.get("actor_id") and itype in (
-                    "move",
-                    "attack",
-                    "dodge",
-                    "dash",
-                    "disengage",
-                    "help",
-                    "end_turn",
-                    "cast_spell",
-                    "reroll",
-                ):
-                    intent["actor_id"] = active_id
+                rejection = _arena_intent_rejection(intent, active_id)
+                if rejection is not None:
+                    err_msg = scrub_secrets(rejection)
+                    violations.append(
+                        {
+                            "round": cur_round,
+                            "turn_index": turn_counter,
+                            "actor_id": active_id,
+                            "side": side,
+                            "action_index": action_index,
+                            "attempt": attempt,
+                            "intent": intent,
+                            "error": err_msg,
+                        }
+                    )
+                    retry_feedback = scrub_secrets(
+                        f"{rejection} Emit one allowed intent for the active combatant."
+                    )
+                    if is_human_turn:
+                        output_fn(f"  ! Rejected: {err_msg}")
+                    continue
 
                 # Recharge sidecar validation before calling combat.step()
                 recharging_action_name: str | None = None
@@ -675,6 +701,7 @@ def run_interactive_session(
                                     "turn_index": turn_counter,
                                     "actor_id": active_id,
                                     "side": side,
+                                    "action_index": action_index,
                                     "attempt": attempt,
                                     "intent": intent,
                                     "error": err_msg,
@@ -744,7 +771,9 @@ def run_interactive_session(
                         turn_ended = True
                     break
 
-                err_msg = str(res.get("error") or "Invalid intent.")
+                err_msg = scrub_secrets(
+                    _driver_visible_error(str(res.get("error") or "Invalid intent."), active_id)
+                )
                 if is_human_turn:
                     output_fn(f"  ! Rejected: {err_msg}")
                 violations.append(
@@ -753,12 +782,13 @@ def run_interactive_session(
                         "turn_index": turn_counter,
                         "actor_id": active_id,
                         "side": side,
+                        "action_index": action_index,
                         "attempt": attempt,
                         "intent": intent,
                         "error": err_msg,
                     }
                 )
-                retry_feedback = (
+                retry_feedback = scrub_secrets(
                     f"Previous intent {json.dumps(intent, sort_keys=True)} was rejected: {err_msg}. "
                     "Choose a legal action."
                 )
@@ -846,7 +876,7 @@ def run_interactive_session(
     )
 
     transcript: dict[str, Any] = {
-        "schema_version": "3",
+        "schema_version": "4",
         "dataset_id": rules.dataset_id,
         "scenario": {
             "id": compiled["id"],
@@ -882,6 +912,10 @@ def run_interactive_session(
 
     if out_trace is not None:
         trace_path = Path(out_trace).expanduser()
+        if trace_path.exists() and not force:
+            raise FileExistsError(
+                f"Refusing to overwrite '{trace_path}'. Pass --force to replace it."
+            )
         trace_path.parent.mkdir(parents=True, exist_ok=True)
         trace_path.write_text(
             json.dumps(transcript, ensure_ascii=False, indent=2) + "\n",

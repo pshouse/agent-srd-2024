@@ -522,9 +522,9 @@ class TestArenaMcpGate(unittest.TestCase):
 class TestVersionAndExperimentalNotice(unittest.TestCase):
     def test_versions_match_0_3_1(self) -> None:
         pyproject = PYPROJECT_PATH.read_text(encoding="utf-8")
-        self.assertIn('version = "0.3.1"', pyproject)
-        self.assertEqual(srd2024.__version__, "0.3.1")
-        self.assertEqual(SERVER_VERSION, "0.3.1")
+        self.assertIn('version = "0.4.0"', pyproject)
+        self.assertEqual(srd2024.__version__, "0.4.0")
+        self.assertEqual(SERVER_VERSION, "0.4.0")
 
     def test_experimental_notice(self) -> None:
         self.assertIn(_NOTICE, README_PATH.read_text(encoding="utf-8"))

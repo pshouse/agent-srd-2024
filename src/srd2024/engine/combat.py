@@ -2452,8 +2452,7 @@ def step(
                 )
                 revive_note = " (regains consciousness, remains Prone)" if revived else ""
                 tracker.hook(
-                    f"{actor['name']} casts {spell_name}, restoring {heal_amt} HP to {t['name']} "
-                    f"({t['hp']}/{t['hp_max']} HP){revive_note}."
+                    f"{actor['name']} casts {spell_name}, restoring {heal_amt} HP to {t['name']}{revive_note}."
                 )
 
         # 3. Temp HP spells (false-life).
@@ -2468,8 +2467,7 @@ def step(
                 t["temp_hp"] = max(int(t.get("temp_hp", 0)), t_amt)
                 tracker.emit("temp_hp_applied", target_id=tid, spell=spell_slug, amount=t_amt, temp_hp_after=t["temp_hp"])
                 tracker.hook(
-                    f"{actor['name']} casts {spell_name}, granting {t_amt} Temporary HP to {t['name']} "
-                    f"(Temp HP: {t['temp_hp']})."
+                    f"{actor['name']} casts {spell_name}, granting Temporary HP to {t['name']}."
                 )
 
         # 4. Auto-hit multi-projectile spells (`magic-missile`).
@@ -3360,7 +3358,7 @@ def step(
 
         spent_hook = (
             f"{actor_name} spends Heroic Inspiration to reroll {label} "
-            f"(previous: {prev_total} vs AC {target_ac})!"
+            f"(previous total {prev_total})."
         )
         merged_hooks = [spent_hook, *(re_res.get("narrative_hooks") or [])]
 

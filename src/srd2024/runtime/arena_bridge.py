@@ -260,6 +260,7 @@ def execute_arena_play(
     save_path: str | Path | None = None,
     resume_path: str | Path | None = None,
     out_trace: str | Path | None = None,
+    force: bool = False,
     input_fn: Any = input,
     output_fn: Any = print,
 ) -> dict[str, Any]:
@@ -309,6 +310,7 @@ def execute_arena_play(
         save_path=save_path,
         resume_path=resume_path,
         out_trace=out_trace,
+        force=force,
         api_base=api_base,
         api_key_env=api_key_env,
         temperature=temperature,
@@ -411,6 +413,12 @@ def add_arena_subcommands(
         dest="out_trace",
         default=None,
         help="Write the full MatchTranscript JSON to this file path.",
+    )
+    p_run.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Overwrite an existing --out-trace file.",
     )
 
     # 3. bench
@@ -586,6 +594,12 @@ def add_arena_subcommands(
         default=None,
         help="Write the final MatchTranscript JSON to this file path (replayable via 'srd-arena replay').",
     )
+    p_play.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Overwrite an existing --save checkpoint or --out-trace file.",
+    )
 
 
 def run_arena_cli_command(
@@ -618,6 +632,10 @@ def run_arena_cli_command(
         )
         if args.out_trace:
             out_path = Path(args.out_trace).expanduser()
+            if out_path.exists() and not getattr(args, "force", False):
+                raise FileExistsError(
+                    f"Refusing to overwrite '{out_path}'. Pass --force to replace it."
+                )
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(
                 json.dumps(transcript, ensure_ascii=False, indent=2) + "\n",
@@ -699,6 +717,7 @@ def run_arena_cli_command(
             save_path=args.save_path,
             resume_path=args.resume_path,
             out_trace=args.out_trace,
+            force=bool(getattr(args, "force", False)),
             input_fn=play_in,
             output_fn=play_out,
         )

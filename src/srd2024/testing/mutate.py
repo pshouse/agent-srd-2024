@@ -455,14 +455,19 @@ def apply_mutant(source_text: str, mutant: Mutant) -> str:
 
 
 def _build_isolated_env(tmp_src: Path, repo_root: Path) -> dict[str, str]:
-    """Construct subprocess environment pointing strictly at the temporary `src/` copy."""
-    env = dict(os.environ)
+    """Pass a minimal environment to mutant subprocesses. No API keys or other secrets."""
+    env: dict[str, str] = {}
+    for key in ("PATH", "PYTHONPATH", "PYTHONHASHSEED"):
+        if os.environ.get(key):
+            env[key] = os.environ[key]
     env["PYTHONPATH"] = f"{tmp_src}{os.pathsep}{repo_root}"
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    if not env.get("SRD2024_RULES"):
-        rules_file = (repo_root / "dist" / "rules.json").resolve()
-        if rules_file.is_file():
-            env["SRD2024_RULES"] = str(rules_file)
+    rules_file = (repo_root / "dist" / "rules.json").resolve()
+    if rules_file.is_file():
+        env["SRD2024_RULES"] = str(rules_file)
+    db_file = (repo_root / "dist" / "srd2024.sqlite").resolve()
+    if db_file.is_file():
+        env["SRD2024_DB"] = str(db_file)
     return env
 
 

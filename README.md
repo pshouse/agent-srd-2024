@@ -209,7 +209,7 @@ Stage 4 adds **interactive human-in-the-loop tabletop play** on top of the Stage
 
 ### 1. Interactive Tabletop Play (`bin/srd-arena play` / `bin/srd arena play`)
 
-Play any 5e 2024 (SRD 5.2) scenario directly in the terminal with an ASCII 5-ft tactical HUD, strict partial observability (enemy HP bands only — never leaking hidden enemy exact HP/AC), numbered legal actions, party `table_talk` (`say <msg>`), save/resume checkpoints, optional natural-language intent translation (`--nl-driver`), and 100% deterministic `replay`-verifiable traces:
+Play any 5e 2024 (SRD 5.2) scenario directly in the terminal with an ASCII 5-ft tactical HUD. Opposing observations and the human menu show HP bands only: they do not include the other side's exact HP, temporary HP, AC, save DC, or spell slots. Numbered legal actions, party `table_talk` (`say <msg>`), optional natural-language intent translation (`--nl-driver`), and `replay`-verifiable traces are included. Checkpoints store RNG state and exact HP for the player's own resume; they are not a shareable view, and `--resume` uses the drivers from the current command line rather than whatever the file names. `--save` and `--out-trace` refuse to overwrite an existing file unless `--force` is set. The `human` driver is only available in this interactive play command.
 
 ```bash
 # Play 1 adventurer alongside AI companions (with live party table_talk)
