@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Marks web/ as ES modules. There is no install step and there are no dependencies."
+}
