@@ -382,24 +382,44 @@ def _describe_driver_config(driver_or_map: AgentDriver | dict[str, AgentDriver])
 
 
 _ARENA_INTENT_TYPES = frozenset(
-    {"move", "attack", "cast_spell", "dodge", "dash", "disengage", "help", "end_turn"}
+    {
+        "move",
+        "attack",
+        "cast_spell",
+        "dodge",
+        "dash",
+        "disengage",
+        "help",
+        "end_turn",
+        "reroll",
+    }
 )
 _PRIVATE_RESOURCE_RE = re.compile(
     r"spell slots?|slots remaining|no Reaction|Reaction remaining",
     re.IGNORECASE,
 )
 _NAMED_RESOURCE_RE = re.compile(r"^(\S+) has no\b")
-_HIDDEN_NARRATION_RE = re.compile(
-    r"\s*\(\s*\d+\s+vs\s+AC\s+\d+\s*\)"
-    r"|\bvs\s+AC\s+\d+\b"
-    r"|\s*\(\s*DC\s+\d+\s*\)",
-    re.IGNORECASE,
+# Narration a player sees. The referee log in the transcript keeps the original
+# hooks. These patterns also cover forms Stage 4 adds, such as "(18/32 HP)",
+# "(failed CON DC 13)", and "(AC 17, ...)".
+_HIDDEN_NARRATION_RES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\s*\([^)]*\b(?:AC|DC)\b[^)]*\)", re.IGNORECASE),
+    re.compile(r"\bvs\s+AC\s+\d+\b", re.IGNORECASE),
+    re.compile(r"\bAC\s+\d+\b", re.IGNORECASE),
+    re.compile(r"\bDC\s+\d+\b", re.IGNORECASE),
+    re.compile(r"\s*\(\s*\d+\s*/\s*\d+\s*HP[^)]*\)", re.IGNORECASE),
+    re.compile(r"\b\d+\s*/\s*\d+\s*HP\b", re.IGNORECASE),
+    re.compile(r"\b\d+\s+temp(?:orary)?\s+HP\b", re.IGNORECASE),
+    re.compile(r"\blevel-\d+\s+spell\s+slots?\b", re.IGNORECASE),
+    re.compile(r"\b\d+\s+spell\s+slots?\b", re.IGNORECASE),
 )
 
 
 def _observer_event_text(text: str) -> str:
-    """Drop hidden to-hit, AC, and save-DC numbers from narration a player sees."""
-    cleaned = _HIDDEN_NARRATION_RE.sub("", str(text))
+    """Drop hidden AC, DC, exact HP, temp HP, and slot counts from player narration."""
+    cleaned = str(text)
+    for pattern in _HIDDEN_NARRATION_RES:
+        cleaned = pattern.sub("", cleaned)
     return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
 
 

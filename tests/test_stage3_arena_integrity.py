@@ -28,7 +28,15 @@ from srd2024.engine.store import RulesStore
 
 _SCENARIOS = ("goblin-ambush", "crypt-of-ghouls", "wyrmling-lair")
 _SEEDS = (1, 2, 3)
-_AC_LEAK_RE = re.compile(r"\bvs\s+AC\s+\d+\b|\bAC\s+\d+\b", re.IGNORECASE)
+_LEAK_RES = (
+    re.compile(r"\bAC\s+\d+", re.IGNORECASE),
+    re.compile(r"\bvs\s+AC\b", re.IGNORECASE),
+    re.compile(r"\bDC\s+\d+", re.IGNORECASE),
+    re.compile(r"\d+\s*/\s*\d+\s*HP", re.IGNORECASE),
+    re.compile(r"\d+\s+temp(?:orary)?\s+HP", re.IGNORECASE),
+    re.compile(r"\d+\s+spell\s+slots?", re.IGNORECASE),
+    re.compile(r"level-\d+\s+spell\s+slots?", re.IGNORECASE),
+)
 _FORBIDDEN_ENEMY_KEYS = {
     "hp",
     "hp_max",
@@ -292,6 +300,7 @@ class TestIntentAllowlistAndActor(unittest.TestCase):
             if isinstance(result, str):
                 self.assertNotIn("spell slot", result.lower())
                 self.assertNotIn("reaction remaining", result.lower())
+        self.assertIsNone(_arena_intent_rejection({"type": "reroll", "actor_id": "pc-lyra"}, "pc-lyra"))
 
 
 class TestObservationHiddenStats(unittest.TestCase):
@@ -299,29 +308,57 @@ class TestObservationHiddenStats(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.rules = RulesStore()
 
-    def test_observations_hide_ac_and_enemy_private_fields(self) -> None:
+    def test_narration_patterns_are_stripped_before_a_match(self) -> None:
+        scen = load_scenario("goblin-ambush", self.rules)
+        state = step(
+            None,
+            {"type": "start_encounter", "seed": 1, "combatants": scen["combatants"]},
+            self.rules,
+        )["state"]
+        hooks = [
+            "Bram hits the goblin (18 vs AC 17) for 5 slashing.",
+            "Topple mastery knocks the goblin Prone (failed CON DC 13).",
+            "The goblin is at (18/32 HP) and gains 6 Temporary HP.",
+            "A ward shows (AC 19) after a save (DC 15 Dexterity).",
+            "The caster has no level-3 spell slots remaining.",
+        ]
+        obs = build_observation(
+            state,
+            "pc-bram",
+            scen,
+            {"party": [], "enemy": []},
+            hooks,
+            {},
+            self.rules,
+        )
+        blob = "\n".join(obs["recent_events"])
+        for pattern in _LEAK_RES:
+            self.assertIsNone(pattern.search(blob), f"{pattern.pattern} in {blob!r}")
+
+    def test_full_matches_hide_opposing_ac_hp_dc_and_slots(self) -> None:
         for scenario in _SCENARIOS:
-            party = _Recording(HeuristicTacticalDriver(self.rules))
-            enemy = _Recording(HeuristicTacticalDriver(self.rules))
-            run_match(
-                scenario,
-                party_driver=party,
-                enemy_driver=enemy,
-                rules=self.rules,
-                seed=1,
-                max_rounds=2,
-            )
-            for label, recorder in (("party", party), ("enemy", enemy)):
-                self.assertGreater(len(recorder.observations), 0, scenario)
-                for obs in recorder.observations:
-                    for foe in obs["enemies"]:
-                        leaked = _FORBIDDEN_ENEMY_KEYS & set(foe)
-                        self.assertFalse(leaked, f"{scenario} {label} enemy keys {leaked}")
-                    for text in _strings(obs):
-                        self.assertIsNone(
-                            _AC_LEAK_RE.search(text),
-                            f"{scenario} {label} leaked narration: {text}",
-                        )
+            for seed in _SEEDS:
+                party = _Recording(HeuristicTacticalDriver(self.rules))
+                enemy = _Recording(HeuristicTacticalDriver(self.rules))
+                run_match(
+                    scenario,
+                    party_driver=party,
+                    enemy_driver=enemy,
+                    rules=self.rules,
+                    seed=seed,
+                )
+                for label, recorder in (("party", party), ("enemy", enemy)):
+                    self.assertGreater(len(recorder.observations), 0, f"{scenario} seed {seed}")
+                    for obs in recorder.observations:
+                        for foe in obs["enemies"]:
+                            leaked = _FORBIDDEN_ENEMY_KEYS & set(foe)
+                            self.assertFalse(leaked, f"{scenario} seed {seed} {label} keys {leaked}")
+                        for text in _strings({"recent_events": obs["recent_events"], "enemies": obs["enemies"]}):
+                            for pattern in _LEAK_RES:
+                                self.assertIsNone(
+                                    pattern.search(text),
+                                    f"{scenario} seed {seed} {label} leaked {pattern.pattern}: {text}",
+                                )
 
 
 class TestScoreFloorAndOrdering(unittest.TestCase):

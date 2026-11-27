@@ -123,6 +123,8 @@ Emits deterministic Stage 2 artifacts (also triggered automatically at the end o
 
 Stage 3 adds a deterministic, partial-observability **Multi-Agent 5e 2024 (SRD 5.2) Tabletop & Model Evaluation Arena** (`src/srd2024/arena/`, `bin/srd-arena`, `bin/srd arena`) strictly on top of the Stage 2 rules engine. Agents (offline deterministic bots or live LLMs over pure Python stdlib `urllib.request`) never roll dice or mutate state—every combat action is adjudicated by `srd2024.engine.combat.step()`, scored quantitatively (`0–100` across outcome, rules legality, tactical execution, and party coordination), and verifiable via 100% deterministic SHA-256 trace replay.
 
+Off-turn reaction spells such as Shield, sent through `srd encounter` or `srd_encounter`, are accepted only when the encounter state already has a `reaction_window` naming that caster. The engine does not open that window when an attack hits; the caller has to set it. On the caster's own turn a reaction spell still spends their reaction.
+
 ### 1. List Scenarios, Run Matches & Replay Traces (`bin/srd-arena` / `bin/srd arena`)
 
 Both `./bin/srd-arena <subcommand>` and `./bin/srd arena <subcommand>` support identical flags and 1:1 JSON parity:
