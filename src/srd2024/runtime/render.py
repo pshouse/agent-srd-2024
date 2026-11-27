@@ -745,6 +745,42 @@ def render_encounter(payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def render_arena_scenarios(payload: dict[str, Any]) -> str:
+    """Render Stage 3 arena scenario catalog as Markdown."""
+    if payload.get("status") == "error":
+        return _render_unresolved(payload)
+    from srd2024.arena.render import render_scenarios_markdown
+
+    return render_scenarios_markdown(payload.get("scenarios") or [])
+
+
+def render_arena_run(payload: dict[str, Any]) -> str:
+    """Render Stage 3 arena match transcript as a Tabletop Session Transcript."""
+    if payload.get("status") == "error":
+        return _render_unresolved(payload)
+    from srd2024.arena.render import render_match_markdown
+
+    return render_match_markdown(payload)
+
+
+def render_arena_bench(payload: dict[str, Any]) -> str:
+    """Render Stage 3 arena benchmark report as a ranked Markdown leaderboard."""
+    if payload.get("status") == "error":
+        return _render_unresolved(payload)
+    from srd2024.arena.render import render_benchmark_markdown
+
+    return render_benchmark_markdown(payload)
+
+
+def render_arena_replay(payload: dict[str, Any]) -> str:
+    """Render Stage 3 deterministic trace replay verification report as Markdown."""
+    if payload.get("status") == "error":
+        return _render_unresolved(payload)
+    from srd2024.arena.render import render_replay_markdown
+
+    return render_replay_markdown(payload)
+
+
 def render_operation(operation: str, payload: dict[str, Any], fmt: str = "markdown") -> str:
     """Render an operation result in 'markdown' or 'json' format."""
     if fmt == "json":
@@ -765,4 +801,12 @@ def render_operation(operation: str, payload: dict[str, Any], fmt: str = "markdo
         return render_character(payload)
     if operation == "encounter":
         return render_encounter(payload)
+    if operation == "arena_scenarios":
+        return render_arena_scenarios(payload)
+    if operation == "arena_run":
+        return render_arena_run(payload)
+    if operation == "arena_bench":
+        return render_arena_bench(payload)
+    if operation == "arena_replay":
+        return render_arena_replay(payload)
     return render_json(payload)

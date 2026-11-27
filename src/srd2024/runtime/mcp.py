@@ -11,6 +11,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, TextIO
 
+from .arena_bridge import (
+    execute_arena_bench,
+    execute_arena_run,
+    execute_arena_scenarios,
+    get_arena_scenarios_resource,
+)
 from .engine import SRDStore
 from .render import render_operation
 from .rules_bridge import (
@@ -23,9 +29,10 @@ from .rules_bridge import (
 )
 
 SERVER_NAME = "agent-srd-2024"
-SERVER_VERSION = "0.2.0"
+SERVER_VERSION = "0.3.0"
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 ENV_ENGINE_VAR = "SRD2024_ENGINE"
+ENV_ARENA_VAR = "SRD2024_ARENA"
 
 TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
@@ -339,6 +346,127 @@ STAGE2_TOOL_DEFINITIONS: list[dict[str, Any]] = [
 
 ALL_TOOL_DEFINITIONS: list[dict[str, Any]] = TOOL_DEFINITIONS + STAGE2_TOOL_DEFINITIONS
 
+STAGE3_TOOL_DEFINITIONS: list[dict[str, Any]] = [
+    {
+        "name": "srd_arena_scenarios",
+        "description": (
+            "List built-in 5e 2024 (SRD 5.2) multi-agent tabletop arena scenarios with tier, "
+            "party level, roster summaries, and tactical evaluation themes."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "format": {
+                    "type": "string",
+                    "enum": ["markdown", "json"],
+                    "default": "markdown",
+                    "description": "Response rendering format.",
+                },
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "srd_arena_run",
+        "description": (
+            "Run a deterministic multi-agent 5e 2024 (SRD 5.2) arena match adjudicated strictly "
+            "by the rules engine, returning a Tabletop Session Transcript (Markdown) or full "
+            "MatchTranscript JSON with quantitative 0-100 evaluation scorecard and replay digest."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "scenario": {
+                    "type": "string",
+                    "description": (
+                        "Built-in scenario ID ('goblin-ambush', 'crypt-of-ghouls', 'wyrmling-lair') "
+                        "or custom scenario JSON file path."
+                    ),
+                },
+                "party_agent": {
+                    "type": "string",
+                    "default": "heuristic-tactical",
+                    "description": (
+                        "Party driver spec ('heuristic-tactical', 'greedy', 'random', "
+                        "'openai-compat:<model>', 'anthropic:<model>', 'gemini:<model>')."
+                    ),
+                },
+                "enemy_agent": {
+                    "type": "string",
+                    "default": "heuristic-tactical",
+                    "description": "Enemy driver spec (default: 'heuristic-tactical').",
+                },
+                "seed": {
+                    "type": "integer",
+                    "default": 42,
+                    "description": "Deterministic PRNG seed (default: 42).",
+                },
+                "max_rounds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional override for maximum combat rounds.",
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["markdown", "json"],
+                    "default": "markdown",
+                    "description": "Response rendering format.",
+                },
+            },
+            "required": ["scenario"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "srd_arena_bench",
+        "description": (
+            "Run a multi-seed, multi-scenario 5e 2024 (SRD 5.2) agent evaluation benchmark "
+            "and produce a ranked leaderboard across outcome, rules legality, tactical execution, "
+            "and party coordination."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "scenarios": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Scenario IDs or JSON paths (default: all 3 built-in scenarios).",
+                },
+                "agents": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Contender driver specs (default: ['heuristic-tactical', 'greedy', 'random']).",
+                },
+                "enemy_agent": {
+                    "type": "string",
+                    "default": "heuristic-tactical",
+                    "description": "Enemy driver spec (default: 'heuristic-tactical').",
+                },
+                "seeds": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "default": [1, 2, 3],
+                    "description": "Integer PRNG seeds (default: [1, 2, 3]).",
+                },
+                "max_rounds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional override for maximum combat rounds per match.",
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["markdown", "json"],
+                    "default": "markdown",
+                    "description": "Response rendering format.",
+                },
+            },
+            "additionalProperties": False,
+        },
+    },
+]
+
+ALL_ARENA_TOOL_DEFINITIONS: list[dict[str, Any]] = ALL_TOOL_DEFINITIONS + STAGE3_TOOL_DEFINITIONS
+
 STATIC_RESOURCES: list[dict[str, Any]] = [
     {
         "uri": "srd://meta",
@@ -358,6 +486,17 @@ STAGE2_STATIC_RESOURCES: list[dict[str, Any]] = [
 ]
 
 ALL_STATIC_RESOURCES: list[dict[str, Any]] = STATIC_RESOURCES + STAGE2_STATIC_RESOURCES
+
+STAGE3_STATIC_RESOURCES: list[dict[str, Any]] = [
+    {
+        "uri": "srd://arena/scenarios",
+        "name": "SRD 2024 Arena Scenarios",
+        "description": "Metadata list of built-in 5e 2024 (SRD 5.2) multi-agent tabletop arena scenarios.",
+        "mimeType": "application/json",
+    }
+]
+
+ALL_ARENA_STATIC_RESOURCES: list[dict[str, Any]] = ALL_STATIC_RESOURCES + STAGE3_STATIC_RESOURCES
 
 RESOURCE_TEMPLATES: list[dict[str, Any]] = [
     {
@@ -406,11 +545,13 @@ class SRDMCPServer:
         rules_path: str | Path | None = None,
         rules_store: Any | None = None,
         expose_engine_tools: bool = False,
+        expose_arena_tools: bool = False,
     ) -> None:
         self.store = store
         self._rules_path = rules_path
         self._rules_store = rules_store
         self.expose_engine_tools = expose_engine_tools
+        self.expose_arena_tools = expose_arena_tools
         self._encounter_sessions: dict[str, dict[str, Any]] = {}
 
     def _get_rules_store(self) -> Any:
@@ -444,16 +585,28 @@ class SRDMCPServer:
             if method == "ping":
                 return _jsonrpc_result(req_id, {})
             if method == "tools/list":
-                tools = ALL_TOOL_DEFINITIONS if self.expose_engine_tools else TOOL_DEFINITIONS
+                if self.expose_arena_tools:
+                    tools = ALL_ARENA_TOOL_DEFINITIONS
+                elif self.expose_engine_tools:
+                    tools = ALL_TOOL_DEFINITIONS
+                else:
+                    tools = TOOL_DEFINITIONS
                 return _jsonrpc_result(req_id, {"tools": tools})
             if method == "tools/call":
                 return _jsonrpc_result(req_id, self._handle_tools_call(params))
             if method == "resources/list":
-                resources = ALL_STATIC_RESOURCES if self.expose_engine_tools else STATIC_RESOURCES
+                if self.expose_arena_tools:
+                    resources = ALL_ARENA_STATIC_RESOURCES
+                elif self.expose_engine_tools:
+                    resources = ALL_STATIC_RESOURCES
+                else:
+                    resources = STATIC_RESOURCES
                 return _jsonrpc_result(req_id, {"resources": resources})
             if method == "resources/templates/list":
                 templates = (
-                    ALL_RESOURCE_TEMPLATES if self.expose_engine_tools else RESOURCE_TEMPLATES
+                    ALL_RESOURCE_TEMPLATES
+                    if (self.expose_arena_tools or self.expose_engine_tools)
+                    else RESOURCE_TEMPLATES
                 )
                 return _jsonrpc_result(req_id, {"resourceTemplates": templates})
             if method == "resources/read":
@@ -658,6 +811,74 @@ class SRDMCPServer:
                 ):
                     self._encounter_sessions[session_id] = copy.deepcopy(payload["state"])
 
+            elif tool_name == "srd_arena_scenarios":
+                payload = execute_arena_scenarios()
+                op = "arena_scenarios"
+
+            elif tool_name == "srd_arena_run":
+                scenario = arguments.get("scenario")
+                if not isinstance(scenario, str) or not scenario.strip():
+                    return self._tool_error("srd_arena_run requires non-empty string argument 'scenario'.")
+                party_agent = arguments.get("party_agent", "heuristic-tactical")
+                if not isinstance(party_agent, str) or not party_agent.strip():
+                    return self._tool_error("'party_agent' must be a non-empty string.")
+                enemy_agent = arguments.get("enemy_agent", "heuristic-tactical")
+                if not isinstance(enemy_agent, str) or not enemy_agent.strip():
+                    return self._tool_error("'enemy_agent' must be a non-empty string.")
+                seed = _coerce_int(arguments.get("seed", 42), "seed")
+                max_rounds_raw = arguments.get("max_rounds")
+                max_rounds = (
+                    _coerce_int(max_rounds_raw, "max_rounds")
+                    if max_rounds_raw is not None
+                    else None
+                )
+                rules = self._get_rules_store()
+                payload = execute_arena_run(
+                    rules,
+                    scenario=scenario.strip(),
+                    party_agent=party_agent.strip(),
+                    enemy_agent=enemy_agent.strip(),
+                    seed=seed,
+                    max_rounds=max_rounds,
+                )
+                op = "arena_run"
+
+            elif tool_name == "srd_arena_bench":
+                scenarios = arguments.get("scenarios")
+                if scenarios is not None and (
+                    not isinstance(scenarios, list) or not all(isinstance(s, str) for s in scenarios)
+                ):
+                    return self._tool_error("'scenarios' must be an array of strings.")
+                agents = arguments.get("agents")
+                if agents is not None and (
+                    not isinstance(agents, list) or not all(isinstance(a, str) for a in agents)
+                ):
+                    return self._tool_error("'agents' must be an array of strings.")
+                enemy_agent = arguments.get("enemy_agent", "heuristic-tactical")
+                if not isinstance(enemy_agent, str) or not enemy_agent.strip():
+                    return self._tool_error("'enemy_agent' must be a non-empty string.")
+                seeds_raw = arguments.get("seeds", [1, 2, 3])
+                if not isinstance(seeds_raw, list) or any(
+                    isinstance(x, bool) or not isinstance(x, int) for x in seeds_raw
+                ):
+                    return self._tool_error("'seeds' must be an array of integers.")
+                max_rounds_raw = arguments.get("max_rounds")
+                max_rounds = (
+                    _coerce_int(max_rounds_raw, "max_rounds")
+                    if max_rounds_raw is not None
+                    else None
+                )
+                rules = self._get_rules_store()
+                payload = execute_arena_bench(
+                    rules,
+                    scenarios=scenarios,
+                    agents=agents,
+                    enemy_agent=enemy_agent.strip(),
+                    seeds=seeds_raw,
+                    max_rounds=max_rounds,
+                )
+                op = "arena_bench"
+
             else:
                 return self._tool_error(f"Unknown tool: '{tool_name}'.")
         except (ValueError, FileNotFoundError) as exc:
@@ -710,6 +931,21 @@ class SRDMCPServer:
                             "uri": uri,
                             "mimeType": "application/json",
                             "text": json.dumps(cov["summary"], ensure_ascii=False, indent=2),
+                        }
+                    ]
+                },
+            )
+
+        if uri == "srd://arena/scenarios":
+            arena_scenarios_payload = get_arena_scenarios_resource()
+            return _jsonrpc_result(
+                req_id,
+                {
+                    "contents": [
+                        {
+                            "uri": uri,
+                            "mimeType": "application/json",
+                            "text": json.dumps(arena_scenarios_payload, ensure_ascii=False, indent=2),
                         }
                     ]
                 },
@@ -842,9 +1078,16 @@ def main(argv: Sequence[str] | None = None, *, default_engine: bool = False) -> 
         default=default_engine,
         help="Advertise Stage 2 deterministic rules/character/encounter tools and resources in MCP discovery.",
     )
+    parser.add_argument(
+        "--arena",
+        action="store_true",
+        default=False,
+        help="Advertise all 11 Stage 1+2+3 MCP tools (including multi-agent arena tools) and srd://arena/scenarios.",
+    )
     args = parser.parse_args(argv)
 
     expose_engine = bool(args.engine) or _env_flag_enabled(ENV_ENGINE_VAR)
+    expose_arena = bool(args.arena) or _env_flag_enabled(ENV_ARENA_VAR)
 
     try:
         with SRDStore(db_path=args.db) as store:
@@ -852,6 +1095,7 @@ def main(argv: Sequence[str] | None = None, *, default_engine: bool = False) -> 
                 store,
                 rules_path=args.rules,
                 expose_engine_tools=expose_engine,
+                expose_arena_tools=expose_arena,
             )
             return server.serve_stdio()
     except FileNotFoundError as exc:
