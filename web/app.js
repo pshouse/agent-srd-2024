@@ -14,14 +14,13 @@ import {
 } from "./lib/facets.js";
 import { cardAssetUrl } from "./lib/paths.js";
 import { buildCatalog, openTarget, resolveIdentifier } from "./lib/resolve.js";
-import { parseRoute } from "./lib/router.js";
+import { readHashState } from "./lib/router.js";
 import { matchRanges, searchEntities } from "./lib/search.js";
 
 const PAGE = 10;
 const PAGE_STEP = 25;
 const COLLAPSE_AT = 12;
 const SVG_NS = "http://www.w3.org/2000/svg";
-const RESERVED = new Set(["q", "type", "sort"]);
 
 const quoteEl = document.getElementById("attribution");
 if (quoteEl) placeAttribution(quoteEl);
@@ -78,6 +77,7 @@ async function start() {
 function mount(manifest, catalog) {
   const types = resourceTypesFromManifest(manifest);
   const typeByName = new Map(types.map((row) => [row.type, row]));
+  const allowedFacetKeys = types.flatMap((row) => row.facetKeys);
   const famOpen = new Set();
   const expanded = new Set();
   let moreOpen = false;
@@ -118,6 +118,10 @@ function mount(manifest, catalog) {
   const cardSlot = el("div", { class: "card-slot" });
   explorer.append(side, resultsCol, cardSlot);
   mainEl.append(hero, searchWrap, explorer);
+
+  function readState() {
+    return readHashState(location.hash || "#/", allowedFacetKeys);
+  }
 
   input.addEventListener("input", () => {
     const state = readState();
@@ -759,28 +763,7 @@ function statRow(manifest) {
     span.append(el("b", { text: value }), ` ${label}`);
     row.append(span);
   }
-  row.append(el("span", { text: "Works offline once loaded" }));
   return row;
-}
-
-function readState() {
-  const hash = location.hash || "#/";
-  const route = parseRoute(hash);
-  const query = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
-  const params = new URLSearchParams(query);
-  const facets = {};
-  for (const [key, value] of params) {
-    if (RESERVED.has(key) || value === "") continue;
-    if (!facets[key]) facets[key] = [];
-    facets[key].push(value);
-  }
-  return {
-    route,
-    q: params.get("q") || "",
-    type: params.get("type") || "",
-    sort: params.get("sort") || "",
-    facets,
-  };
 }
 
 function hashFor(state) {

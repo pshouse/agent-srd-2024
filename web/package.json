@@ -1,5 +1,5 @@
 {
   "private": true,
   "type": "module",
-  "description": "Marks web/ as ES modules. There is no install step and there are no dependencies."
+  "description": "Marks web/ as ES modules. There is no install step and there are no dependencies. From the repo root run `node --test` with no directory argument. `node --test web/tests` and `node --test tests/` fail on Node 24 because a directory is not a module."
 }

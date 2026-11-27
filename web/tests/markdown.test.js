@@ -45,6 +45,15 @@ test("hostile Markdown does not execute and produces no live HTML", () => {
   }
 });
 
+test("markdown images are not rendered", () => {
+  const rendered = renderCardMarkdown("![alt text](javascript:alert(1))\n\n![picture](https://example.com/x.png)\n");
+  assert.equal(rendered.ok, true);
+  assert.equal(rendered.html.includes("<img"), false);
+  assert.match(rendered.html, /alt text/);
+  assert.match(rendered.html, /picture/);
+  assert.deepEqual(liveHtmlHazards(rendered.html), []);
+});
+
 test("relative card links are rewritten and pipe tables render", () => {
   assert.equal(rewriteCardHref("../damage-types/fire.md"), "#/e/damage-types:fire");
   assert.equal(

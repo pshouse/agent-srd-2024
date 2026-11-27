@@ -39,3 +39,33 @@ export function parseRoute(hash) {
 export function cardHash(id) {
   return `#/e/${id}`;
 }
+
+const QUERY_RESERVED = new Set(["q", "type", "sort"]);
+
+/**
+ * Read a location hash the same way the first paint and `hashchange` do.
+ * Facet bags are null-prototype objects. Keys other than `q`, `type`, `sort`,
+ * and the allowlist are ignored, including `__proto__`, `constructor`, and `prototype`.
+ * @param {string} hash
+ * @param {Iterable<string>} [allowedFacetKeys]
+ */
+export function readHashState(hash, allowedFacetKeys) {
+  const allowed = new Set(allowedFacetKeys || []);
+  const route = parseRoute(hash);
+  const raw = String(hash ?? "");
+  const query = raw.includes("?") ? raw.slice(raw.indexOf("?") + 1) : "";
+  const params = new URLSearchParams(query);
+  const facets = Object.create(null);
+  for (const [key, value] of params) {
+    if (value === "" || QUERY_RESERVED.has(key) || !allowed.has(key)) continue;
+    if (!Object.hasOwn(facets, key)) facets[key] = [];
+    facets[key].push(value);
+  }
+  return {
+    route,
+    q: params.get("q") || "",
+    type: params.get("type") || "",
+    sort: params.get("sort") || "",
+    facets,
+  };
+}

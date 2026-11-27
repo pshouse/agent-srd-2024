@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { cardAssetUrl, cardRelativePath, distAssetUrl } from "../lib/paths.js";
-import { parseRoute } from "../lib/router.js";
+import { readFileSync } from "node:fs";
+
+import { parseRoute, readHashState } from "../lib/router.js";
 
 test("hash routes ignore the Pages base path and the local directory", () => {
   assert.deepEqual(parseRoute(""), { name: "explorer", unknown: false });
@@ -19,6 +21,42 @@ test("hash routes ignore the Pages base path and the local directory", () => {
   assert.equal(parseRoute("#/e/spells%3Afireball").id, "spells:fireball");
   assert.equal(parseRoute("#/missing").unknown, true);
   assert.equal(parseRoute("#/e/shield").name, "explorer");
+});
+
+const ALLOWED = ["level", "class", "school"];
+
+test("boot hash ignores __proto__, constructor, and prototype", () => {
+  for (const key of ["__proto__", "constructor", "prototype"]) {
+    const state = readHashState(`#/?${key}=x&type=spells&level=3`, ALLOWED);
+    assert.equal(state.route.name, "explorer");
+    assert.equal(state.route.unknown, false);
+    assert.equal(state.type, "spells");
+    assert.deepEqual(state.facets.level, ["3"]);
+    assert.equal(Object.getPrototypeOf(state.facets), null);
+    assert.equal(Object.hasOwn(state.facets, key), false);
+    assert.equal(state.facets[key], undefined);
+    assert.doesNotThrow(() => state.facets.level.push("4"));
+  }
+});
+
+test("hashchange ignores __proto__, constructor, and prototype", () => {
+  for (const key of ["__proto__", "constructor", "prototype"]) {
+    const state = readHashState(`#/e/spells:fireball?${key}=x&q=fire&level=3`, ALLOWED);
+    assert.equal(state.route.name, "card");
+    assert.equal(state.route.id, "spells:fireball");
+    assert.equal(state.q, "fire");
+    assert.deepEqual(state.facets.level, ["3"]);
+    assert.equal(Object.getPrototypeOf(state.facets), null);
+    assert.equal(Object.hasOwn(state.facets, key), false);
+    assert.equal(state.facets[key], undefined);
+  }
+});
+
+test("boot and hashchange both read the hash through readHashState", () => {
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(app, /addEventListener\("hashchange", render\)/);
+  assert.match(app, /function readState\(\) \{\s*return readHashState\(/);
+  assert.match(app, /\n {2}render\(\);\n/);
 });
 
 test("asset URLs stay relative to the app under both base paths", () => {

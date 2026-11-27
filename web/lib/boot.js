@@ -47,6 +47,11 @@ export function validateBoot(manifest, index) {
   if (!isObject(index)) {
     errors.push("index is missing or not an object");
   } else {
+    if (index.schema_version !== EXPECTED_SCHEMA_VERSION) {
+      errors.push(
+        `index.schema_version is ${formatValue(index.schema_version)} (expected "${EXPECTED_SCHEMA_VERSION}")`,
+      );
+    }
     if (index.dataset_id !== EXPECTED_DATASET_ID) {
       errors.push(
         `index.dataset_id is ${formatValue(index.dataset_id)} (expected "${EXPECTED_DATASET_ID}")`,
@@ -57,6 +62,17 @@ export function validateBoot(manifest, index) {
       errors.push(
         `index.entities.length is ${formatValue(length)} (expected ${EXPECTED_ENTITY_COUNT})`,
       );
+    }
+    if (Array.isArray(index.entities)) {
+      const ids = new Set();
+      for (const entity of index.entities) {
+        if (entity && typeof entity.id === "string" && entity.id) ids.add(entity.id);
+      }
+      if (ids.size !== EXPECTED_ENTITY_COUNT) {
+        errors.push(
+          `index entity id set size is ${ids.size} (expected ${EXPECTED_ENTITY_COUNT})`,
+        );
+      }
     }
   }
 

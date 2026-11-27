@@ -19,6 +19,7 @@ function entities(count, name = "Sample") {
 
 function pair({
   schema = "1",
+  indexSchema = "1",
   manifestDataset = "srd-2024-5.2",
   indexDataset = "srd-2024-5.2",
   count = 2029,
@@ -32,6 +33,7 @@ function pair({
       counts: { entities: count },
     },
     index: {
+      schema_version: indexSchema,
       dataset_id: indexDataset,
       entities: entities(length, name),
     },
@@ -105,7 +107,36 @@ test("mismatched version, dataset_id, and count are all reported together", () =
     length: 1,
   });
   const errors = validateBoot(manifest, index);
-  assert.equal(errors.length, 5);
+  assert.equal(errors.length, 6);
+});
+
+test("a bad index.schema_version is a hard error and renders no entities", () => {
+  for (const indexSchema of ["2", 1, ""]) {
+    const { manifest, index } = pair({ indexSchema, name: "Fireball" });
+    const decision = bootViewModel(manifest, index);
+    assert.equal(decision.ok, false, `index schema ${String(indexSchema)}`);
+    assert.equal(decision.entities, null);
+    assert.match(decision.errors.join("\n"), /index\.schema_version/);
+    assert.equal(decision.errors.join("\n").includes("Fireball"), false);
+  }
+  const missing = pair({ name: "Fireball" });
+  delete missing.index.schema_version;
+  const decision = bootViewModel(missing.manifest, missing.index);
+  assert.equal(decision.ok, false);
+  assert.equal(decision.entities, null);
+  assert.match(decision.errors.join("\n"), /index\.schema_version/);
+});
+
+test("duplicate entity ids fail closed", () => {
+  const { manifest, index } = pair({ name: "Fireball" });
+  index.entities[1].id = index.entities[0].id;
+  const decision = bootViewModel(manifest, index);
+  assert.equal(decision.ok, false);
+  assert.equal(decision.entities, null);
+  assert.match(decision.errors.join("\n"), /id set size is 2028/);
+  assert.equal(decision.errors.join("\n").includes("Fireball"), false);
+  const ids = new Set(index.entities.map((entity) => entity.id));
+  assert.equal(ids.size, 2028);
 });
 
 test("the shipped manifest and index pass without consulting the graph", () => {

@@ -57,6 +57,7 @@ function createRenderer() {
     typographer: false,
   });
   md.enable("table");
+  md.disable("image");
   const allow = md.validateLink.bind(md);
   md.validateLink = (url) => {
     const stripped = String(url)
