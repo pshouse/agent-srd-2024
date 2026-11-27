@@ -19,6 +19,18 @@ from .text import est_tokens, normalize_search_text, strip_markdown
 SCHEMA_VERSION = "1"
 DATASET_ID = "srd-2024-5.2"
 
+# Official SRD 5.2 CC-BY-4.0 notice. Single source of truth for every emitted
+# attribution (manifest.json, SQLite meta, dist/cards/INDEX.md). The snapshot
+# string in data/raw/PROVENANCE.json is not this text: it uses straight quotes
+# and omits the comma before the second "available".
+SRD_ATTRIBUTION = (
+    "This work includes material from the System Reference Document 5.2 "
+    "(“SRD 5.2”) by Wizards of the Coast LLC, available at "
+    "https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the "
+    "Creative Commons Attribution 4.0 International License, available at "
+    "https://creativecommons.org/licenses/by/4.0/legalcode."
+)
+
 _SCHEMA_SQL = """
 CREATE TABLE meta (
     key   TEXT PRIMARY KEY,
@@ -358,7 +370,7 @@ def build_all(raw_dir: Path, out_dir: Path) -> dict[str, Any]:
     ]
 
     content_license = provenance["content_license"]
-    attribution = content_license["attribution"]
+    attribution = SRD_ATTRIBUTION
     upstream_repo = provenance["upstream_repo"]
     upstream_commit = provenance["upstream_commit"]
     upstream_db_ver = provenance["upstream_database_version"]

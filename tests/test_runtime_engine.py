@@ -16,6 +16,7 @@ from __future__ import annotations
 import unittest
 from typing import Any
 
+from srd2024.compiler.build import SRD_ATTRIBUTION
 from tests.helpers import EXPECTED_ENTITY_COUNT, EXPECTED_TYPE_COUNT, run_cli_json
 
 
@@ -339,7 +340,7 @@ class TestGraphAndValidate(unittest.TestCase):
         prov = res["provenance"]
         self.assertEqual(prov["dataset_id"], "srd-2024-5.2")
         self.assertEqual(prov["license"], "CC-BY-4.0")
-        self.assertIn("SRD 5.2", prov["attribution"])
+        self.assertEqual(prov["attribution"], SRD_ATTRIBUTION)
 
     def test_srd_validate_missing_parent_advisory(self) -> None:
         # Subclass without its parent class should produce a structural advisory
