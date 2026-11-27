@@ -8,9 +8,10 @@ A zero-server, local-first **5e 2024 (SRD 5.2)** knowledge pack compiled for AI 
 - **Single portable SQLite database (`dist/srd2024.sqlite`)**: Normalized entities across all 25 SRD 5.2 resource types, inverted facet index (`entity_facets`), contentless FTS5 search (`entities_fts`) with typographic punctuation normalization (`Dragon's` <-> `Dragon’s`), directed cross-reference graph (`edges` with preserved inline metadata), and CC-BY-4.0 provenance (`meta`).
 - **Resolved-bundle query engine**: Single-call lookup (`srd_get`) that returns a root entity plus its depth-1 (configurable `0..2`) referenced mechanical rules under a deterministic token budget with a 3-tier priority scheme and anti-hub guard—eliminating N+1 lookup chatter.
 - **Three thin agent surfaces over one read-only engine**:
-  - **CLI** (`bin/srd`) — Markdown or JSON output
-  - **Stdio MCP Server** (`bin/srd-mcp`) — newline-delimited JSON-RPC 2.0 with 5 orthogonal tools + MCP resources
-  - **Drop-in Agent Skill** (`skill/SKILL.md`) — progressive disclosure & resolved-bundle playbook
+  - **CLI** (`bin/srd`) — Markdown or JSON output (Stage 1 retrieval + Stage 2 `rule`, `character`, `encounter`)
+  - **Stdio MCP Server** (`bin/srd-mcp` / `bin/srd-engine-mcp`) — newline-delimited JSON-RPC 2.0 with 5 Stage 1 tools (or all 8 Stage 1 + Stage 2 tools via `bin/srd-engine-mcp` / `--engine`) + MCP resources
+  - **Drop-in Agent Skill** (`skill/SKILL.md`) — progressive disclosure, resolved-bundle & Stage 2 neuro-symbolic playbook
+- **Stage 2 Neuro-Symbolic Rules Compiler & Engine (`dist/rules.json`, `src/srd2024/engine/`)**: Offline deterministic prose-to-IR compiler with honest `full` / `partial` / `narrative` coverage grading (`dist/web/rules-coverage.json`), deterministic 5e 2024 character validator/statblock compiler, and pure JSON-serializable combat state machine (all 8 weapon masteries, all 15 conditions, spells, concentration, death saves, seeded RNG).
 - **Compiled Markdown cards (`dist/cards/`)**: 2,029 token-tight Markdown + YAML frontmatter files with relative cross-reference links and `dist/cards/INDEX.md` for pure file-reading agents.
 - **Zero-server static web exports (`dist/web/`)**: Lean JSON catalog, compact directed graph, and lazy per-type card shards for browser-side explorers and bundle inspectors.
 
@@ -63,6 +64,61 @@ The runtime engine always opens SQLite strictly read-only (`file:<path>?mode=ro`
 
 ---
 
+## Stage 2 Quickstart: Deterministic Rules Compiler & Engine
+
+Stage 2 adds an offline, deterministic **neuro-symbolic rules layer** (`dist/rules.json`, `src/srd2024/engine/`) so agents translate intent and narrate outcomes while Python executes every 5e 2024 calculation, mastery, condition, spell slot, and dice roll.
+
+### 1. Build Compiled Rules IR (`bin/srd-rules-build`)
+
+```bash
+./bin/srd-rules-build
+```
+
+Emits deterministic Stage 2 artifacts (also triggered automatically at the end of `./bin/srd-build`):
+- `dist/rules.json` — compiled Rules IR across weapon masteries, conditions, equipment, spells, monsters, and character creation tables, with explicit `full` / `partial` / `narrative` coverage & provenance.
+- `dist/web/rules-coverage.json` — lean static coverage manifest for dashboards and audits.
+
+### 2. Inspect Rules IR, Compile Characters & Run Encounters (`bin/srd`)
+
+```bash
+# Inspect global compiled rules coverage or a single entity's typed Rules IR
+./bin/srd rule --coverage
+./bin/srd rule spells:fireball --format json
+
+# Validate & compile a 2024 CharacterBuildSpec JSON into an authoritative statblock
+./bin/srd character ./character-spec.json --format markdown
+./bin/srd character --spec '{"name":"Aldric","species":"human","background":"soldier","background_asi":{"str":2,"con":1},"class":"fighter","level":1,"ability_method":"standard_array","base_abilities":{"str":15,"dex":13,"con":14,"int":8,"wis":12,"cha":10},"equipment":{"armor":"chain-mail","shield":true,"weapons":["longsword"]},"weapon_mastery_weapons":["longsword"]}' --format json
+
+# Advance a deterministic 5e 2024 encounter (stateless --state / --out-state round-trip)
+./bin/srd encounter --intent '{"type":"start_encounter","seed":42,"combatants":[{"id":"g1","side":"enemy","monster":"goblin-warrior","position":{"x":5,"y":0}},{"id":"g2","side":"party","monster":"goblin-warrior","position":{"x":0,"y":0}}]}' --out-state /tmp/enc-state.json --format markdown
+./bin/srd encounter --state /tmp/enc-state.json --intent '{"type":"end_turn"}' --out-state /tmp/enc-state.json --format json
+```
+
+#### Rules IR Path Resolution (`bin/srd`, `bin/srd-mcp`, `bin/srd-engine-mcp`)
+1. `--rules <path>` CLI flag
+2. `SRD2024_RULES` environment variable
+3. Default `<repo_root>/dist/rules.json`
+
+### 3. Stage 2 MCP Server (`bin/srd-engine-mcp` / `bin/srd-mcp --engine`)
+
+- Default `bin/srd-mcp` preserves the exact 5 Stage 1 tools in `tools/list` for strict backwards compatibility while accepting `tools/call` for all 8 tools.
+- Launch **`bin/srd-engine-mcp`** (or `bin/srd-mcp --engine`, or set `SRD2024_ENGINE=1`) to advertise all **8 MCP tools** and Stage 2 resources:
+  - Tools 6–8: `srd_rule`, `srd_compile_character`, `srd_encounter` (supports both stateless `state` and server-side `session_id` caching)
+  - Resources: `srd://rules/coverage` (`application/json`) and `srd://rule/<type>/<slug>` (`application/json`)
+
+```json
+{
+  "mcpServers": {
+    "srd-2024-engine": {
+      "command": "/path/to/agent-srd-2024/bin/srd-engine-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+---
+
 ## Stdio MCP Server (`bin/srd-mcp`)
 
 `bin/srd-mcp` implements a pure-stdlib JSON-RPC 2.0 MCP server over newline-delimited JSON on `stdin`/`stdout` (with errors strictly on `stderr`).
@@ -108,17 +164,25 @@ Point your agent runtime at [`skill/SKILL.md`](skill/SKILL.md) to teach progress
 ```text
 data/raw/2024/en/*.json (25 upstream files, 2,029 entities)
         │
-        ▼  bin/srd-build (src/srd2024/compiler/)
-┌──────────────────────────────────────────────────────────┐
-│ dist/srd2024.sqlite   (entities, facets, edges, FTS5)    │
-│ dist/cards/<type>/    (2,029 Markdown + YAML cards)      │
-│ dist/web/             (index.json, graph.json, types/*)  │
-│ dist/manifest.json    (inventory, counts, SHA-256 hash)  │
-└──────────────────────────────────────────────────────────┘
-        │  strictly read-only (mode=ro)
-        ▼  src/srd2024/runtime/
-   bin/srd (CLI)  │  bin/srd-mcp (MCP)  │  skill/SKILL.md
+        ├──▶ bin/srd-build (src/srd2024/compiler/)
+        │    ┌──────────────────────────────────────────────────────────┐
+        │    │ dist/srd2024.sqlite   (entities, facets, edges, FTS5)    │
+        │    │ dist/cards/<type>/    (2,029 Markdown + YAML cards)      │
+        │    │ dist/web/             (index.json, graph.json, types/*)  │
+        │    │ dist/manifest.json    (inventory, counts, SHA-256 hash)  │
+        │    └──────────────────────────────────────────────────────────┘
+        │
+        └──▶ bin/srd-rules-build (src/srd2024/rules_compiler/)
+             ┌──────────────────────────────────────────────────────────┐
+             │ dist/rules.json            (typed Rules IR + coverage)   │
+             │ dist/web/rules-coverage.json (static coverage manifest)  │
+             └──────────────────────────────────────────────────────────┘
+                        │  strictly read-only (zero runtime LLM)
+                        ▼  src/srd2024/engine/ + src/srd2024/runtime/
+   bin/srd (CLI) │ bin/srd-mcp (5 tools) │ bin/srd-engine-mcp (8 tools) │ skill/SKILL.md
 ```
+
+See [`docs/STAGE2-SPEC.md`](docs/STAGE2-SPEC.md) for the Stage 2 rules IR, character compiler, combat state machine, and agent surface contract.
 
 ### Identifier Resolution & Resolved-Bundle Packing
 - **Canonical IDs:** `<type>:<slug>` (disambiguates all 53 cross-type slug collisions such as `spells:shield` vs `equipment:shield` and `classes:druid` vs `monsters:druid`).

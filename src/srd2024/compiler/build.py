@@ -506,4 +506,9 @@ def build_all(raw_dir: Path, out_dir: Path) -> dict[str, Any]:
         "resource_types": resource_types,
     }
     _write_text_lf(out_dir / "manifest.json", _pretty_json(manifest))
+
+    # Stage 2 post-build hook: emit rules.json & web/rules-coverage.json without altering Stage 1 artifacts
+    from srd2024.rules_compiler.build import build_rules
+
+    build_rules(raw_dir, out_dir)
     return manifest
