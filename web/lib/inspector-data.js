@@ -19,6 +19,9 @@ export function loadGraph() {
     graphPromise = fetch(GRAPH_URL).then((res) => {
       if (!res.ok) throw new Error(`graph HTTP ${res.status}`);
       return res.json();
+    }).catch((err) => {
+      graphPromise = null;
+      throw err;
     });
   }
   return graphPromise;
@@ -34,6 +37,9 @@ export function loadShard(type) {
   const promise = fetch(url).then((res) => {
     if (!res.ok) throw new Error(`shard HTTP ${res.status}`);
     return res.json();
+  }).catch((err) => {
+    shardPromises.delete(type);
+    throw err;
   });
   shardPromises.set(type, promise);
   return promise;

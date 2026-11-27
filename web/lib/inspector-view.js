@@ -10,6 +10,7 @@ import {
 } from "./bundle.js";
 import { familyOf, typeLabel } from "./facets.js";
 import { loadGraph, loadShard } from "./inspector-data.js";
+import { claimInspector, inspectorStale } from "./inspector-token.js";
 import { resolveIdentifier } from "./resolve.js";
 
 const LOG_MIN = Math.log(200);
@@ -20,68 +21,84 @@ const LOG_MAX = Math.log(16000);
  * @param {{ catalog: object, manifest: object, routeId: string, hash: string, attribution: string }} ctx
  */
 export async function renderInspector(container, ctx) {
-  const token = (container.dataset.inspToken = String(Number(container.dataset.inspToken || 0) + 1));
-  const stale = () => container.dataset.inspToken !== token;
-  container.replaceChildren(el("p", { class: "loading", text: "Loading bundle…" }));
-  if (!ctx.routeId) {
-    container.replaceChildren(emptyInspector());
-    return;
-  }
-  let graph;
-  try {
-    graph = await loadGraph();
-  } catch {
+  const token = claimInspector(container);
+  const stale = () => inspectorStale(container, token);
+  const fetchGraph = ctx.loadGraph || loadGraph;
+  const fetchShard = ctx.loadShard || loadShard;
+  const fail = (text) => {
     if (stale()) return;
-    container.replaceChildren(problem("The cross-reference graph could not be loaded.", true));
-    return;
-  }
-  if (stale()) return;
-  const errors = validateGraph(graph, ctx.manifest);
-  if (errors.length) {
-    container.replaceChildren(problem(errors.join(" "), true));
-    return;
-  }
-  const world = worldFrom(ctx.catalog, graph);
-  const params = readInspectorQuery(ctx.hash);
-  const resolved = resolveIdentifier(ctx.catalog, ctx.routeId);
-  if (resolved.status !== "ok") {
-    container.replaceChildren(unresolvedView(resolved));
-    return;
-  }
-  const relFilter = params.rels;
-  const { depIds } = expandOutgoing(world.outgoing, resolved.entity.id, params.depth, relFilter);
-  const types = new Set([resolved.entity.type]);
-  for (const id of depIds) {
-    const entity = ctx.catalog.byId.get(id);
-    if (entity) types.add(entity.type);
-  }
-  try {
-    await Promise.all([...types].map((type) => loadShard(type)));
-  } catch {
-    if (stale()) return;
-    container.replaceChildren(problem("A card shard could not be loaded.", true));
-    return;
-  }
-  if (stale()) return;
-  const bodies = new Map();
-  for (const type of types) {
-    const shard = await loadShard(type);
-    for (const [id, record] of Object.entries(shard)) {
-      if (record && typeof record.card_body_md === "string") bodies.set(id, record.card_body_md);
-    }
-  }
-  world.bodyOf = (id) => {
-    if (!bodies.has(id)) throw new Error(`missing body ${id}`);
-    return bodies.get(id);
+    container.replaceChildren(problem(text, true));
   };
-  const payload = packBundle(world, ctx.routeId, {
-    depth: params.depth,
-    maxTokens: params.maxTokens,
-    includeInbound: params.inbound,
-    rels: relFilter,
-  });
-  const attribution = ctx.attribution || ATTRIBUTION;
-  paint(container, ctx, payload, params, world, attribution);
+  try {
+    container.replaceChildren(el("p", { class: "loading", text: "Loading bundle…" }));
+    if (!ctx.routeId) {
+      if (stale()) return;
+      container.replaceChildren(emptyInspector());
+      return;
+    }
+    let graph;
+    try {
+      graph = await fetchGraph();
+    } catch {
+      fail("The cross-reference graph could not be loaded.");
+      return;
+    }
+    if (stale()) return;
+    const errors = validateGraph(graph, ctx.manifest);
+    if (errors.length) {
+      fail(errors.join(" "));
+      return;
+    }
+    const world = worldFrom(ctx.catalog, graph);
+    const params = readInspectorQuery(ctx.hash);
+    const resolved = resolveIdentifier(ctx.catalog, ctx.routeId);
+    if (resolved.status !== "ok") {
+      if (stale()) return;
+      container.replaceChildren(unresolvedView(resolved));
+      return;
+    }
+    const relFilter = params.rels;
+    const { depIds } = expandOutgoing(world.outgoing, resolved.entity.id, params.depth, relFilter);
+    const types = new Set([resolved.entity.type]);
+    for (const id of depIds) {
+      const entity = ctx.catalog.byId.get(id);
+      if (entity) types.add(entity.type);
+    }
+    try {
+      await Promise.all([...types].map((type) => fetchShard(type)));
+    } catch {
+      fail("A card shard could not be loaded.");
+      return;
+    }
+    if (stale()) return;
+    const bodies = new Map();
+    for (const type of types) {
+      const shard = await fetchShard(type);
+      if (!shard || typeof shard !== "object") continue;
+      for (const [id, record] of Object.entries(shard)) {
+        if (record && typeof record.card_body_md === "string") bodies.set(id, record.card_body_md);
+      }
+    }
+    world.bodyOf = (id) => {
+      if (!bodies.has(id)) throw new Error(`missing body ${id}`);
+      return bodies.get(id);
+    };
+    const payload = packBundle(world, ctx.routeId, {
+      depth: params.depth,
+      maxTokens: params.maxTokens,
+      includeInbound: params.inbound,
+      rels: relFilter,
+    });
+    if (stale()) return;
+    if (!payload || payload.status === "error") {
+      fail((payload && payload.error) || "This bundle cannot be shown.");
+      return;
+    }
+    const attribution = ctx.attribution || ATTRIBUTION;
+    paint(container, ctx, payload, params, world, attribution);
+  } catch (err) {
+    fail(err && err.message ? err.message : "This bundle cannot be shown.");
+  }
 }
 
 function worldFrom(catalog, graph) {
@@ -91,7 +108,9 @@ function worldFrom(catalog, graph) {
     outgoing: indexed.outgoing,
     incoming: indexed.incoming,
     resolveIdentifier,
-    bodyOf: () => "",
+    bodyOf(id) {
+      throw new Error(`missing body ${id}`);
+    },
   };
 }
 
@@ -188,12 +207,14 @@ function settings(ctx, root, params, rels, activeRels) {
     value: String(sliderFromTokens(params.maxTokens)),
     "aria-label": "Token budget",
   });
-  const number = el("input", { type: "number", min: "200", max: "16000", value: String(params.maxTokens) });
+  const sliderStart = String(sliderFromTokens(params.maxTokens));
+  const number = el("input", { type: "number", min: "200", max: "16000", value: String(params.maxTokens), "aria-label": "Max tokens" });
   const ends = el("div", { class: "legend" });
   ends.append(el("span", { text: "200" }), el("span", { text: "2,000 default" }), el("span", { text: "16,000" }));
   const reset = el("button", { type: "button", class: "btn ghost", text: "Reset" });
   reset.addEventListener("click", () => ctx.setHash(hashFor(root.id, { ...params, maxTokens: 2000 })));
   slider.addEventListener("change", () => {
+    if (slider.value === sliderStart) return;
     const maxTokens = tokensFromSlider(Number(slider.value));
     ctx.setHash(hashFor(root.id, { ...params, maxTokens }));
   });
@@ -376,10 +397,20 @@ function unresolvedView(payload) {
 }
 
 function problem(text, hard) {
-  return el("div", { class: hard ? "notice err" : "notice warn", role: hard ? "alert" : "status" }, [
-    el("p", {}, [el("b", { text: hard ? "This bundle cannot be shown." : text }), hard ? el("span", { text: ` ${text}` }) : ""]),
-  ]);
+  const box = el("div", { class: hard ? "notice err" : "notice warn", role: hard ? "alert" : "status" });
+  box.append(el("span", { class: "ic", "aria-hidden": "true" }, [el("span", { text: hard ? "\u00d7" : "!" })]));
+  const copy = el("div");
+  if (hard) {
+    copy.append(el("b", { text: "This bundle cannot be shown." }));
+    copy.append(el("div", { class: "detail", text }));
+  } else {
+    copy.append(el("b", { text }));
+  }
+  box.append(copy);
+  return box;
 }
+
+let copyTimer = 0;
 
 async function doCopy(text, buttons, fallback, area) {
   try {
@@ -389,7 +420,8 @@ async function doCopy(text, buttons, fallback, area) {
       button.textContent = "\u2713 Copied";
       button.classList.add("done");
     }
-    window.setTimeout(() => {
+    window.clearTimeout(copyTimer);
+    copyTimer = window.setTimeout(() => {
       for (const button of buttons) {
         button.textContent = "Copy Agent Context";
         button.classList.remove("done");

@@ -12,6 +12,7 @@ import {
   typePlural,
   valuesForFacet,
 } from "./lib/facets.js";
+import { invalidateInspector } from "./lib/inspector-token.js";
 import { cardAssetUrl } from "./lib/paths.js";
 import { buildCatalog, openTarget, resolveIdentifier } from "./lib/resolve.js";
 import { readHashState } from "./lib/router.js";
@@ -167,7 +168,8 @@ function mount(manifest, catalog) {
     const { renderInspector } = await import("./lib/inspector-view.js");
     if (gen !== viewGen) return;
     const attribution = trustedAttribution(manifest) || ATTRIBUTION;
-    await renderInspector(resultsCol, {
+    try {
+      await renderInspector(resultsCol, {
       catalog,
       manifest,
       routeId: state.route.id,
@@ -177,10 +179,15 @@ function mount(manifest, catalog) {
         if (location.hash !== next) location.hash = next;
       },
     });
+    } catch {
+      if (gen !== viewGen) return;
+      resultsCol.textContent = "This bundle cannot be shown.";
+    }
   }
 
   function render() {
     const gen = ++viewGen;
+    invalidateInspector(resultsCol);
     const state = readState();
     syncNav(state.route);
     syncPlaceholder();

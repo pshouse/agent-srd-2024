@@ -225,6 +225,7 @@ a.xref.mon::before{clip-path:polygon(25% 3%,75% 3%,100% 50%,75% 97%,25% 97%,0 50
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 main.mode-bundle .hero,main.mode-bundle .search-wrap{display:none}
 .insp-head{padding:22px 0 0;display:flex;flex-wrap:wrap;gap:12px 18px;align-items:flex-end}
+.insp-head .hide-narrow{margin-left:auto;display:flex;gap:10px;align-items:center}
 .crumbs{font-size:var(--fs-ui);color:var(--text-2)}
 .insp-head h1{font-size:var(--fs-xl);margin-top:6px}
 .insp{display:grid;grid-template-columns:300px minmax(0,1fr) minmax(0,.9fr);gap:24px;align-items:start;padding:20px 0 48px}

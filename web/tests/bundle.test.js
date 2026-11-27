@@ -135,6 +135,80 @@ test("the inspector graph fails closed unless schema, nodes, and edges agree", (
   assert.equal(trustedAttribution(world.manifest), world.manifest.license.attribution);
 });
 
+test("an unknown edge destination fails closed instead of throwing", () => {
+  const fireball = {
+    id: "spells:fireball",
+    type: "spells",
+    slug: "fireball",
+    name: "Fireball",
+    summary: "Boom",
+    card_tokens_est: 20,
+  };
+  const catalog = buildCatalog([fireball]);
+  const { outgoing, incoming } = indexGraph(
+    [["spells:fireball", "missing:nope", "damage_type", null]],
+    catalog.byId,
+  );
+  const payload = packBundle(
+    {
+      catalog,
+      outgoing,
+      incoming,
+      resolveIdentifier,
+      bodyOf(id) {
+        if (id === "spells:fireball") return "# Fireball\n\nBoom";
+        throw new Error(`missing body ${id}`);
+      },
+    },
+    "spells:fireball",
+    { depth: 1, maxTokens: 2000 },
+  );
+  assert.equal(payload.status, "error");
+  assert.match(payload.error, /unknown entry: missing:nope/);
+});
+
+test("a missing shard body fails closed instead of throwing", () => {
+  const entities = [
+    {
+      id: "spells:fireball",
+      type: "spells",
+      slug: "fireball",
+      name: "Fireball",
+      summary: "Boom",
+      card_tokens_est: 20,
+    },
+    {
+      id: "damage-types:fire",
+      type: "damage-types",
+      slug: "fire",
+      name: "Fire",
+      summary: "Hot",
+      card_tokens_est: 10,
+    },
+  ];
+  const catalog = buildCatalog(entities);
+  const { outgoing, incoming } = indexGraph(
+    [["spells:fireball", "damage-types:fire", "damage_type", null]],
+    catalog.byId,
+  );
+  const payload = packBundle(
+    {
+      catalog,
+      outgoing,
+      incoming,
+      resolveIdentifier,
+      bodyOf(id) {
+        if (id === "spells:fireball") return "# Fireball\n\nBoom";
+        throw new Error(`missing body ${id}`);
+      },
+    },
+    "spells:fireball",
+    { depth: 1, maxTokens: 2000 },
+  );
+  assert.equal(payload.status, "error");
+  assert.match(payload.error, /card body for damage-types:fire is missing/);
+});
+
 test("a hostile card body stays literal text in the bundle", () => {
   const hostile = "<script>alert(1)</script>\n<img src=x onerror=alert(1)>";
   const custom = {

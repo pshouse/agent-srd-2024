@@ -280,6 +280,17 @@ export function expandOutgoing(outgoing, rootId, depth, relFilter) {
   return { minHop, depRels, depIds };
 }
 
+function readCardBody(world, id) {
+  let body;
+  try {
+    body = world.bodyOf(id);
+  } catch {
+    return { error: `The card body for ${id} is missing.` };
+  }
+  if (typeof body !== "string") return { error: `The card body for ${id} is missing.` };
+  return { body };
+}
+
 function computeEstimated(body, meta) {
   let est = estTokens(body);
   for (let pass = 0; pass < 2; pass += 1) {
@@ -322,12 +333,16 @@ export function packBundle(world, identifier, options = {}) {
   }
 
   const root = resolved.entity;
-  const rootBody = world.bodyOf(root.id);
+  const rootRead = readCardBody(world, root.id);
+  if (rootRead.error) return { status: "error", error: rootRead.error };
+  const rootBody = rootRead.body;
   const { minHop, depRels, depIds } = expandOutgoing(world.outgoing, root.id, depth, relFilter);
   depIds.sort((a, b) => {
     const hopDiff = minHop.get(a) - minHop.get(b);
     if (hopDiff) return hopDiff;
-    const tierDiff = tierForType(world.catalog.byId.get(a).type) - tierForType(world.catalog.byId.get(b).type);
+    const left = world.catalog.byId.get(a);
+    const right = world.catalog.byId.get(b);
+    const tierDiff = tierForType(left && left.type) - tierForType(right && right.type);
     if (tierDiff) return tierDiff;
     if (a < b) return -1;
     if (a > b) return 1;
@@ -345,10 +360,15 @@ export function packBundle(world, identifier, options = {}) {
 
   for (const depId of depIds) {
     const dep = world.catalog.byId.get(depId);
+    if (!dep) {
+      return { status: "error", error: `The graph names an unknown entry: ${depId}` };
+    }
+    const depRead = readCardBody(world, depId);
+    if (depRead.error) return { status: "error", error: depRead.error };
     const depTier = tierForType(dep.type);
     const rels = [...(depRels.get(depId) || [])].sort();
     const relsStr = rels.join(", ");
-    const body = world.bodyOf(depId);
+    const body = depRead.body;
     const fullBlock = `### ${dep.name} (\`${dep.id}\`) — via ${relsStr}\n\n${body}`;
     const stubBlock = `- **${dep.name}** (\`${dep.id}\`, via ${relsStr}): ${dep.summary}`;
     const fullTokens = estTokens(fullBlock);
