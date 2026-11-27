@@ -1,0 +1,52 @@
+{
+  "name": "Aldric",
+  "species": "human",
+  "subspecies": null,
+  "size": "Medium",
+  "background": "acolyte",
+  "background_asi": {
+    "cha": 2,
+    "wis": 1
+  },
+  "origin_feat": "magic-initiate",
+  "extra_origin_feat": "alert",
+  "class": "paladin",
+  "subclass": null,
+  "level": 1,
+  "ability_method": "manual",
+  "base_abilities": {
+    "str": 15,
+    "dex": 11,
+    "con": 12,
+    "int": 9,
+    "wis": 12,
+    "cha": 13
+  },
+  "asi_choices": [],
+  "skill_proficiencies": [
+    "insight",
+    "religion",
+    "athletics",
+    "persuasion",
+    "perception"
+  ],
+  "equipment": {
+    "armor": "chain-mail",
+    "shield": true,
+    "weapons": [
+      "longsword",
+      "javelin"
+    ]
+  },
+  "weapon_mastery_weapons": [
+    "longsword",
+    "javelin"
+  ],
+  "cantrips": [],
+  "prepared_spells": [
+    "bless",
+    "divine-smite"
+  ],
+  "hp_method": "fixed",
+  "hp_rolls": []
+}
