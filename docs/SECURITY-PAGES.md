@@ -31,28 +31,65 @@ A successful call disables GitHub Pages for this repository. It does not delete 
 2. The person who administers the repo chooses **Unpublish site** (or sets the source to none, if that is what the page shows).
 3. Confirm.
 
-### Check that it is off
+### Check that it is on, then that it is off
+
+The site root is `index.html`, which redirects to `web/`. These three URLs are the check. While the site is published, each final status is **200**. After the kill switch, each is **404**.
 
 ```bash
-curl -sI https://pshouse.github.io/agent-srd-2024/ | head -n 1
+base=https://pshouse.github.io/agent-srd-2024
+for path in / /web/ /dist/manifest.json; do
+  code=$(curl -sL -o /dev/null -w '%{http_code}' "$base$path")
+  echo "$code $path"
+done
 ```
 
-The expected status is **404**. A 200 means the site is still published.
+`curl -L` follows a directory redirect such as `/web` to `/web/`. A live site prints:
+
+```text
+200 /
+200 /web/
+200 /dist/manifest.json
+```
+
+After the kill switch, the same three lines are `404`.
 
 ## Rollback
 
-Pages has no push deploy, so a bad run is not replaced by the next commit on `main`. To return to a known tree:
+`gh workflow run --ref` accepts a branch or a tag. It does not accept a commit SHA. The Pages job fails immediately unless the ref is `main` or a release tag, and it does not deploy on push.
 
-1. If the bad site should disappear immediately, use the kill switch above and confirm the 404.
-2. After sign-off to publish again, run the `pages` workflow on the last good commit (Actions → pages → Run workflow, and choose that ref), or:
+To put a known tree back on the site:
+
+1. If the bad site should disappear immediately, use the kill switch and confirm the three URLs above are 404.
+2. Open a revert pull request onto `main`, review it, and merge it. Then dispatch from `main`:
 
 ```bash
-gh workflow run pages.yml --ref <good-sha>
+gh workflow run pages.yml --ref main
 ```
 
-3. Open the site and confirm the footer dataset line still says `srd-2024-5.2` and the page you rolled back to.
+3. Or dispatch from a release tag of the good tree:
 
-Do not run that command until Pages is supposed to be on. Dispatching does not by itself enable Pages; GitHub will refuse the deploy while Pages is disabled.
+```bash
+gh workflow run pages.yml --ref v1.2.3
+```
+
+4. Open `/`, `/web/`, and `/dist/manifest.json` and confirm each is 200, and that the footer still says `srd-2024-5.2`.
+
+Do not dispatch until Pages is supposed to be on. Dispatching does not by itself enable Pages.
+
+## Pre-enable checklist
+
+Pages stays off until every line below is done.
+
+### Patrick (repository admin)
+
+- [ ] Create the `github-pages` environment. Patrick is a required reviewer. The deployment-branch rule is `main` only.
+- [ ] Turn on secret scanning push protection for this repository.
+- [ ] Confirm branch protection on `main`.
+
+### CTO
+
+- [ ] Kill-switch drill: enable Pages, dispatch from `main`, confirm `/`, `/web/`, and `/dist/manifest.json` return 200, run the kill switch, confirm those three URLs return 404.
+- [ ] Sign off, together with Patrick, before the site is left published.
 
 ## Who can dispatch
 

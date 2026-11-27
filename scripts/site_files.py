@@ -17,6 +17,7 @@ from pathlib import Path
 
 # Explicit publish set. Globs only name runtime files; they are not a denylist.
 ALLOWLIST = (
+    "index.html",
     "web/index.html",
     "web/styles.css",
     "web/app.js",
@@ -54,14 +55,26 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def _refuse_symlink(repo: Path, path: Path) -> None:
+    current = path
+    while True:
+        if current.is_symlink():
+            rel = current.relative_to(repo).as_posix() if current.is_relative_to(repo) else str(current)
+            raise SystemExit(f"allowlisted path is a symlink: {rel}")
+        if current == repo or current == current.parent:
+            break
+        current = current.parent
+
+
 def expand_allowlist(repo: Path) -> list[str]:
     """Return repo-relative paths matched by the allowlist, in sorted order."""
     found: list[str] = []
     for pattern in ALLOWLIST:
-        matches = sorted(p for p in repo.glob(pattern) if p.is_file())
+        matches = sorted(p for p in repo.glob(pattern) if p.is_file() or p.is_symlink())
         if not matches:
             raise SystemExit(f"allowlist pattern matched nothing: {pattern}")
         for path in matches:
+            _refuse_symlink(repo, path)
             rel = path.relative_to(repo).as_posix()
             if rel not in found:
                 found.append(rel)
@@ -100,9 +113,12 @@ def check(repo: Path, site: Path) -> list[str]:
 
     actual: list[str] = []
     for path in site.rglob("*"):
+        rel = path.relative_to(site).as_posix()
+        if path.is_symlink():
+            errors.append(f"symlink: {rel}")
+            continue
         if not path.is_file():
             continue
-        rel = path.relative_to(site).as_posix()
         actual.append(rel)
         if rel not in expected:
             errors.append(f"outside allowlist: {rel}")

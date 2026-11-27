@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.site_files import assemble, check
+from scripts.site_files import assemble, check, expand_allowlist
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -26,7 +26,13 @@ class CheckSiteTests(unittest.TestCase):
     def test_assembled_tree_passes_and_omits_private_files(self) -> None:
         self.assertEqual(check(ROOT, self.site), [])
         names = {p.relative_to(self.site).as_posix() for p in self.site.rglob("*") if p.is_file()}
+        self.assertIn("index.html", names)
         self.assertIn("web/index.html", names)
+        root_html = (self.site / "index.html").read_text(encoding="utf-8")
+        self.assertIn('http-equiv="refresh"', root_html)
+        self.assertIn('href="web/"', root_html)
+        self.assertIn("Content-Security-Policy", root_html)
+        self.assertNotIn("<script", root_html.lower())
         self.assertIn("dist/manifest.json", names)
         self.assertIn("dist/web/graph.json", names)
         self.assertIn("bin/srd", names)
@@ -78,6 +84,61 @@ class CheckSiteTests(unittest.TestCase):
         self.assertIn("dataset_id", errors)
         self.assertIn("counts.entities", errors)
         self.assertIn("does not match manifest", errors)
+
+    def test_schema_version_mismatch_fails(self) -> None:
+        path = self.site / "dist" / "manifest.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["schema_version"] = "9"
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        errors = "\n".join(check(ROOT, self.site))
+        self.assertIn("schema_version", errors)
+
+    def test_edges_count_mismatch_fails(self) -> None:
+        path = self.site / "dist" / "manifest.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["counts"]["edges"] = 1
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        errors = "\n".join(check(ROOT, self.site))
+        self.assertIn("counts.edges", errors)
+        self.assertIn("graph edge count", errors)
+
+    def test_graph_and_index_cross_check_fails(self) -> None:
+        index_path = self.site / "dist" / "web" / "index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["entities"] = index["entities"][:2]
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        graph_path = self.site / "dist" / "web" / "graph.json"
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+        graph["nodes"] = {"spells:fireball": graph["nodes"]["spells:fireball"]}
+        graph["edges"] = graph["edges"][:4]
+        graph_path.write_text(json.dumps(graph), encoding="utf-8")
+        errors = "\n".join(check(ROOT, self.site))
+        self.assertIn("index entity count", errors)
+        self.assertIn("graph edge count", errors)
+        self.assertIn("graph node count", errors)
+
+    def test_missing_required_file_fails(self) -> None:
+        (self.site / "web" / "app.js").unlink()
+        errors = "\n".join(check(ROOT, self.site))
+        self.assertIn("missing required file: web/app.js", errors)
+
+    def test_site_symlink_fails(self) -> None:
+        styles = self.site / "web" / "styles.css"
+        styles.unlink()
+        styles.symlink_to(self.site / "web" / "index.html")
+        errors = "\n".join(check(ROOT, self.site))
+        self.assertIn("symlink: web/styles.css", errors)
+
+    def test_allowlisted_source_symlink_fails(self) -> None:
+        link = ROOT / "web" / "lib" / "zz-symlink-test.js"
+        try:
+            link.symlink_to(ROOT / "web" / "lib" / "boot.js")
+            with self.assertRaises(SystemExit) as caught:
+                expand_allowlist(ROOT)
+            self.assertIn("symlink", str(caught.exception))
+        finally:
+            if link.is_symlink() or link.exists():
+                link.unlink()
 
     def test_shell_script_is_executable(self) -> None:
         mode = (ROOT / "scripts" / "check_site.sh").stat().st_mode
