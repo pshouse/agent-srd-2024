@@ -215,6 +215,16 @@ See [`docs/SPEC.md`](docs/SPEC.md) for the complete schema and contract specific
 
 ---
 
+## GitHub Pages
+
+The site is **not live**. GitHub Pages is off, and `.github/workflows/pages.yml` does not turn it on. The workflow runs only when someone dispatches it by hand. Enabling Pages, and the first dispatch, need sign-off from the CTO and from Patrick.
+
+The job would publish a sibling layout (`web/`, `dist/`, `bin/`, and `skill/SKILL.md`) built from an allowlist, after the Node tests, the Python tests, and `scripts/check_site.sh`. CI (`.github/workflows/ci.yml`) runs those tests on pull requests and on pushes to `main`. It does not deploy.
+
+The kill switch, the 404 check, and rollback are in [`docs/SECURITY-PAGES.md`](docs/SECURITY-PAGES.md). The deployment decision is [ADR 0002](docs/adr/0002-pages-deploy-gates.md).
+
+---
+
 ## Attribution & Licensing
 
 ### Underlying SRD 5.2 Content (CC-BY-4.0)

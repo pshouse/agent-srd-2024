@@ -1,0 +1,65 @@
+# Tests and secret scan. This workflow does not deploy and does not enable Pages.
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+
+      - name: Node tests
+        run: node --disable-warning=ExperimentalWarning --test
+
+      - name: Python tests
+        run: PYTHONPATH=src python -m unittest discover -s tests -q
+
+      - name: Vendored markdown-it SHA-256
+        run: echo "d5432491790141da046b1197353705db03264f40b5727f3b4b591f5aba193e30  web/vendor/markdown-it/markdown-it.esm.min.mjs" | sha256sum -c -
+
+  gitleaks:
+    # Full-history scan when this workflow runs for a push to main.
+    # Pull requests use the same checkout and command over the history
+    # GitHub fetched for that event.
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks 8.30.1
+        run: |
+          set -euo pipefail
+          version=8.30.1
+          file="gitleaks_${version}_linux_x64.tar.gz"
+          curl -fsSL -o "$file" "https://github.com/gitleaks/gitleaks/releases/download/v${version}/${file}"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  ${file}" | sha256sum -c -
+          tar -xzf "$file" gitleaks
+          install -m 0755 gitleaks "$RUNNER_TEMP/gitleaks"
+          "$RUNNER_TEMP/gitleaks" version
+
+      - name: Scan the whole git history
+        run: |
+          "$RUNNER_TEMP/gitleaks" git . --verbose --redact
