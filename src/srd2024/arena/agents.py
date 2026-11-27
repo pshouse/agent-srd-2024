@@ -897,6 +897,8 @@ def extract_decision_json(raw_text: str) -> dict[str, Any]:
         raw_text = raw_text[:_MAX_DECISION_TEXT]
 
     stripped = raw_text.strip()
+    if _json_nesting_exceeds(stripped):
+        raise ValueError("JSON nesting exceeds the limit.")
 
     # 1. Direct JSON parse.
     try:
@@ -2733,16 +2735,69 @@ _SECRET_TEXT_RE = re.compile(
 )
 
 
+def _secret_forms(secret: str) -> list[str]:
+    """Raw value plus the escaped form header errors use (`repr` without quotes)."""
+    forms = [secret]
+    forms.extend(line for line in secret.splitlines() if line and line != secret)
+    rendered = repr(secret)
+    if len(rendered) >= 2 and rendered[0] == rendered[-1] and rendered[0] in "'\"":
+        forms.append(rendered[1:-1])
+    forms.append(rendered)
+    return forms
+
+
 def scrub_secrets(text: str, secrets: list[str] | None = None) -> str:
-    """Redact secret-looking substrings and any explicit secret values from `text`."""
+    """Redact secret-looking substrings and any explicit secret values from `text`.
+
+    Header validation quotes CR/LF keys with backslash escapes, so those forms
+    are removed as well as the raw value.
+    """
     if not text:
         return text
     out = str(text)
     for secret in secrets or []:
         raw = str(secret or "")
-        if len(raw) >= 4 and raw in out:
-            out = out.replace(raw, "[REDACTED]")
+        if len(raw) < 4:
+            continue
+        forms = [form for form in _secret_forms(raw) if len(form) >= 4]
+        for form in sorted(forms, key=len, reverse=True):
+            if form in out:
+                out = out.replace(form, "[REDACTED]")
     return _SECRET_TEXT_RE.sub("[REDACTED]", out)
+
+
+def _json_nesting_exceeds(text: str, limit: int = _MAX_JSON_DEPTH) -> bool:
+    """Return whether `{` / `[` nesting outside strings is deeper than `limit`.
+
+    This runs before `json.loads` so a hostile document cannot raise RecursionError.
+    """
+    depth = 0
+    in_string = False
+    escape = False
+    for ch in text:
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            depth += 1
+            if depth > limit:
+                return True
+        elif ch in "}]" and depth:
+            depth -= 1
+    return False
+
+
+def _reject_control_chars_in_secret(value: str) -> None:
+    """Refuse CR/LF and other controls before they are placed in an HTTP header."""
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        raise RuntimeError("LLM API key was rejected.")
 
 
 def _is_local_url(url: str) -> bool:
@@ -2834,6 +2889,8 @@ def _default_http_transport(
         raise
 
     raw_body = raw_bytes.decode("utf-8", errors="replace")
+    if _json_nesting_exceeds(raw_body):
+        raise RuntimeError("LLM response JSON nesting exceeds the limit.")
     try:
         parsed = json.loads(raw_body)
     except json.JSONDecodeError:
@@ -2941,6 +2998,7 @@ class OpenAICompatDriver(BaseLLMDriver):
         url = f"{self.api_base}/chat/completions"
         headers: dict[str, str] = {}
         if key:
+            _reject_control_chars_in_secret(key)
             headers["Authorization"] = f"Bearer {key}"
         payload = {
             "model": self.model,
@@ -2996,6 +3054,7 @@ class AnthropicDriver(BaseLLMDriver):
             "anthropic-version": self.ANTHROPIC_VERSION,
         }
         if key:
+            _reject_control_chars_in_secret(key)
             headers["x-api-key"] = key
         payload = {
             "model": self.model,
@@ -3040,6 +3099,7 @@ class GeminiDriver(BaseLLMDriver):
         url = f"{self.api_base}/v1beta/models/{encoded_model}:generateContent"
         headers: dict[str, str] = {}
         if key:
+            _reject_control_chars_in_secret(key)
             headers["x-goog-api-key"] = key
         payload = {
             "system_instruction": {"parts": [{"text": system_prompt}]},

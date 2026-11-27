@@ -36,7 +36,6 @@ ENV_ARENA_VAR = "SRD2024_ARENA"
 ENV_ARENA_ALLOW_LLM_VAR = "SRD2024_ARENA_ALLOW_LLM"
 
 _ARENA_TOOL_NAMES = frozenset({"srd_arena_scenarios", "srd_arena_run", "srd_arena_bench"})
-_PAID_LLM_PREFIXES = ("openai-compat:", "anthropic:", "gemini:")
 _MCP_MAX_LINE_CHARS = 256 * 1024
 _MCP_MAX_SEEDS = 10
 _MCP_MAX_ROUNDS = 50
@@ -44,6 +43,9 @@ _MCP_MAX_SCENARIO_ID_CHARS = 256
 _MCP_MAX_INLINE_SCENARIO_CHARS = 64 * 1024
 _MCP_MAX_AGENT_SPEC_CHARS = 256
 _MCP_MAX_ERROR_CHARS = 300
+# seeds × scenarios × agents × rounds. 15 is the longest built-in scenario.
+_MCP_MAX_BENCH_WORK = 500
+_MCP_ASSUMED_ROUNDS = 15
 
 TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
@@ -556,9 +558,8 @@ def _looks_like_filesystem_path(text: str) -> bool:
     return False
 
 
-def _is_paid_llm_spec(spec: str) -> bool:
-    low = spec.strip().lower()
-    return low.startswith(_PAID_LLM_PREFIXES)
+def _spec_has_whitespace_or_control(spec: str) -> bool:
+    return any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in spec)
 
 
 def _builtin_scenario_ids() -> set[str]:
@@ -575,6 +576,10 @@ def _resolve_mcp_scenario(raw: str) -> str | dict[str, Any]:
     if text.startswith("{"):
         if len(text) > _MCP_MAX_INLINE_SCENARIO_CHARS:
             raise ValueError("Inline scenario JSON exceeds 64KB.")
+        from srd2024.arena.agents import _json_nesting_exceeds
+
+        if _json_nesting_exceeds(text):
+            raise ValueError("JSON nesting exceeds the limit.")
         try:
             parsed = json.loads(text)
         except json.JSONDecodeError as exc:
@@ -591,13 +596,34 @@ def _resolve_mcp_scenario(raw: str) -> str | dict[str, Any]:
     return text
 
 
-def _check_mcp_agent_spec(spec: str, *, allow_llm: bool) -> None:
+def _check_mcp_agent_spec(spec: str, *, allow_llm: bool, rules: Any) -> None:
+    """Reject whitespace tricks and any driver that would call a paid LLM.
+
+    The paid-LLM decision uses the object `create_driver` actually returns.
+    A second parse of the spec string is not the gate: `openai-compat :gpt-x`
+    still constructs `OpenAICompatDriver`.
+    """
     if len(spec) > _MCP_MAX_AGENT_SPEC_CHARS:
         raise ValueError("Agent spec exceeds 256 characters.")
-    if _is_paid_llm_spec(spec) and not allow_llm:
+    if _spec_has_whitespace_or_control(spec):
+        raise ValueError("Agent spec must not contain whitespace or control characters.")
+    from srd2024.arena.agents import BaseLLMDriver, create_driver
+
+    driver = create_driver(spec, rules=rules, seed=1)
+    if isinstance(driver, BaseLLMDriver) and not allow_llm:
         raise ValueError(
             "Paid LLM drivers require --arena-allow-llm or SRD2024_ARENA_ALLOW_LLM=1 at server start."
         )
+
+
+def _bench_work_limit_exceeded(
+    *,
+    n_scenarios: int,
+    n_agents: int,
+    n_seeds: int,
+    rounds: int,
+) -> bool:
+    return n_scenarios * n_agents * n_seeds * rounds > _MCP_MAX_BENCH_WORK
 
 
 def _clip_error(message: str) -> str:
@@ -913,16 +939,16 @@ class SRDMCPServer:
                     return self._tool_error(f"'max_rounds' must be between 1 and {_MCP_MAX_ROUNDS}.")
                 try:
                     scenario_ref = _resolve_mcp_scenario(scenario)
-                    _check_mcp_agent_spec(party_agent.strip(), allow_llm=self.allow_arena_llm)
-                    _check_mcp_agent_spec(enemy_agent.strip(), allow_llm=self.allow_arena_llm)
+                    rules = self._get_rules_store()
+                    _check_mcp_agent_spec(party_agent, allow_llm=self.allow_arena_llm, rules=rules)
+                    _check_mcp_agent_spec(enemy_agent, allow_llm=self.allow_arena_llm, rules=rules)
                 except ValueError as exc:
                     return self._tool_error(str(exc))
-                rules = self._get_rules_store()
                 payload = execute_arena_run(
                     rules,
                     scenario=scenario_ref,
-                    party_agent=party_agent.strip(),
-                    enemy_agent=enemy_agent.strip(),
+                    party_agent=party_agent,
+                    enemy_agent=enemy_agent,
                     seed=seed,
                     max_rounds=max_rounds,
                 )
@@ -961,23 +987,35 @@ class SRDMCPServer:
                 )
                 if max_rounds is not None and (max_rounds < 1 or max_rounds > _MCP_MAX_ROUNDS):
                     return self._tool_error(f"'max_rounds' must be between 1 and {_MCP_MAX_ROUNDS}.")
+                n_scenarios = len(scenarios) if isinstance(scenarios, list) else len(_builtin_scenario_ids())
+                n_agents = len(agents) if isinstance(agents, list) else 3
+                rounds_for_cap = max_rounds if max_rounds is not None else _MCP_ASSUMED_ROUNDS
+                if _bench_work_limit_exceeded(
+                    n_scenarios=n_scenarios,
+                    n_agents=n_agents,
+                    n_seeds=len(seeds_raw),
+                    rounds=rounds_for_cap,
+                ):
+                    return self._tool_error(
+                        "Bench work exceeds the limit (seeds × scenarios × agents × rounds)."
+                    )
                 try:
                     if scenarios is not None:
                         scenarios = [_resolve_mcp_scenario(s) for s in scenarios]
                         if any(not isinstance(s, str) for s in scenarios):
                             return self._tool_error("Bench scenarios must be built-in ids.")
+                    rules = self._get_rules_store()
                     if agents is not None:
                         for spec in agents:
-                            _check_mcp_agent_spec(spec.strip(), allow_llm=self.allow_arena_llm)
-                    _check_mcp_agent_spec(enemy_agent.strip(), allow_llm=self.allow_arena_llm)
+                            _check_mcp_agent_spec(spec, allow_llm=self.allow_arena_llm, rules=rules)
+                    _check_mcp_agent_spec(enemy_agent, allow_llm=self.allow_arena_llm, rules=rules)
                 except ValueError as exc:
                     return self._tool_error(str(exc))
-                rules = self._get_rules_store()
                 payload = execute_arena_bench(
                     rules,
                     scenarios=scenarios,
                     agents=agents,
-                    enemy_agent=enemy_agent.strip(),
+                    enemy_agent=enemy_agent,
                     seeds=seeds_raw,
                     max_rounds=max_rounds,
                 )

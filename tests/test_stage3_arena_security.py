@@ -17,6 +17,7 @@ from unittest import mock
 
 import srd2024
 from srd2024.arena.agents import (
+    AnthropicDriver,
     GeminiDriver,
     HeuristicTacticalDriver,
     OpenAICompatDriver,
@@ -219,8 +220,9 @@ class TestDecisionParserBounds(unittest.TestCase):
         for _ in range(40):
             inner = '{"x":' + inner + "}"
         text = '{"intent":' + inner + "}"
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as ctx:
             extract_decision_json(text)
+        self.assertIn("nesting", str(ctx.exception).lower())
 
     def test_random_inputs_do_not_escape_value_error(self) -> None:
         rng = random.Random(20241127)
@@ -233,6 +235,30 @@ class TestDecisionParserBounds(unittest.TestCase):
                 continue
             self.assertIsInstance(parsed, dict)
             self.assertIn("intent", parsed)
+
+    def test_crlf_key_is_absent_from_header_errors(self) -> None:
+        key = "anth-secret\r\nInjected: pwned"
+        leaked = f"Invalid header value {key!r}"
+        cleaned = scrub_secrets(leaked, [key])
+        self.assertNotIn("anth-secret", cleaned)
+        self.assertNotIn("Injected", cleaned)
+        self.assertNotIn("\\r\\n", cleaned)
+
+        def _transport(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+            raise AssertionError("transport must not run")
+
+        driver = AnthropicDriver(
+            model="claude-test",
+            api_base="https://api.anthropic.com",
+            api_key=key,
+            http_transport=_transport,
+        )
+        with self.assertRaises(RuntimeError) as ctx:
+            driver.decide(_obs())
+        text = str(ctx.exception)
+        self.assertNotIn("anth-secret", text)
+        self.assertNotIn("Injected", text)
+        self.assertNotIn("pwned", text)
 
     def test_scrub_removes_explicit_secret_and_bearer(self) -> None:
         raw = f"Authorization: Bearer {_FAKE_KEY} and key={_FAKE_KEY}"
@@ -318,6 +344,75 @@ class TestArenaMcpGate(unittest.TestCase):
         finally:
             store.close()
 
+    def test_whitespace_and_case_cannot_select_a_paid_driver(self) -> None:
+        store, server = self._server(arena=True, allow_llm=False)
+        gaps = (" ", "\t", "\n", "\r", "\u00a0")
+        stems = ("openai-compat", "anthropic", "gemini", "OpenAI-Compat", "ANTHROPIC", "Gemini")
+        hostile = [f"{stem}{gap}:gpt-x" for stem in stems for gap in gaps]
+        hostile.extend(["OpenAI-Compat:gpt-x", "ANTHROPIC:claude", "GeMiNi:flash"])
+
+        def _boom(*_args: Any, **_kwargs: Any) -> Any:
+            raise AssertionError("MCP attempted a network call")
+
+        def _blocked(arguments: dict[str, Any]) -> None:
+            resp = self._call(server, arguments.pop("_tool"), arguments)
+            text = resp["result"]["content"][0]["text"]
+            self.assertTrue(resp["result"]["isError"], text)
+            self.assertTrue(
+                "whitespace" in text or "arena-allow-llm" in text,
+                text,
+            )
+            self.assertNotIn("api.openai.com", text)
+            self.assertNotIn("gpt-x", text)
+
+        try:
+            with mock.patch("socket.create_connection", _boom), mock.patch("socket.getaddrinfo", _boom):
+                for spec in hostile:
+                    _blocked({
+                        "_tool": "srd_arena_run",
+                        "scenario": "goblin-ambush",
+                        "party_agent": spec,
+                        "enemy_agent": "heuristic-tactical",
+                        "format": "json",
+                    })
+                    _blocked({
+                        "_tool": "srd_arena_run",
+                        "scenario": "goblin-ambush",
+                        "party_agent": "heuristic-tactical",
+                        "enemy_agent": spec,
+                        "format": "json",
+                    })
+                    _blocked({
+                        "_tool": "srd_arena_bench",
+                        "scenarios": ["goblin-ambush"],
+                        "agents": [spec],
+                        "seeds": [1],
+                        "enemy_agent": "heuristic-tactical",
+                        "format": "json",
+                    })
+        finally:
+            store.close()
+
+    def test_bench_total_work_is_capped(self) -> None:
+        store, server = self._server(arena=True)
+        try:
+            resp = self._call(
+                server,
+                "srd_arena_bench",
+                {
+                    "scenarios": ["goblin-ambush"] * 8,
+                    "agents": ["heuristic-tactical"] * 8,
+                    "seeds": [1] * 8,
+                    "format": "json",
+                },
+            )
+            text = resp["result"]["content"][0]["text"]
+            self.assertTrue(resp["result"]["isError"], text)
+            self.assertIn("seeds × scenarios × agents × rounds", text)
+            self.assertNotIn("goblin-ambush" * 2, text)
+        finally:
+            store.close()
+
     def test_json_caps_reject_without_echoing_the_payload(self) -> None:
         store, server = self._server(arena=True)
         try:
@@ -395,7 +490,17 @@ class TestArenaMcpGate(unittest.TestCase):
                 elif kind == 2:
                     arguments = {
                         "scenario": rng.choice(samples),
-                        "party_agent": rng.choice(["heuristic-tactical", "openai-compat:gpt-x", 5, ""]),
+                        "party_agent": rng.choice([
+                            "heuristic-tactical",
+                            "openai-compat:gpt-x",
+                            "openai-compat :gpt-x",
+                            "anthropic\t:claude",
+                            "gemini\n:flash",
+                            "OpenAI-Compat:gpt-x",
+                            "ANTHROPIC\u00a0:claude",
+                            5,
+                            "",
+                        ]),
                         "seeds": rng.choice([list(range(11)), ["nope"], [1, 2], 3]),
                         "max_rounds": rng.choice([0, 51, -1, 2, "x"]),
                         "format": "json",
