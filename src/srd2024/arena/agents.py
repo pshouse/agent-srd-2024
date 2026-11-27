@@ -3081,6 +3081,7 @@ class AnthropicDriver(BaseLLMDriver):
     DEFAULT_API_KEY_ENV = "ANTHROPIC_API_KEY"
     PROVIDER_PREFIX = "anthropic"
     ANTHROPIC_VERSION = "2023-06-01"
+    MIN_MAX_TOKENS = 4096  # headroom for default-on thinking plus the JSON decision
 
     def _build_request(
         self, system_prompt: str, user_prompt: str
@@ -3093,10 +3094,13 @@ class AnthropicDriver(BaseLLMDriver):
         if key:
             _reject_control_chars_in_secret(key)
             headers["x-api-key"] = key
+        # Current Claude models (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable 5.x) reject sampling parameters:
+        # `temperature` returns a 400 (Haiku 5.5: any non-default value), so it is never sent and --temperature
+        # has no effect on this driver. They also think by default, and thinking tokens count toward max_tokens,
+        # so a small cap can end the turn before any text is written; keep enough headroom for both.
         payload = {
             "model": self.model,
-            "max_tokens": self.max_tokens,
-            "temperature": self.temperature,
+            "max_tokens": max(self.max_tokens, self.MIN_MAX_TOKENS),
             "system": system_prompt,
             "messages": [{"role": "user", "content": user_prompt}],
         }
@@ -3111,6 +3115,10 @@ class AnthropicDriver(BaseLLMDriver):
             for b in blocks
             if isinstance(b, dict) and b.get("type") == "text"
         )
+        stop = response.get("stop_reason")
+        if not raw_text.strip() and stop in ("refusal", "max_tokens"):
+            # Name the cause instead of failing later with an opaque "no JSON found".
+            raise ValueError(f"Anthropic response has no text (stop_reason={stop!r}).")
         u = response.get("usage") or {}
         inp_t = int(u.get("input_tokens", 0) or 0)
         out_t = int(u.get("output_tokens", 0) or 0)

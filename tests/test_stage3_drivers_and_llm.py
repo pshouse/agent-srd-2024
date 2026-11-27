@@ -444,6 +444,17 @@ class TestStage3LiveLLMDriversOverLocalHTTP(unittest.TestCase):
             self.assertEqual(req["body"]["model"], "claude-3-5-sonnet-test")
             self.assertIn("system", req["body"])
             self.assertIn("messages", req["body"])
+            # Current Claude models 400 on sampling params, and their default-on thinking needs token headroom.
+            self.assertNotIn("temperature", req["body"])
+            self.assertGreaterEqual(req["body"]["max_tokens"], AnthropicDriver.MIN_MAX_TOKENS)
+
+    def test_anthropic_driver_names_empty_refusal_and_truncation(self) -> None:
+        driver = AnthropicDriver(model="claude-haiku-5-5", api_key="k")
+        for stop in ("refusal", "max_tokens"):
+            with self.assertRaisesRegex(ValueError, stop):
+                driver._parse_response({"content": [{"type": "thinking", "thinking": ""}], "stop_reason": stop})
+        text, _ = driver._parse_response({"content": [{"type": "text", "text": "{}"}], "stop_reason": "end_turn"})
+        self.assertEqual(text, "{}")
 
     def test_gemini_driver_end_to_end(self) -> None:
         decision_json = json.dumps(
