@@ -1,0 +1,15 @@
+---
+id: features:rogue-sneak-attack
+type: features
+name: "Sneak Attack"
+summary: "Rogue L1 feature: You know how to strike subtly and exploit a foe's distraction."
+refs:
+  - classes:rogue
+  - levels:rogue-1
+---
+# Sneak Attack (`features:rogue-sneak-attack`)
+**Class:** [Rogue](../classes/rogue.md) | **Level:** [Rogue 1](../levels/rogue-1.md)
+
+You know how to strike subtly and exploit a foe's distraction. Once per turn, you can deal an extra 1d6 damage to one creature you hit with an attack roll if you have Advantage on the roll and the attack uses a Finesse or a Ranged weapon. The extra damage's type is the same as the weapon's type.
+ You don't need Advantage on the attack roll if at least one of your allies is within 5 feet of the target, the ally doesn't have the Incapacitated condition, and you don't have Disadvantage on the attack roll.
+ The extra damage increases as you gain Rogue levels, as shown in the Sneak Attack column of the Rogue Features table.

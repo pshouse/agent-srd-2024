@@ -1,0 +1,20 @@
+---
+id: monsters:boar
+type: monsters
+name: "Boar"
+summary: "CR 1/4 Medium beast (unaligned); AC 11, HP 13, XP 50"
+refs:
+  - damage-types:piercing
+---
+# Boar (`monsters:boar`)
+*Medium beast, unaligned* | **CR** 1/4 (XP 50; PB +2)
+**AC** 11 | **HP** 13 (2d8 + 4) | **Speed** 40 ft.
+**STR** 13 (+1) | **DEX** 11 (+0) | **CON** 14 (+2) | **INT** 2 (-4) | **WIS** 9 (-1) | **CHA** 5 (-3)
+**Senses:** Passive Perception 9
+**Languages:** None
+
+## Traits
+- **Bloodied Fury.** While Bloodied, the boar has Advantage on attack rolls.
+
+## Actions
+- **Gore.** Melee Attack Roll: +3, reach 5 ft. Hit: 4 (1d6 + 1) Piercing damage. If the target is a Medium or smaller creature and the boar moved 20+ feet straight toward it immediately before the hit, the target takes an extra 3 (1d6) Piercing damage and has the Prone condition.

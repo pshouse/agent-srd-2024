@@ -1,0 +1,27 @@
+---
+id: monsters:roper
+type: monsters
+name: "Roper"
+summary: "CR 5 Large aberration (neutral evil); AC 20, HP 93, XP 1800"
+refs:
+  - ability-scores:str
+  - damage-types:piercing
+  - proficiencies:skill-perception
+  - proficiencies:skill-stealth
+---
+# Roper (`monsters:roper`)
+*Large aberration, neutral evil* | **CR** 5 (XP 1,800; PB +3)
+**AC** 20 | **HP** 93 (11d10 + 33) | **Speed** 10 ft., climb 20 ft.
+**STR** 18 (+4) | **DEX** 8 (-1) | **CON** 17 (+3) | **INT** 7 (-2) | **WIS** 16 (+3) | **CHA** 6 (-2)
+**Skills:** [Skill: Perception](../proficiencies/skill-perception.md) +6, [Skill: Stealth](../proficiencies/skill-stealth.md) +5
+**Senses:** Darkvision 60 ft., Passive Perception 16
+**Languages:** None
+
+## Traits
+- **Spider Climb.** The roper can climb difficult surfaces, including along ceilings, without needing to make an ability check.
+
+## Actions
+- **Multiattack.** The roper makes two Tentacle attacks, uses Reel, and makes two Bite attacks.
+- **Bite.** Melee Attack Roll: +7, reach 5 ft. Hit: 17 (3d8 + 4) Piercing damage.
+- **Tentacle.** Melee Attack Roll: +7, reach 60 ft. Hit: The target has the Grappled condition (escape DC 14) from one of six tentacles, and the target has the Poisoned condition until the grapple ends. The tentacle can be damaged, freeing a creature it has Grappled when destroyed (AC 20, HP 10, Immunity to Poison and Psychic damage). Damaging the tentacle deals no damage to the roper, and a destroyed tentacle regrows at the start of the roper’s next turn.
+- **Reel.** The roper pulls each creature Grappled by it up to 30 feet straight toward it.

@@ -1,0 +1,95 @@
+---
+id: equipment-categories:adventuring-gear
+type: equipment-categories
+name: "Adventuring Gear"
+summary: "Equipment category containing 86 items."
+refs:
+  - equipment:acid
+  - equipment:alchemists-fire
+  - equipment:amulet
+  - equipment:antitoxin
+  - equipment:backpack
+  - equipment:ball-bearings
+  - equipment:barrel
+  - equipment:basket
+  - equipment:bedroll
+  - equipment:bell
+  - equipment:blanket
+  - equipment:block-and-tackle
+  - equipment:book
+  - equipment:bottle-glass
+  - equipment:bucket
+  - equipment:burglars-pack
+  - equipment:caltrops
+  - equipment:candle
+  - equipment:case-crossbow-bolt
+  - equipment:case-map-or-scroll
+  - equipment:chain
+  - equipment:chest
+  - equipment:climbers-kit
+  - equipment:clothes-fine
+  - equipment:clothes-travelers
+  - equipment:component-pouch
+  - equipment:costume
+  - equipment:crowbar
+  - equipment:crystal
+  - equipment:diplomat-pack
+  - equipment:dungeoneer-pack
+  - equipment:emblem
+  - equipment:flask
+  - equipment:grappling-hook
+  - equipment:healers-kit
+  - equipment:holy-water
+  - equipment:hunting-trap
+  - equipment:ink
+  - equipment:ink-pen
+  - equipment:jug
+  - equipment:ladder
+  - equipment:lamp
+  - equipment:lantern-bullseye
+  - equipment:lantern-hooded
+  - equipment:lock
+  - equipment:magnifying-glass
+  - equipment:manacles
+  - equipment:map
+  - equipment:mirror
+  - equipment:net
+  - equipment:oil
+  - equipment:orb
+  - equipment:paper
+  - equipment:parchment
+  - equipment:perfume
+  - equipment:poison-basic
+  - equipment:pole
+  - equipment:pot-iron
+  - equipment:potion-of-healing
+  - equipment:pouch
+  - equipment:priests-pack
+  - equipment:quiver
+  - equipment:ram-portable
+  - equipment:rations
+  - equipment:reliquary
+  - equipment:robe
+  - equipment:rod
+  - equipment:rope
+  - equipment:sack
+  - equipment:scholars-pack
+  - equipment:shovel
+  - equipment:signal-whistle
+  - equipment:spell-scroll-cantrip
+  - equipment:spell-scroll-level-1
+  - equipment:spikes-iron
+  - equipment:sprig-of-mistletoe
+  - equipment:spyglass
+  - equipment:staff
+  - equipment:string
+  - equipment:tent
+  - equipment:tinderbox
+  - equipment:torch
+  - equipment:vial
+  - equipment:wand
+  - equipment:waterskin
+  - equipment:yew-wand
+---
+# Adventuring Gear (`equipment-categories:adventuring-gear`)
+**Items (86):** [Acid](../equipment/acid.md), [Alchemist's Fire](../equipment/alchemists-fire.md), [Amulet](../equipment/amulet.md), [Antitoxin](../equipment/antitoxin.md), [Backpack](../equipment/backpack.md), [Ball bearings](../equipment/ball-bearings.md), [Barrel](../equipment/barrel.md), [Basket](../equipment/basket.md), [Bedroll](../equipment/bedroll.md), [Bell](../equipment/bell.md), [Blanket](../equipment/blanket.md), [Block and tackle](../equipment/block-and-tackle.md), [Book](../equipment/book.md), [Bottle, Glass](../equipment/bottle-glass.md), [Bucket](../equipment/bucket.md), [Burglar's Pack](../equipment/burglars-pack.md), [Caltrops](../equipment/caltrops.md), [Candle](../equipment/candle.md), [Case, Crossbow Bolt](../equipment/case-crossbow-bolt.md), [Case, Map or Scroll](../equipment/case-map-or-scroll.md), [Chain](../equipment/chain.md), [Chest](../equipment/chest.md), [Climber's Kit](../equipment/climbers-kit.md), [Clothes, Fine](../equipment/clothes-fine.md), [Clothes, Traveler's](../equipment/clothes-travelers.md), [Component Pouch](../equipment/component-pouch.md), [Costume](../equipment/costume.md), [Crowbar](../equipment/crowbar.md), [Crystal](../equipment/crystal.md), [Diplomat's Pack](../equipment/diplomat-pack.md), [Dungeoneer's Pack](../equipment/dungeoneer-pack.md), [Emblem](../equipment/emblem.md), [Flask](../equipment/flask.md), [Grappling Hook](../equipment/grappling-hook.md), [Healer's Kit](../equipment/healers-kit.md), [Holy Water](../equipment/holy-water.md), [Hunting Trap](../equipment/hunting-trap.md), [Ink](../equipment/ink.md), [Ink Pen](../equipment/ink-pen.md), [Jug](../equipment/jug.md), [Ladder](../equipment/ladder.md), [Lamp](../equipment/lamp.md), [Lantern, Bullseye](../equipment/lantern-bullseye.md), [Lantern, Hooded](../equipment/lantern-hooded.md), [Lock](../equipment/lock.md), [Magnifying Glass](../equipment/magnifying-glass.md), [Manacles](../equipment/manacles.md), [Map](../equipment/map.md), [Mirror](../equipment/mirror.md), [Net](../equipment/net.md), [Oil](../equipment/oil.md), [Orb](../equipment/orb.md), [Paper](../equipment/paper.md), [Parchment](../equipment/parchment.md), [Perfume](../equipment/perfume.md), [Poison, Basic](../equipment/poison-basic.md), [Pouch](../equipment/pouch.md), [Pole](../equipment/pole.md), [Pot, Iron](../equipment/pot-iron.md), [Potion of Healing](../equipment/potion-of-healing.md), [Priest's Pack](../equipment/priests-pack.md), [Quiver](../equipment/quiver.md), [Ram, Portable](../equipment/ram-portable.md), [Rations](../equipment/rations.md), [Reliquary](../equipment/reliquary.md), [Robe](../equipment/robe.md), [Rod](../equipment/rod.md), [Rope](../equipment/rope.md), [Sack](../equipment/sack.md), [Scholar's Pack](../equipment/scholars-pack.md), [Shovel](../equipment/shovel.md), [Signal Whistle](../equipment/signal-whistle.md), [Spell Scroll, Cantrip](../equipment/spell-scroll-cantrip.md), [Spell Scroll, Level 1](../equipment/spell-scroll-level-1.md), [Spikes, Iron](../equipment/spikes-iron.md), [Sprig of Mistletoe](../equipment/sprig-of-mistletoe.md), [Spyglass](../equipment/spyglass.md), [Staff](../equipment/staff.md), [String](../equipment/string.md), [Tent](../equipment/tent.md), [Tinderbox](../equipment/tinderbox.md), [Torch](../equipment/torch.md), [Vial](../equipment/vial.md), [Wand](../equipment/wand.md), [Waterskin](../equipment/waterskin.md), [Yew Wand](../equipment/yew-wand.md)

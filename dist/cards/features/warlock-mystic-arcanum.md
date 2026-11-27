@@ -1,0 +1,16 @@
+---
+id: features:warlock-mystic-arcanum
+type: features
+name: "Mystic Arcanum"
+summary: "Warlock L11 feature: Your patron grants you a magical secret called an arcanum."
+refs:
+  - classes:warlock
+  - levels:warlock-11
+---
+# Mystic Arcanum (`features:warlock-mystic-arcanum`)
+**Class:** [Warlock](../classes/warlock.md) | **Level:** [Warlock 11](../levels/warlock-11.md)
+
+Your patron grants you a magical secret called an arcanum. Choose one level 6 Warlock spell as this arcanum.
+You can cast your arcanum spell once without expending a spell slot, and you must finish a Long Rest before you can cast it in this way again.
+As shown in the Warlock Features table, you gain another Warlock spell of your choice that can be cast in this way when you reach Warlock levels 13 (level 7 spell), 15 (level 8 spell), and 17 (level 9 spell). You regain all uses of your Mystic Arcanum when you finish a Long Rest.
+Whenever you gain a Warlock level, you can replace one of your arcanum spells with another Warlock spell of the same level.

@@ -1,0 +1,15 @@
+---
+id: features:paladin-aura-of-protection
+type: features
+name: "Aura of Protection"
+summary: "Paladin L6 feature: You radiate a protective, unseeable aura in a 10-foot Emanation that originates from you."
+refs:
+  - classes:paladin
+  - levels:paladin-6
+---
+# Aura of Protection (`features:paladin-aura-of-protection`)
+**Class:** [Paladin](../classes/paladin.md) | **Level:** [Paladin 6](../levels/paladin-6.md)
+
+You radiate a protective, unseeable aura in a 10-foot Emanation that originates from you. The aura is inactive while you have the Incapacitated condition.
+  You and your allies in the aura gain a bonus to saving throws equal to your Charisma modifier (minimum bonus of +1).
+  If another Paladin is present, a creature can benefit from only one Aura of Protection at a time; the creature chooses which aura while in them.

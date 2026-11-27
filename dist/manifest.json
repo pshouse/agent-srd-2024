@@ -1,0 +1,235 @@
+{
+  "artifacts": {
+    "cards_index": "cards/INDEX.md",
+    "sqlite": "srd2024.sqlite",
+    "web_graph": "web/graph.json",
+    "web_index": "web/index.json",
+    "web_types_dir": "web/types"
+  },
+  "counts": {
+    "cards": 2029,
+    "dangling_refs": 0,
+    "edges": 7614,
+    "entities": 2029,
+    "facets": 7681,
+    "files": 25,
+    "web_type_shards": 25
+  },
+  "dataset_id": "srd-2024-5.2",
+  "license": {
+    "attribution": "This work includes material from the System Reference Document 5.2 (\"SRD 5.2\") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.",
+    "content": "CC-BY-4.0",
+    "content_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+    "packaging": "MIT"
+  },
+  "resource_types": [
+    {
+      "count": 6,
+      "facet_keys": [
+        "skill"
+      ],
+      "type": "ability-scores"
+    },
+    {
+      "count": 10,
+      "facet_keys": [
+        "abbreviation"
+      ],
+      "type": "alignments"
+    },
+    {
+      "count": 4,
+      "facet_keys": [
+        "ability",
+        "feat",
+        "proficiency"
+      ],
+      "type": "backgrounds"
+    },
+    {
+      "count": 12,
+      "facet_keys": [
+        "hit_die",
+        "saving_throw",
+        "spellcaster",
+        "subclass"
+      ],
+      "type": "classes"
+    },
+    {
+      "count": 15,
+      "facet_keys": [],
+      "type": "conditions"
+    },
+    {
+      "count": 13,
+      "facet_keys": [],
+      "type": "damage-types"
+    },
+    {
+      "count": 182,
+      "facet_keys": [
+        "ability",
+        "category",
+        "cost_unit",
+        "damage_type",
+        "mastery",
+        "property"
+      ],
+      "type": "equipment"
+    },
+    {
+      "count": 30,
+      "facet_keys": [],
+      "type": "equipment-categories"
+    },
+    {
+      "count": 17,
+      "facet_keys": [
+        "feat_type",
+        "has_prerequisite",
+        "repeatable"
+      ],
+      "type": "feats"
+    },
+    {
+      "count": 232,
+      "facet_keys": [
+        "class",
+        "level",
+        "subclass"
+      ],
+      "type": "features"
+    },
+    {
+      "count": 19,
+      "facet_keys": [
+        "is_rare"
+      ],
+      "type": "languages"
+    },
+    {
+      "count": 287,
+      "facet_keys": [
+        "class",
+        "level",
+        "subclass"
+      ],
+      "type": "levels"
+    },
+    {
+      "count": 277,
+      "facet_keys": [
+        "attunement",
+        "category",
+        "limited_to",
+        "rarity",
+        "variant"
+      ],
+      "type": "magic-items"
+    },
+    {
+      "count": 8,
+      "facet_keys": [],
+      "type": "magic-schools"
+    },
+    {
+      "count": 341,
+      "facet_keys": [
+        "alignment",
+        "condition_immunity",
+        "cr",
+        "creature_type",
+        "size"
+      ],
+      "type": "monsters"
+    },
+    {
+      "count": 14,
+      "facet_keys": [
+        "cost",
+        "poison_type"
+      ],
+      "type": "poisons"
+    },
+    {
+      "count": 74,
+      "facet_keys": [
+        "background",
+        "class",
+        "proficiency_type"
+      ],
+      "type": "proficiencies"
+    },
+    {
+      "count": 18,
+      "facet_keys": [
+        "ability"
+      ],
+      "type": "skills"
+    },
+    {
+      "count": 9,
+      "facet_keys": [
+        "creature_type",
+        "has_subspecies",
+        "size",
+        "speed"
+      ],
+      "type": "species"
+    },
+    {
+      "count": 339,
+      "facet_keys": [
+        "attack_type",
+        "class",
+        "concentration",
+        "damage_type",
+        "level",
+        "ritual",
+        "school"
+      ],
+      "type": "spells"
+    },
+    {
+      "count": 12,
+      "facet_keys": [
+        "class"
+      ],
+      "type": "subclasses"
+    },
+    {
+      "count": 24,
+      "facet_keys": [
+        "damage_type",
+        "species"
+      ],
+      "type": "subspecies"
+    },
+    {
+      "count": 68,
+      "facet_keys": [
+        "species",
+        "subspecies"
+      ],
+      "type": "traits"
+    },
+    {
+      "count": 8,
+      "facet_keys": [],
+      "type": "weapon-mastery-properties"
+    },
+    {
+      "count": 10,
+      "facet_keys": [],
+      "type": "weapon-properties"
+    }
+  ],
+  "schema_version": "1",
+  "source_hash": "b31fee9482ebceeb7b6ba2d8072b4eb1a6b0aadbd6a695b213193821b4c6f363",
+  "upstream": {
+    "commit": "8a339e73ed5bba9ffec2ad6be9e76b5afa9c1b24",
+    "database_version": "7.10.0",
+    "repo": "https://github.com/5e-bits/5e-srd-api"
+  }
+}

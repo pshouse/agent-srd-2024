@@ -1,0 +1,16 @@
+---
+id: spells:identify
+type: spells
+name: "Identify"
+summary: "Level 1 Divination (Ritual); 1 minute; Touch; Instantaneous; Bard, Wizard"
+refs:
+  - classes:bard
+  - classes:wizard
+  - magic-schools:divination
+---
+# Identify (`spells:identify`)
+**Level 1 [Divination](../magic-schools/divination.md) (Ritual)** | **Casting Time:** 1 minute | **Range:** Touch
+**Components:** V, S, M (a pearl worth 100+ GP) | **Duration:** Instantaneous | **Classes:** [Bard](../classes/bard.md), [Wizard](../classes/wizard.md)
+
+You touch an object throughout the spell's casting. If the object is a magic item or some other magical object, you learn its properties and how to use them, whether it requires Attunement, and how many charges it has, if any. You learn whether any ongoing spells are affecting the item and what they are. If the item was created by a spell, you learn that spell's name.
+  If you instead touch a creature throughout the casting, you learn which ongoing spells, if any, are currently affecting it.

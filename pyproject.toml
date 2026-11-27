@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-srd-2024"
+version = "0.1.0"
+description = "Zero-server, agent-native 5e 2024 (SRD 5.2) SQLite, Markdown card, CLI, and MCP pack"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+srd-build = "srd2024.compiler.__main__:main"
+srd = "srd2024.runtime.cli:main"
+srd-mcp = "srd2024.runtime.mcp:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
