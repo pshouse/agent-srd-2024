@@ -119,6 +119,84 @@ Emits deterministic Stage 2 artifacts (also triggered automatically at the end o
 
 ---
 
+## Stage 3 Quickstart: Multi-Agent Tabletop & Model Eval Arena
+
+Stage 3 adds a deterministic, partial-observability **Multi-Agent 5e 2024 (SRD 5.2) Tabletop & Model Evaluation Arena** (`src/srd2024/arena/`, `bin/srd-arena`, `bin/srd arena`) strictly on top of the Stage 2 rules engine. Agents (offline deterministic bots or live LLMs over pure Python stdlib `urllib.request`) never roll dice or mutate state—every combat action is adjudicated by `srd2024.engine.combat.step()`, scored quantitatively (`0–100` across outcome, rules legality, tactical execution, and party coordination), and verifiable via 100% deterministic SHA-256 trace replay.
+
+### 1. List Scenarios, Run Matches & Replay Traces (`bin/srd-arena` / `bin/srd arena`)
+
+Both `./bin/srd-arena <subcommand>` and `./bin/srd arena <subcommand>` support identical flags and 1:1 JSON parity:
+
+```bash
+# Inspect built-in 5e 2024 (SRD 5.2) arena scenarios (goblin-ambush, crypt-of-ghouls, wyrmling-lair)
+./bin/srd-arena scenarios
+./bin/srd arena scenarios --format json
+
+# Run a single deterministic match and save a full MatchTranscript trace
+./bin/srd-arena run wyrmling-lair \
+  --party-agent heuristic-tactical \
+  --enemy-agent heuristic-tactical \
+  --seed 42 \
+  --out-trace /tmp/wyrmling-trace.json \
+  --format markdown
+
+# Replay a saved transcript and assert byte-identical deterministic digest parity (exit 0 on match)
+./bin/srd-arena replay /tmp/wyrmling-trace.json --format markdown
+
+# Run the multi-seed, multi-scenario evaluation leaderboard across offline drivers
+./bin/srd-arena bench \
+  --scenarios goblin-ambush,crypt-of-ghouls,wyrmling-lair \
+  --agents heuristic-tactical,greedy,random \
+  --enemy-agent heuristic-tactical \
+  --seeds 1,2,3 \
+  --out-json /tmp/arena-bench.json
+```
+
+### 2. Evaluate Live LLM Drivers (Zero External SDKs — Pure Stdlib `urllib.request`)
+
+```bash
+# OpenAI-compatible endpoint (OpenAI, OpenRouter, Ollama, vLLM, LM Studio, etc.)
+OPENAI_API_KEY=... ./bin/srd-arena run goblin-ambush \
+  --party-agent openai-compat:gpt-4o-mini \
+  --enemy-agent heuristic-tactical \
+  --seed 7
+
+# Local Ollama / vLLM endpoint (API key optional on localhost)
+./bin/srd-arena run goblin-ambush \
+  --party-agent openai-compat:llama3.2 \
+  --api-base http://127.0.0.1:11434/v1 \
+  --enemy-agent heuristic-tactical
+
+# Anthropic Messages API
+ANTHROPIC_API_KEY=... ./bin/srd-arena run crypt-of-ghouls \
+  --party-agent anthropic:claude-sonnet-4-5 \
+  --enemy-agent heuristic-tactical
+
+# Google Gemini generateContent API
+GEMINI_API_KEY=... ./bin/srd-arena run wyrmling-lair \
+  --party-agent gemini:gemini-2.5-flash \
+  --enemy-agent heuristic-tactical
+```
+
+### 3. Stage 3 MCP Server Mode (`bin/srd-mcp --arena` / `SRD2024_ARENA=1`)
+
+- Default `bin/srd-mcp` preserves the exact **5 Stage 1 tools** in `tools/list`.
+- `bin/srd-engine-mcp` / `bin/srd-mcp --engine` / `SRD2024_ENGINE=1` preserves the exact **8 Stage 1 + Stage 2 tools** in `tools/list`.
+- Launch **`bin/srd-mcp --arena`** (or set `SRD2024_ARENA=1`, or `bin/srd-engine-mcp --arena`) to advertise all **11 MCP tools** (`srd_arena_scenarios`, `srd_arena_run`, `srd_arena_bench` added) plus the `srd://arena/scenarios` resource. All 11 tools and Stage 3 resources are dispatchable via `tools/call` / `resources/read` across every launcher mode.
+
+```json
+{
+  "mcpServers": {
+    "srd-2024-arena": {
+      "command": "/path/to/agent-srd-2024/bin/srd-mcp",
+      "args": ["--arena"]
+    }
+  }
+}
+```
+
+---
+
 ## Stdio MCP Server (`bin/srd-mcp`)
 
 `bin/srd-mcp` implements a pure-stdlib JSON-RPC 2.0 MCP server over newline-delimited JSON on `stdin`/`stdout` (with errors strictly on `stderr`).
@@ -177,12 +255,12 @@ data/raw/2024/en/*.json (25 upstream files, 2,029 entities)
              │ dist/rules.json            (typed Rules IR + coverage)   │
              │ dist/web/rules-coverage.json (static coverage manifest)  │
              └──────────────────────────────────────────────────────────┘
-                        │  strictly read-only (zero runtime LLM)
-                        ▼  src/srd2024/engine/ + src/srd2024/runtime/
-   bin/srd (CLI) │ bin/srd-mcp (5 tools) │ bin/srd-engine-mcp (8 tools) │ skill/SKILL.md
+                        │  strictly read-only (zero runtime LLM required for Stage 1+2)
+                        ▼  src/srd2024/engine/ + src/srd2024/arena/ + src/srd2024/runtime/
+   bin/srd (CLI + arena) │ bin/srd-arena │ bin/srd-mcp (5 / --engine 8 / --arena 11 tools) │ bin/srd-engine-mcp │ skill/SKILL.md
 ```
 
-See [`docs/STAGE2-SPEC.md`](docs/STAGE2-SPEC.md) for the Stage 2 rules IR, character compiler, combat state machine, and agent surface contract.
+See [`docs/STAGE2-SPEC.md`](docs/STAGE2-SPEC.md) for the Stage 2 rules IR, character compiler, combat state machine, and agent surface contract, and [`docs/STAGE3-SPEC.md`](docs/STAGE3-SPEC.md) for the Stage 3 multi-agent tabletop arena, driver architecture, quantitative scorer, and trace replay contract.
 
 ### Identifier Resolution & Resolved-Bundle Packing
 - **Canonical IDs:** `<type>:<slug>` (disambiguates all 53 cross-type slug collisions such as `spells:shield` vs `equipment:shield` and `classes:druid` vs `monsters:druid`).

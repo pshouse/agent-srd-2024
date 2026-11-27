@@ -107,6 +107,35 @@ Drive encounters with structured intents via `srd_encounter` (or `bin/srd encoun
 
 ---
 
+## Stage 3: Multi-Agent Tabletop & Eval Arena
+
+Stage 3 layers a deterministic, partial-observability **Multi-Agent 5e 2024 (SRD 5.2) Tabletop & Model Evaluation Arena** (`src/srd2024/arena/`) on top of Stage 2. Every PC is compiled through `compile_character()` and every move, attack, mastery, spell, concentration save, and death save is adjudicated strictly by `combat.step()`—drivers only emit structured intents, rationales, and private party `table_talk`.
+
+### 1. Scenarios & CLI Surfaces (`bin/srd-arena` / `bin/srd arena`)
+Both `bin/srd-arena <subcommand>` and `bin/srd arena <subcommand>` expose identical subcommands and 1:1 JSON parity:
+- **Built-in scenarios:** `goblin-ambush` (Tier 1, L1), `crypt-of-ghouls` (Tier 2, L5), `wyrmling-lair` (Tier 2, L5 fire-immune lair) — plus custom scenario JSON files.
+- **Offline deterministic drivers (zero network):** `heuristic-tactical`, `greedy`, `random`, `replay`.
+- **Pure-stdlib live LLM drivers (`urllib.request`, zero external SDKs):** `openai-compat:<model>` (works with OpenAI, xAI, OpenRouter, Ollama, vLLM, LM Studio via `--api-base` / `--api-key-env`), `anthropic:<model>`, and `gemini:<model>`.
+
+### 2. Quantitative Evaluation & Deterministic Trace Replay
+- Every match produces a `MatchScorecard` (`0–100`) combining `outcome_score` (35%), `rules_legality_score` (25%), `tactical_score` (25%, including immunity discipline & mastery execution), and `coordination_score` (15%, including zero friendly-fire, party `table_talk`, focus-fire, and ally support) into `composite_score`.
+- Save any match transcript via `--out-trace <path>` and verify 100% deterministic replay parity via `bin/srd-arena replay <trace.json>` (checks `original_digest == replayed_digest`).
+
+### 3. Stage 3 MCP Discovery Mode (`--arena` / `SRD2024_ARENA=1`)
+- Launch **`bin/srd-mcp --arena`** (or set `SRD2024_ARENA=1`, or `bin/srd-engine-mcp --arena`) to advertise all **11 MCP tools** (5 Stage 1 + 3 Stage 2 + 3 Stage 3: `srd_arena_scenarios`, `srd_arena_run`, `srd_arena_bench`) plus `srd://arena/scenarios`.
+- Default `bin/srd-mcp` keeps the 5-tool Stage 1 lock and `bin/srd-engine-mcp` / `--engine` keeps the 8-tool Stage 1+2 lock, while `tools/call` and `resources/read` dispatch Stage 3 tools/resources on all launcher modes.
+
+### Stage 3 Tool & CLI Quick Reference
+
+| MCP Tool | CLI Equivalent (`bin/srd-arena` or `bin/srd arena`) | Purpose |
+|---|---|---|
+| `srd_arena_scenarios` | `bin/srd-arena scenarios` | List built-in 5e 2024 arena scenarios |
+| `srd_arena_run` | `bin/srd-arena run <scenario_or_json> [--party-agent A] [--enemy-agent E] [--seed N] [--out-trace P]` | Run a deterministic multi-agent match + scorecard |
+| `srd_arena_bench` | `bin/srd-arena bench [--scenarios S] [--agents A] [--enemy-agent E] [--seeds 1,2,3] [--out-json P]` | Run a multi-seed / multi-scenario leaderboard benchmark |
+| *(CLI replay)* | `bin/srd-arena replay <trace.json>` | Replay a saved transcript and verify SHA-256 digest match |
+
+---
+
 ## Attribution (CC-BY-4.0)
 
 When quoting or summarizing rules from this pack, include this notice:

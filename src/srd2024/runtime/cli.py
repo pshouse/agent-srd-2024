@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from .arena_bridge import add_arena_subcommands, run_arena_cli_command
 from .engine import SRDStore
 from .render import render_operation
 from .rules_bridge import (
@@ -335,6 +336,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional die override queue as JSON array (e.g. '[15,6]') or comma-separated ints.",
     )
 
+    # 9. srd arena (Stage 3)
+    p_arena = subparsers.add_parser(
+        "arena",
+        help="Run the Stage 3 multi-agent 5e 2024 (SRD 5.2) tabletop & model eval arena.",
+    )
+    p_arena.add_argument(
+        "--rules",
+        dest="arena_rules",
+        default=None,
+        help="Path to rules.json (overrides SRD2024_RULES and default dist/rules.json).",
+    )
+    arena_subparsers = p_arena.add_subparsers(dest="arena_command", required=True)
+    add_arena_subcommands(arena_subparsers, sub_common)
+
     return parser
 
 
@@ -430,12 +445,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    db_override = args.db_sub if args.db_sub is not None else args.db
-    rules_override = args.rules_sub if args.rules_sub is not None else args.rules
+    db_override = args.db_sub if getattr(args, "db_sub", None) is not None else args.db
+    rules_override = (
+        args.rules_sub
+        if getattr(args, "rules_sub", None) is not None
+        else (
+            args.arena_rules
+            if getattr(args, "arena_rules", None) is not None
+            else args.rules
+        )
+    )
     fmt = args.format
+    op_name = args.command
+    exit_code = 0
 
     try:
-        if args.command in ("rule", "character", "encounter"):
+        if args.command == "arena":
+            op_name, payload, exit_code = run_arena_cli_command(args, rules_override)
+        elif args.command in ("rule", "character", "encounter"):
             payload = _run_stage2_command(args, rules_override)
         else:
             with SRDStore(db_path=db_override) as store:
@@ -484,13 +511,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
-    output = render_operation(args.command, payload, fmt=fmt)
+    output = render_operation(op_name, payload, fmt=fmt)
     sys.stdout.write(output + "\n")
     sys.stdout.flush()
 
     if payload.get("status") == "error":
         return 1
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":

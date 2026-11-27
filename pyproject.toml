@@ -16,6 +16,7 @@ srd = "srd2024.runtime.cli:main"
 srd-mcp = "srd2024.runtime.mcp:main"
 srd-rules-build = "srd2024.rules_compiler.__main__:main"
 srd-engine-mcp = "srd2024.runtime.mcp:main_engine"
+srd-arena = "srd2024.runtime.arena_bridge:main_arena"
 
 [tool.setuptools.packages.find]
 where = ["src"]
