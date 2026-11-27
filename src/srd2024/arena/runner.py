@@ -431,6 +431,37 @@ def _observer_event_text(text: str) -> str:
     return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
 
 
+_MAX_RETRY_HISTORY = 8
+
+
+def _retry_feedback_with_history(
+    retry_feedback: str | None,
+    violations: list[dict[str, Any]],
+    turn_index: int,
+    actor_id: str,
+) -> str | None:
+    """Add every earlier rejected intent from this turn to `retry_feedback` (#55).
+
+    The latest rejection is already described by `retry_feedback`. Without the earlier ones, a driver
+    bounces between intents it already tried until the retries run out. Returns None or the unchanged
+    message when there is nothing to add.
+    """
+    if not retry_feedback:
+        return retry_feedback
+    this_turn = [v for v in violations if v.get("turn_index") == turn_index and v.get("actor_id") == actor_id]
+    earlier = this_turn[:-1][-_MAX_RETRY_HISTORY:]
+    if not earlier:
+        return retry_feedback
+    lines = []
+    for v in earlier:
+        intent = v.get("intent") or {}
+        shown = json.dumps(intent, sort_keys=True) if intent else "(no valid intent)"
+        lines.append(f"- {shown}: {v.get('error')}")
+    return scrub_secrets(
+        f"{retry_feedback}\nAlso rejected earlier this turn (do not repeat any of these):\n" + "\n".join(lines)
+    )
+
+
 def _arena_intent_rejection(intent: dict[str, Any], active_id: str) -> str | None:
     """Reject intents the arena must not pass to the engine.
 
@@ -655,7 +686,7 @@ def run_match(
                     recent_hooks,
                     cooldowns,
                     rules,
-                    retry_feedback=retry_feedback,
+                    retry_feedback=_retry_feedback_with_history(retry_feedback, violations, turn_counter, active_id),
                 )
                 try:
                     decision = driver.decide(observation)

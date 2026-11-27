@@ -37,6 +37,7 @@ from .runner import (
     _is_match_over,
     _is_recharge_action,
     _resolve_winner,
+    _retry_feedback_with_history,
     _select_driver,
     build_observation,
     compute_transcript_digest,
@@ -619,7 +620,7 @@ def run_interactive_session(
                     recent_hooks,
                     cooldowns,
                     rules,
-                    retry_feedback=retry_feedback,
+                    retry_feedback=_retry_feedback_with_history(retry_feedback, violations, turn_counter, active_id),
                 )
                 observation["self"]["heroic_inspiration"] = bool(
                     state["combatants"][active_id].get("heroic_inspiration", False)
