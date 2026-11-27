@@ -976,6 +976,22 @@ def _combatant_to_start_entry(comb: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _builtin_lineup_matches(scenario_id: str, transcript: dict[str, Any]) -> bool:
+    """True while the built-in scenario still has the line-up (ids and start positions) the transcript recorded.
+
+    Built-in scenarios get retuned; a trace recorded before that replays from its own initial_state instead.
+    """
+    from .scenarios import _BUILTIN_SCENARIOS
+
+    raw = _BUILTIN_SCENARIOS.get(scenario_id) or {}
+    def xy(pos: Any) -> tuple[Any, Any]:
+        return ((pos or {}).get("x"), (pos or {}).get("y"))
+
+    builtin = {e["id"]: xy(e.get("position")) for e in list(raw.get("party") or []) + list(raw.get("enemies") or [])}
+    recorded = {cid: xy(c.get("position")) for cid, c in ((transcript.get("initial_state") or {}).get("combatants") or {}).items()}
+    return builtin == recorded
+
+
 def _reconstruct_scenario_from_transcript(transcript: dict[str, Any]) -> dict[str, Any]:
     sc_meta = transcript.get("scenario") or {}
     init_state = transcript.get("initial_state") or {}
@@ -1062,7 +1078,7 @@ def replay_match(
 
     if scenario_override is not None:
         scenario_input: str | Path | dict[str, Any] = scenario_override
-    elif scenario_id in BUILTIN_SCENARIO_IDS:
+    elif scenario_id in BUILTIN_SCENARIO_IDS and _builtin_lineup_matches(scenario_id, transcript):
         scenario_input = scenario_id
     else:
         scenario_input = _reconstruct_scenario_from_transcript(transcript)

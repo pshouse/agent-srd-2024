@@ -75,6 +75,7 @@ def audit(path: Path) -> None:
     # Saves made at encounter start (the first creature's turn) aren't in `actions`; their results are in initial_state.
     aura_immune: dict[str, set] = {i: set(c.get("aura_immune_to") or []) for i, c in cs.items()}
     auras = {i: next((t for t in c.get("traits_ir") or [] if t.get("kind") == "start_of_turn_aura_save"), None) for i, c in cs.items()}
+    turn_order = list(t["initial_state"].get("turn_order") or cs)
 
     def reach(i: str) -> int:
         best = 0
@@ -107,11 +108,14 @@ def audit(path: Path) -> None:
                 reaction[e["actor_id"]] = True
                 disengaged[e["actor_id"]] = False
                 who = e["actor_id"]
-                for src, aura in auras.items():
+                # The engine checks auras in turn order; two Ghasts make two "Stench" saves, matched in that order.
+                aura_saves = iter([x for x in evs[idx + 1:] if x["type"] == "saving_throw" and x["target_id"] == who
+                                   and any(a and x.get("reason") == a.get("name") for a in auras.values())])
+                for src in turn_order:
+                    aura = auras.get(src)
                     if aura and src != who and hp[src] > 0 and "dead" not in conds[src] and hp[who] > 0 \
                             and "dead" not in conds[who] and src not in aura_immune[who] and cheb(pos[src], pos[who]) <= aura["radius_ft"]:
-                        sv = next((x for x in evs[idx + 1:] if x["type"] == "saving_throw" and x["target_id"] == who
-                                   and x.get("reason") == aura.get("name")), None)
+                        sv = next(aura_saves, None)
                         check("starting a turn in a Stench-type aura forces its save", sv is not None and sv["dc"] == aura["dc"]
                               and sv["ability"] == aura["ability"], where, f"{who} starts its turn {cheb(pos[src], pos[who])} ft from {src}")
                         if sv is not None and sv["success"] and aura.get("immune_on_success"):

@@ -502,10 +502,10 @@ class TestScoreFloorAndOrdering(unittest.TestCase):
     def test_talk_spam_exploit_scores_near_noop(self) -> None:
         # #22: one attack plus idle chatter scored ~48-53. It now earns only its real damage and mastery.
         self.assertLess(self.talk_spam, 20.0)
-        # Ratio was < 0.5 before reactions (#33/#38). Automatic Shield now protects every party, including idle ones
-        # (talk-spam outcome 0 -> ~3, still 0 wins), while Opportunity Attacks punish random wandering
-        # (random 37.9 -> 35.6): measured 0.434 -> 0.513. Engine-made reactions earn no damage or mastery credit.
-        self.assertLess(self.talk_spam, self.random * 0.55)
+        # It must stay below even a random policy. (A ratio bound, < 0.55 x random, held until the scenarios were
+        # retuned for difficulty: random play now loses most matches, 32.8 -> 20.0, while talk-spam is 17.2 -> 15.8.)
+        self.assertLess(self.talk_spam, self.random)
+        self.assertLess(self.talk_spam, self.heuristic * 0.3)
 
     def test_help_only_scores_near_noop(self) -> None:
         # CTO M1: Help that never sets up a hit is not a contribution (was 45.18 / 48.18 with talk).
@@ -514,9 +514,13 @@ class TestScoreFloorAndOrdering(unittest.TestCase):
         self.assertLess(self.help_only, self.random * 0.5)
 
     def test_reasonable_policies_score_clearly_above_noop(self) -> None:
-        self.assertGreater(self.heuristic, 80.0)
-        self.assertGreater(self.greedy, 80.0)
-        self.assertGreater(self.random, self.noop + 25.0)
+        # Scenarios were retuned so heuristic-vs-heuristic is no longer a near-certain party win (94.7 / 84.9 / 32.8
+        # before; 64.5 / 59.6 / 20.0 after). The ordering is what matters.
+        self.assertGreater(self.heuristic, 60.0)
+        self.assertGreater(self.greedy, 55.0)
+        self.assertGreater(self.heuristic, self.greedy)
+        self.assertGreater(self.greedy, self.random)
+        self.assertGreater(self.random, self.noop + 15.0)
 
     def test_score_ordering(self) -> None:
         self.assertGreater(self.heuristic, self.greedy)
