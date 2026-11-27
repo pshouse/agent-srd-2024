@@ -729,7 +729,7 @@ def score_match(
 
 Every sub-score is clamped to `[0.0, 100.0]` and rounded to 2 decimal places.
 
-**Contribution factor (#22).** A `productive_turn` is an active (non-auto-skipped) turn by `side` that contains at least one `attack`, `cast_spell`, or `help`. Let `contribution = productive_turns / active_turns` (`0.0` if there are no active turns). Ratio terms that a tiny sample can max out (legality, immunity discipline, zero friendly-fire, focus fire) are multiplied by `contribution`. Without this, one attack followed by idle, chatty turns scored about 50 points. A do-nothing policy now scores about 1. Count-based terms (damage, features, teamwork) already measure contribution, so they are not scaled.
+**Contribution factor (#22).** A `productive_turn` is an active (non-auto-skipped) turn by `side` that contains at least one `attack` or `cast_spell`, or a `help` whose Advantage was spent on an ally attack that **hit**. Help that expires unused (at the start of the helper's next turn) or is spent on a miss is not productive. Each such hit redeems at most one pending Help on that target, oldest first. Let `contribution = productive_turns / active_turns` (`0.0` if there are no active turns). Ratio terms that a tiny sample can max out (legality, immunity discipline, zero friendly-fire, focus fire) are multiplied by `contribution`. Without this, one attack followed by idle, chatty turns scored about 50 points. A do-nothing policy now scores about 1. Count-based terms (damage, features, teamwork) already measure contribution, so they are not scaled.
 
 1. **`outcome_score` (weight `0.35`):**
    - Win component (`0..50`): `50.0` if `winner == side`, `20.0` if `winner == "draw"`, `0.0` otherwise.
@@ -754,7 +754,7 @@ Every sub-score is clamped to `[0.0, 100.0]` and rounded to 2 decimal places.
    - **Zero friendly-fire (`0..40`):** `max(0.0, 40.0 - 20.0 * friendly_fire_incidents) * contribution` (where a friendly-fire incident is any `damage_applied` event caused by `side` with `total_damage > 0` targeting a same-side combatant).
    - **Party blackboard communication (`0..20`):** `20.0 * min(1.0, productive_talk_turns / max(1.0, active_turns * 0.5))`, where `productive_talk_turns` counts productive turns that carry at least one `table_talk` message. Chat on idle turns earns nothing. `metrics.table_talk_messages` still reports the full message count.
    - **Focus-fire coordination (`0..20`):** `20.0 * focus_fire_ratio * contribution`, where `focus_fire_ratio` is the fraction of `side`'s offensive attacks/spells that target an already-damaged opponent (or the highest-threat target when all enemies are unharmed), defaulting to `1.0` if `<= 1` opponent is alive or `0` offensive actions were taken with `winner == side`.
-   - **Teamwork & ally support (`0..20`):** `min(20.0, ally_revivals * 12.0 + ally_heals * 6.0 + ally_buff_targets * 4.0 + help_actions * 8.0 + mastery_setup_triggers * 4.0)` (where `mastery_setup_triggers` counts `sap`, `topple`, `vex`, `slow` triggers supporting the team).
+   - **Teamwork & ally support (`0..20`):** `min(20.0, ally_revivals * 12.0 + ally_heals * 6.0 + ally_buff_targets * 4.0 + effective_help_actions * 8.0 + mastery_setup_triggers * 4.0)`. Only Help that set up a hit counts; `metrics.help_actions` still reports every Help (where `mastery_setup_triggers` counts `sap`, `topple`, `vex`, `slow` triggers supporting the team).
 5. **`composite_score`:**
    ```python
    composite_score = round(

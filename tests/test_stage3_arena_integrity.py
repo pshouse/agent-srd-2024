@@ -121,6 +121,36 @@ class _TalkSpam:
         return AgentDecision(intent={"type": "end_turn", "actor_id": me}, table_talk="Stay together, team!")
 
 
+class _HelpOnly:
+    """CTO M1 on #22: take Help every turn and never attack, optionally chatting.
+
+    Help counted as a fully productive turn, so this scored ~45-48 with 0 damage.
+    """
+
+    def __init__(self, *, talk: bool = False) -> None:
+        self.talk = talk
+        self.name = "help-talk" if talk else "help-only"
+
+    def reset(self, seed: int | None = None) -> None:
+        return None
+
+    def decide(self, observation: dict[str, Any]) -> AgentDecision:
+        me = observation["self"]["id"]
+        foes = [e for e in observation["enemies"] if e.get("alive", True)]
+        allies = [a for a in observation.get("allies", []) if a.get("id") != me]
+        if observation["self"]["turn_resources"]["action"] and foes:
+            return AgentDecision(
+                intent={
+                    "type": "help",
+                    "actor_id": me,
+                    "target_id": foes[0]["id"],
+                    "ally_id": allies[0]["id"] if allies else None,
+                },
+                table_talk="I've got your back!" if self.talk else None,
+            )
+        return AgentDecision(intent={"type": "end_turn", "actor_id": me})
+
+
 class _Garbage:
     name = "garbage"
 
@@ -462,6 +492,8 @@ class TestScoreFloorAndOrdering(unittest.TestCase):
         cls.noop = _mean_composite(_NoOp(), cls.rules)
         cls.talk_spam = _mean_composite(_TalkSpam(cls.rules), cls.rules)
         cls.garbage = _mean_composite(_Garbage(), cls.rules)
+        cls.help_only = _mean_composite(_HelpOnly(), cls.rules)
+        cls.help_talk = _mean_composite(_HelpOnly(talk=True), cls.rules)
 
     def test_noop_baseline_near_zero(self) -> None:
         # #22: a do-nothing policy must score near zero (was 7.52; ~1.25 is the legality floor).
@@ -471,6 +503,12 @@ class TestScoreFloorAndOrdering(unittest.TestCase):
         # #22: one attack plus idle chatter scored ~48-53. It now earns only its real damage and mastery.
         self.assertLess(self.talk_spam, 20.0)
         self.assertLess(self.talk_spam, self.random * 0.5)
+
+    def test_help_only_scores_near_noop(self) -> None:
+        # CTO M1: Help that never sets up a hit is not a contribution (was 45.18 / 48.18 with talk).
+        self.assertLess(self.help_only, 20.0)
+        self.assertLess(self.help_talk, 20.0)
+        self.assertLess(self.help_only, self.random * 0.5)
 
     def test_reasonable_policies_score_clearly_above_noop(self) -> None:
         self.assertGreater(self.heuristic, 80.0)
@@ -504,6 +542,64 @@ class TestScoreFloorAndOrdering(unittest.TestCase):
         replayed = replay_match(json.loads(json.dumps(first)), rules)
         self.assertTrue(replayed["deterministic_match"], replayed.get("diffs"))
         self.assertEqual(replayed["original_digest"], replayed["replayed_digest"])
+
+
+class TestHelpCredit(unittest.TestCase):
+    """Help counts as productive only when the helped ally attack happens and hits."""
+
+    @staticmethod
+    def _transcript(*, hit: bool) -> dict[str, Any]:
+        combatants = {
+            "pc-a": {"id": "pc-a", "side": "party", "hp": 10, "hp_max": 10, "alive": True},
+            "pc-b": {"id": "pc-b", "side": "party", "hp": 10, "hp_max": 10, "alive": True},
+            "gob": {"id": "gob", "side": "enemy", "hp": 7, "hp_max": 7, "alive": True},
+        }
+
+        def act(seq: int, actor: str, turn: int, intent: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
+            return {
+                "seq": seq, "round": 1, "turn_index": turn, "actor_id": actor, "side": "party",
+                "first_attempt_legal": True, "intent": intent, "events": events, "state_diff": {},
+            }
+
+        attack_events: list[dict[str, Any]] = [
+            {"type": "attack_roll", "actor_id": "pc-b", "target_id": "gob", "advantage_sources": ["help"], "hit": hit}
+        ]
+        if hit:
+            attack_events.append(
+                {"type": "damage_applied", "source_id": "pc-b", "target_id": "gob", "total_damage": 3,
+                 "hp_before": 7, "hp_after": 4, "breakdown": []}
+            )
+        return {
+            "winner": "draw",
+            "rounds": 1,
+            "config": {"max_rounds": 5},
+            "initial_state": {"combatants": combatants},
+            "final_state": {"combatants": combatants},
+            "actions": [
+                act(1, "pc-a", 0, {"type": "help", "actor_id": "pc-a", "target_id": "gob", "ally_id": "pc-b"},
+                    [{"type": "action_help", "actor_id": "pc-a", "ally_id": "pc-b", "target_id": "gob"}]),
+                act(2, "pc-a", 0, {"type": "end_turn", "actor_id": "pc-a"}, []),
+                act(3, "pc-b", 1, {"type": "attack", "actor_id": "pc-b", "target_id": "gob", "weapon": "longsword"},
+                    attack_events),
+                act(4, "pc-b", 1, {"type": "end_turn", "actor_id": "pc-b"}, []),
+            ],
+        }
+
+    def test_help_that_sets_up_a_hit_is_productive(self) -> None:
+        from srd2024.arena.scoring import score_match
+
+        m = score_match(self._transcript(hit=True))["metrics"]
+        self.assertEqual(m["productive_turns"], 2)
+        self.assertEqual(m["effective_help_actions"], 1)
+        self.assertEqual(m["contribution"], 1.0)
+
+    def test_help_spent_on_a_miss_is_not_productive(self) -> None:
+        from srd2024.arena.scoring import score_match
+
+        m = score_match(self._transcript(hit=False))["metrics"]
+        self.assertEqual(m["productive_turns"], 1)  # only pc-b's attack turn
+        self.assertEqual(m["effective_help_actions"], 0)
+        self.assertEqual(m["help_actions"], 1)  # raw count still reported
 
 
 if __name__ == "__main__":

@@ -98,6 +98,38 @@ def _is_offensive_action(
     return []
 
 
+def _successful_help_turns(side_actions: list[dict[str, Any]]) -> set[tuple[int, int, str]]:
+    """Return turn keys of `help` actions whose Advantage was spent on an ally attack that hit.
+
+    A Help action only contributes if the helped attack happens and lands (CTO M1 on #22).
+    Help that expires unused, or that is spent on a miss, earns nothing. Each hit
+    redeems at most one pending Help on that target (oldest first). A helper's pending
+    Help expires when that helper starts their next turn.
+    """
+    pending: dict[str, list[tuple[tuple[int, int, str], str]]] = {}
+    credited: set[tuple[int, int, str]] = set()
+    for a in side_actions:
+        if a.get("auto_skipped", False):
+            continue
+        actor_id = str(a.get("actor_id") or "")
+        turn_key = (int(a.get("round", 0)), int(a.get("turn_index", 0)), actor_id)
+        # Expire this actor's Help from earlier turns (engine: start_of_source_next_turn).
+        for tgt in list(pending):
+            pending[tgt] = [(k, h) for (k, h) in pending[tgt] if h != actor_id or k == turn_key]
+        for ev in a.get("events") or []:
+            etype = ev.get("type")
+            if etype == "action_help" and ev.get("target_id"):
+                pending.setdefault(str(ev["target_id"]), []).append((turn_key, actor_id))
+            elif etype in ("attack_roll", "spell_attack_roll") and "help" in (ev.get("advantage_sources") or []):
+                tgt = str(ev.get("target_id") or "")
+                queue = pending.get(tgt) or []
+                if queue:
+                    help_key, _helper = queue.pop(0)
+                    if ev.get("hit"):
+                        credited.add(help_key)
+    return credited
+
+
 def score_match(
     transcript: dict[str, Any],
     rules: RulesStore | None = None,
@@ -209,7 +241,9 @@ def score_match(
     forced_fallbacks = sum(1 for a in decision_actions if bool(a.get("forced_fallback", False)))
     side_violations = sum(1 for v in violations if str(v.get("side")) == side)
 
-    # Turn productivity: a turn is productive if any action in it attacked, cast, or helped.
+    # Turn productivity: a turn is productive if any action in it attacked or cast,
+    # or used Help that set up an ally's hit.
+    successful_help_turns = _successful_help_turns(side_actions)
     turn_productivity: dict[tuple[int, int, str], bool] = {}
     turn_talk: dict[tuple[int, int, str], int] = {}
     for a in side_actions:
@@ -217,7 +251,8 @@ def score_match(
             continue
         turn_key = (int(a.get("round", 0)), int(a.get("turn_index", 0)), str(a.get("actor_id") or ""))
         a_type = str((a.get("intent") or {}).get("type") or "").strip().lower()
-        turn_productivity[turn_key] = turn_productivity.get(turn_key, False) or a_type in _PRODUCTIVE_INTENT_TYPES
+        is_prod = a_type in _PRODUCTIVE_INTENT_TYPES and (a_type != "help" or turn_key in successful_help_turns)
+        turn_productivity[turn_key] = turn_productivity.get(turn_key, False) or is_prod
         talk = a.get("table_talk")
         if isinstance(talk, str) and talk.strip():
             turn_talk[turn_key] = turn_talk.get(turn_key, 0) + 1
@@ -467,12 +502,13 @@ def score_match(
         focus_fire_ratio = focused_actions / offensive_multi_enemy_actions
     focus_pts = 20.0 * focus_fire_ratio * contribution
 
+    effective_help_actions = len(successful_help_turns)
     teamwork_pts = min(
         20.0,
         ally_revivals * 12.0
         + ally_heals * 6.0
         + ally_buff_targets * 4.0
-        + help_actions * 8.0
+        + effective_help_actions * 8.0
         + mastery_setup_triggers * 4.0,
     )
     coordination_score = round(_clamp(ff_pts + comm_pts + focus_pts + teamwork_pts), 2)
@@ -515,6 +551,7 @@ def score_match(
             "ally_heals": ally_heals,
             "ally_buff_targets": ally_buff_targets,
             "help_actions": help_actions,
+            "effective_help_actions": effective_help_actions,
             "friendly_fire_incidents": friendly_fire_incidents,
             "friendly_fire_damage": friendly_fire_damage,
             "table_talk_messages": table_talk_messages,
