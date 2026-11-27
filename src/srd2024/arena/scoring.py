@@ -23,11 +23,12 @@ SCORE_WEIGHTS: dict[str, float] = {
 
 _PRODUCTIVE_INTENT_TYPES: frozenset[str] = frozenset({"attack", "cast_spell", "help"})
 
-# Idle turns (end_turn / dodge / dash / disengage only) used to collect a full
-# legality score plus free immunity and friendly-fire points. Those points are
-# paid only once the side has actually attacked, cast, or helped. A legal idle
-# side keeps a small legality fraction so it still ranks above pure violations.
-_IDLE_LEGALITY_FACTOR = 0.15
+# Ratio terms (legality, immunity, friendly fire, focus fire) can be perfect
+# from a tiny sample: one attack followed by idle turns used to collect almost
+# all of them (#22). Each is now paid in proportion to `contribution`, the share
+# of the side's active turns that attacked, cast, or helped. A fully idle side
+# keeps a small legality floor so it still ranks above pure violations.
+_LEGALITY_FLOOR = 0.05
 
 _SETUP_MASTERIES: frozenset[str] = frozenset({"sap", "topple", "vex", "slow"})
 
@@ -95,6 +96,38 @@ def _is_offensive_action(
         if spell_slug not in _KNOWN_BUFF_SPELLS:
             return opp_targets
     return []
+
+
+def _successful_help_turns(side_actions: list[dict[str, Any]]) -> set[tuple[int, int, str]]:
+    """Return turn keys of `help` actions whose Advantage was spent on an ally attack that hit.
+
+    A Help action only contributes if the helped attack happens and lands (CTO M1 on #22).
+    Help that expires unused, or that is spent on a miss, earns nothing. Each hit
+    redeems at most one pending Help on that target (oldest first). A helper's pending
+    Help expires when that helper starts their next turn.
+    """
+    pending: dict[str, list[tuple[tuple[int, int, str], str]]] = {}
+    credited: set[tuple[int, int, str]] = set()
+    for a in side_actions:
+        if a.get("auto_skipped", False):
+            continue
+        actor_id = str(a.get("actor_id") or "")
+        turn_key = (int(a.get("round", 0)), int(a.get("turn_index", 0)), actor_id)
+        # Expire this actor's Help from earlier turns (engine: start_of_source_next_turn).
+        for tgt in list(pending):
+            pending[tgt] = [(k, h) for (k, h) in pending[tgt] if h != actor_id or k == turn_key]
+        for ev in a.get("events") or []:
+            etype = ev.get("type")
+            if etype == "action_help" and ev.get("target_id"):
+                pending.setdefault(str(ev["target_id"]), []).append((turn_key, actor_id))
+            elif etype in ("attack_roll", "spell_attack_roll") and "help" in (ev.get("advantage_sources") or []):
+                tgt = str(ev.get("target_id") or "")
+                queue = pending.get(tgt) or []
+                if queue:
+                    help_key, _helper = queue.pop(0)
+                    if ev.get("hit"):
+                        credited.add(help_key)
+    return credited
 
 
 def score_match(
@@ -166,7 +199,12 @@ def score_match(
         total_final_hp += hp
         if alive:
             survivors += 1
-            survival_sum += 1.0 if hp > 0 else 0.5
+            # A downed-but-alive ally counts half only on a win (they get stabilized).
+            # On a loss or draw it counts nothing, so losing without fighting earns no survival credit (#22).
+            if hp > 0:
+                survival_sum += 1.0
+            elif winner == side:
+                survival_sum += 0.5
 
     survival_pts = 25.0 * (survival_sum / max(1, total_allies))
 
@@ -203,10 +241,25 @@ def score_match(
     forced_fallbacks = sum(1 for a in decision_actions if bool(a.get("forced_fallback", False)))
     side_violations = sum(1 for v in violations if str(v.get("side")) == side)
 
-    engaged = any(
-        str((a.get("intent") or {}).get("type") or "").strip().lower() in _PRODUCTIVE_INTENT_TYPES
-        for a in decision_actions
-    )
+    # Turn productivity: a turn is productive if any action in it attacked or cast,
+    # or used Help that set up an ally's hit.
+    successful_help_turns = _successful_help_turns(side_actions)
+    turn_productivity: dict[tuple[int, int, str], bool] = {}
+    turn_talk: dict[tuple[int, int, str], int] = {}
+    for a in side_actions:
+        if a.get("auto_skipped", False):
+            continue
+        turn_key = (int(a.get("round", 0)), int(a.get("turn_index", 0)), str(a.get("actor_id") or ""))
+        a_type = str((a.get("intent") or {}).get("type") or "").strip().lower()
+        is_prod = a_type in _PRODUCTIVE_INTENT_TYPES and (a_type != "help" or turn_key in successful_help_turns)
+        turn_productivity[turn_key] = turn_productivity.get(turn_key, False) or is_prod
+        talk = a.get("table_talk")
+        if isinstance(talk, str) and talk.strip():
+            turn_talk[turn_key] = turn_talk.get(turn_key, 0) + 1
+    active_turns = len(turn_productivity)
+    productive_turns = sum(1 for prod in turn_productivity.values() if prod)
+    contribution = productive_turns / active_turns if active_turns else 0.0
+
     if total_decisions == 0:
         rules_legality_score = 100.0
     else:
@@ -217,9 +270,7 @@ def score_match(
             2.0 * max(0, side_violations - (total_decisions - first_attempt_legal)),
         )
         raw_legality = _clamp(100.0 * first_attempt_rate - fallback_penalty - extra_retry_penalty)
-        if not engaged:
-            raw_legality *= _IDLE_LEGALITY_FACTOR
-        rules_legality_score = round(raw_legality, 2)
+        rules_legality_score = round(raw_legality * max(_LEGALITY_FLOOR, contribution), 2)
 
     # ------------------------------------------------------------------
     # 3 & 4. Event Telemetry, Tactical & Coordination Metrics
@@ -236,14 +287,10 @@ def score_match(
     help_actions = 0
     friendly_fire_incidents = 0
     friendly_fire_damage = 0
-    action_table_talk_count = 0
 
     usage_prompt = 0
     usage_completion = 0
     usage_total = 0
-
-    # Track active & productive turns for `side`.
-    turn_productivity: dict[tuple[int, int, str], bool] = {}
 
     # Dynamic opponent HP tracking for focus-fire coordination.
     opp_hp: dict[str, int] = {}
@@ -295,19 +342,6 @@ def score_match(
 
         # Track side-specific telemetry.
         if a_side == side:
-            if not action.get("auto_skipped", False):
-                turn_key = (
-                    int(action.get("round", 0)),
-                    int(action.get("turn_index", 0)),
-                    actor_id,
-                )
-                is_prod = itype in _PRODUCTIVE_INTENT_TYPES
-                turn_productivity[turn_key] = turn_productivity.get(turn_key, False) or is_prod
-
-            talk = action.get("table_talk")
-            if isinstance(talk, str) and talk.strip():
-                action_table_talk_count += 1
-
             usage = action.get("usage")
             if isinstance(usage, dict):
                 pt = int(usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0)
@@ -439,11 +473,8 @@ def score_match(
         max(1, int(c.get("hp_max", c.get("hp", 1)))) for c in opp_init
     )
     dmg_eff_pts = 40.0 * min(1.0, effective_damage_dealt / max(1, total_opponent_initial_hp))
-    immunity_pts = max(0.0, 25.0 - 12.5 * wasted_immune_hits) if engaged else 0.0
-
-    active_turns = len(turn_productivity)
-    productive_turns = sum(1 for prod in turn_productivity.values() if prod)
-    action_econ_pts = 20.0 * (productive_turns / max(1, active_turns))
+    immunity_pts = max(0.0, 25.0 - 12.5 * wasted_immune_hits) * contribution
+    action_econ_pts = 20.0 * contribution
 
     feat_pts = min(
         15.0,
@@ -457,27 +488,27 @@ def score_match(
     # ------------------------------------------------------------------
     # 4. Coordination Score (0..100, weight 0.15)
     # ------------------------------------------------------------------
-    ff_pts = max(0.0, 40.0 - 20.0 * friendly_fire_incidents) if engaged else 0.0
+    ff_pts = max(0.0, 40.0 - 20.0 * friendly_fire_incidents) * contribution
 
-    table_talk_messages = max(len(blackboard_side), action_table_talk_count)
-    # Talk with no attack, cast, or help does not score. The message count stays in metrics.
-    if engaged:
-        comm_pts = 20.0 * min(1.0, table_talk_messages / max(1.0, active_turns * 0.5))
-    else:
-        comm_pts = 0.0
+    table_talk_messages = max(len(blackboard_side), sum(turn_talk.values()))
+    # Only talk on productive turns scores: chatter while idling earns nothing.
+    # The full message count stays in metrics.
+    productive_talk_turns = sum(1 for k in turn_talk if turn_productivity.get(k, False))
+    comm_pts = 20.0 * min(1.0, productive_talk_turns / max(1.0, active_turns * 0.5))
 
     if offensive_multi_enemy_actions == 0:
         focus_fire_ratio = 1.0 if (len(opp_ids) <= 1 or winner == side) else 0.0
     else:
         focus_fire_ratio = focused_actions / offensive_multi_enemy_actions
-    focus_pts = 20.0 * focus_fire_ratio
+    focus_pts = 20.0 * focus_fire_ratio * contribution
 
+    effective_help_actions = len(successful_help_turns)
     teamwork_pts = min(
         20.0,
         ally_revivals * 12.0
         + ally_heals * 6.0
         + ally_buff_targets * 4.0
-        + help_actions * 8.0
+        + effective_help_actions * 8.0
         + mastery_setup_triggers * 4.0,
     )
     coordination_score = round(_clamp(ff_pts + comm_pts + focus_pts + teamwork_pts), 2)
@@ -520,12 +551,15 @@ def score_match(
             "ally_heals": ally_heals,
             "ally_buff_targets": ally_buff_targets,
             "help_actions": help_actions,
+            "effective_help_actions": effective_help_actions,
             "friendly_fire_incidents": friendly_fire_incidents,
             "friendly_fire_damage": friendly_fire_damage,
             "table_talk_messages": table_talk_messages,
             "focus_fire_ratio": round(focus_fire_ratio, 4),
             "active_turns": active_turns,
             "productive_turns": productive_turns,
+            "contribution": round(contribution, 4),
+            "productive_talk_turns": productive_talk_turns,
             "total_decisions": total_decisions,
             "first_attempt_legal": first_attempt_legal,
             "total_violations": side_violations,
