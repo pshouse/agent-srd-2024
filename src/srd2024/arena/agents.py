@@ -950,7 +950,7 @@ def build_system_prompt() -> str:
         '- move: {"type":"move","actor_id":"<id>","to":{"x":<int>,"y":<int>},"stand_up":<bool>}\n'
         '- attack (PC weapon): {"type":"attack","actor_id":"<id>","target_id":"<id>","weapon":"<slug>","offhand":<bool>}\n'
         '- attack (monster action): {"type":"attack","actor_id":"<id>","action":"<Action Name>","target_ids":["<id>",...]}\n'
-        '- cast_spell: {"type":"cast_spell","actor_id":"<id>","spell":"<slug>","slot_level":<int>,"target_ids":["<id>",...],"as_reaction":<bool>,"destination":{"x":<int>,"y":<int>}}\n'
+        '- cast_spell: {"type":"cast_spell","actor_id":"<id>","spell":"<slug>","slot_level":<int>,"target_ids":["<id>",...],"destination":{"x":<int>,"y":<int>}}\n'
         '- dodge / dash / disengage: {"type":"dodge"|"dash"|"disengage","actor_id":"<id>"}\n'
         '- help: {"type":"help","actor_id":"<id>","target_id":"<enemy_id>","ally_id":"<ally_id>"}\n'
         '- end_turn: {"type":"end_turn","actor_id":"<id>"}\n\n'
@@ -958,6 +958,9 @@ def build_system_prompt() -> str:
         "- Respect turn_resources (action, bonus_action, reaction, attacks_remaining), spell slots, and ranges.\n"
         "- Grid uses 5-ft squares with Chebyshev distance max(|dx|,|dy|).\n"
         "- Avoid damage types enemies are immune to, never hit allies with AoE, revive 0-HP allies, and use Weapon Masteries.\n"
+        "- Reactions are automatic: the engine makes Opportunity Attacks and casts Shield when they are triggered. "
+        "Never cast a reaction spell yourself.\n"
+        "- Leaving an enemy's melee reach provokes an Opportunity Attack unless you Disengage first (teleporting doesn't provoke).\n"
         "- When no useful actions remain, emit end_turn.\n\n"
         "Respond with ONLY a single JSON object (no markdown outside JSON):\n"
         '{"intent": {...}, "rationale": "<short tactical reason>", "table_talk": "<optional brief ally callout or null>"}'
@@ -1098,10 +1101,7 @@ class RandomDriver:
             if int(sp_rec.get("level", 0)) >= 1:
                 sp_intent["slot_level"] = slot_lvl
             if action_type == "reaction":
-                sp_intent["as_reaction"] = True
-                sp_intent["target_ids"] = [actor_id]
-                candidates.append(sp_intent)
-                continue
+                continue  # reaction spells (Shield) are cast by the engine when triggered (#33)
 
             # Teleport spell requires valid destination within max_distance_ft.
             buffs = list(sp_rec.get("buffs") or [])
@@ -1570,29 +1570,8 @@ class HeuristicTacticalDriver:
             if revival is not None:
                 return revival
 
-        # 3b. Reaction `shield` economy (Wizard / Caster)
-        if (
-            "shield" in spell_recs
-            and "shield" not in self_effects
-            and res.get("reaction")
-        ):
-            can_shield, _, sh_slot = _can_cast_spell_now(
-                "shield", spell_recs["shield"], self_data, slots, allow_reaction=True
-            )
-            min_enemy_dist = min(distance_ft(self_pos, e["position"]) for e in enemies)
-            if can_shield and (min_enemy_dist <= 15 or hp <= hp_max * 0.60):
-                return AgentDecision(
-                    intent={
-                        "type": "cast_spell",
-                        "actor_id": actor_id,
-                        "spell": "shield",
-                        "slot_level": sh_slot,
-                        "as_reaction": True,
-                        "target_ids": [actor_id],
-                    },
-                    rationale="Casting Reaction Shield (+5 AC) to protect fragile caster under threat.",
-                    table_talk="Raising an arcane Shield (+5 AC)!" if is_party else None,
-                )
+        # 3b. Shield is a Reaction to being hit: the engine casts it when an incoming attack would hit and +5 AC
+        #     turns it into a miss (#33). Casting it pre-emptively on our own turn is not legal, so don't plan it.
 
         # 3c. Bonus Action `misty-step` escape if adjacent enemy threatens caster
         adjacent_enemies = [e for e in enemies if distance_ft(self_pos, e["position"]) <= 5]

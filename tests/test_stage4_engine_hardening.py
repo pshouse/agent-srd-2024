@@ -1263,14 +1263,15 @@ class TestHeroicInspirationAndSpellHooks(unittest.TestCase):
         self.assertEqual(r_mm["status"], "ok")
         self.assertTrue(any("Magic Missile" in h and "force damage" in h for h in r_mm["narrative_hooks"]), r_mm["narrative_hooks"])
 
-        # 3. Shield -> emits +5 AC hook, and blocks Magic Missile with block hook.
+        # 3. Shield on your own turn has no trigger and is refused (#33); the engine casts it when an attack would
+        #    hit (tests/test_reactions.py covers that path and its +5 AC hook).
         r_sh = step(
             st,
             {"type": "cast_spell", "actor_id": "wiz-1", "spell": "shield", "as_reaction": True, "slot_level": 1},
             self.rules,
         )
-        self.assertEqual(r_sh["status"], "ok")
-        self.assertTrue(any("Shield" in h and "+5 AC" in h for h in r_sh["narrative_hooks"]), r_sh["narrative_hooks"])
+        self.assertEqual(r_sh["status"], "invalid_intent")
+        self.assertIn("No valid reaction trigger", r_sh["error"])
 
         # 4. Fireball -> emits cast/save/fire damage hooks for both targets.
         r_fb = step(

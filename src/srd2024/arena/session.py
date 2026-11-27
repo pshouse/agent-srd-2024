@@ -570,10 +570,45 @@ def run_interactive_session(
             if now_active != active_id or int(state["round"]) != cur_round:
                 turn_ended = True
                 break
+            # Dropped mid-turn (e.g. by an Opportunity Attack while moving away, #38): end the turn cleanly.
+            if action_index > 0 and _cannot_act(state["combatants"][active_id], rules):
+                drop_intent = {"type": "end_turn", "actor_id": active_id}
+                drop_res = step(state, drop_intent, rules)
+                action_seq += 1
+                actions.append(
+                    {
+                        "seq": action_seq,
+                        "round": cur_round,
+                        "turn_index": turn_counter,
+                        "action_index": action_index,
+                        "actor_id": active_id,
+                        "actor_name": actor["name"],
+                        "side": side,
+                        "driver": driver_name,
+                        "attempts": 0,
+                        "first_attempt_legal": True,
+                        "auto_skipped": True,
+                        "auto_end_turn": False,
+                        "forced_fallback": False,
+                        "intent": drop_intent,
+                        "rationale": "Auto-ended: incapacitated or at 0 HP mid-turn.",
+                        "table_talk": None,
+                        "events": drop_res.get("events") or [],
+                        "state_diff": drop_res.get("state_diff") or {},
+                        "narrative_hooks": drop_res.get("narrative_hooks") or [],
+                        "usage": {},
+                    }
+                )
+                for h in drop_res.get("narrative_hooks") or []:
+                    output_fn(f"  * {_sanitize_stream_hook(str(h), hidden_target_names)}")
+                recent_hooks.extend(drop_res.get("narrative_hooks") or [])
+                state = drop_res["state"]
+                turn_ended = True
+                break
 
             retry_feedback: str | None = None
             accepted = False
-            max_attempts = (max(eff_max_retries, 5) if is_human_turn else max(0, eff_max_retries)) + 1
+            max_attempts =(max(eff_max_retries, 5) if is_human_turn else max(0, eff_max_retries)) + 1
 
             for attempt in range(1, max_attempts + 1):
                 observation = build_observation(

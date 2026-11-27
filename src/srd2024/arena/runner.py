@@ -608,6 +608,40 @@ def run_match(
             if now_active != active_id or int(state["round"]) != cur_round:
                 turn_ended = True
                 break
+            # Dropped mid-turn (e.g. by an Opportunity Attack while moving away, #38): end the turn cleanly
+            # instead of asking the driver for an action it can no longer take.
+            if action_index > 0 and _cannot_act(state["combatants"][active_id], rules):
+                drop_intent = {"type": "end_turn", "actor_id": active_id}
+                drop_res = step(state, drop_intent, rules)
+                action_seq += 1
+                actions.append(
+                    {
+                        "seq": action_seq,
+                        "round": cur_round,
+                        "turn_index": turn_counter,
+                        "action_index": action_index,
+                        "actor_id": active_id,
+                        "actor_name": actor["name"],
+                        "side": side,
+                        "driver": driver_name,
+                        "attempts": 0,
+                        "first_attempt_legal": True,
+                        "auto_skipped": True,
+                        "auto_end_turn": False,
+                        "forced_fallback": False,
+                        "intent": drop_intent,
+                        "rationale": "Auto-ended: incapacitated or at 0 HP mid-turn.",
+                        "table_talk": None,
+                        "events": drop_res.get("events") or [],
+                        "state_diff": drop_res.get("state_diff") or {},
+                        "narrative_hooks": drop_res.get("narrative_hooks") or [],
+                        "usage": {},
+                    }
+                )
+                recent_hooks.extend(drop_res.get("narrative_hooks") or [])
+                state = drop_res["state"]
+                turn_ended = True
+                break
 
             retry_feedback: str | None = None
             accepted = False

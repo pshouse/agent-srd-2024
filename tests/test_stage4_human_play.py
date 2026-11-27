@@ -155,7 +155,7 @@ class TestHumanMenuAndHud(unittest.TestCase):
         self.assertIn("fireball", spell_slugs)
         self.assertIn("magic-missile", spell_slugs)
         self.assertIn("mage-armor", spell_slugs)
-        self.assertIn("shield", spell_slugs)
+        self.assertNotIn("shield", spell_slugs)  # reaction spells aren't menu actions; the engine casts Shield (#33)
 
         obs_ghoul = build_observation(state, "ghoul-1", compiled, {"party": [], "enemy": []}, [], {}, self.rules)
         menu_ghoul = build_human_action_menu(obs_ghoul, self.rules)
@@ -614,11 +614,10 @@ class TestInteractiveSessionsAndSeats(unittest.TestCase):
         self.assertEqual(rep["diffs"], [])
 
     def test_heroic_inspiration_reroll_on_round2_javelin_miss_talia_hooks_and_replay(self) -> None:
-        # R1: Bram closes to (15,0) [5], Longsword hits Goblin Scout A [1], end [e].
-        # Talia casts Shield & Magic Missile (defeating Scout A).
-        # R2: Bram throws Javelin at Goblin Scout B [2] -> misses (14 vs AC 15),
-        #     sees Heroic Inspiration option #1 in HUD/menu, types 'r' to reroll -> hits!
-        #     Talia casts Ray of Frost in R2.
+        # R1: Bram closes to (15,0) [5], attacks Goblin Scout A [1], end [e]; Talia casts Magic Missile at Scout A.
+        # R2: Bram throws Javelin at Goblin Scout B [2] -> misses (7 vs AC 15),
+        #     sees Heroic Inspiration option #1 in HUD/menu, types 'r' to reroll; Talia casts Ray of Frost.
+        # (Seed 22 since #33: Talia no longer casts Shield on her own turn, which shifted seed 42's dice.)
         script = ["5", "1", "e", "2", "r", "e"] + ["1", "e"] * 15
         in_fn, out_fn, outputs = _make_scripted_io(script, fallback="e")
 
@@ -626,7 +625,7 @@ class TestInteractiveSessionsAndSeats(unittest.TestCase):
             "goblin-ambush",
             rules=self.rules,
             play_as="pc-bram",
-            seed=42,
+            seed=22,
             input_fn=in_fn,
             output_fn=out_fn,
         )
@@ -634,7 +633,7 @@ class TestInteractiveSessionsAndSeats(unittest.TestCase):
         joined_out = "\n".join(outputs)
         self.assertIn("Heroic Inspiration: Ready", joined_out)
         self.assertIn(
-            "Spend Heroic Inspiration — reroll Javelin vs Goblin Scout B (was 14)",
+            "Spend Heroic Inspiration — reroll Javelin vs Goblin Scout B (was 7)",
             joined_out,
         )
         self.assertIn("Bram Ironhand spends Heroic Inspiration to reroll Javelin", joined_out)
@@ -649,7 +648,7 @@ class TestInteractiveSessionsAndSeats(unittest.TestCase):
         self.assertFalse(transcript["final_state"]["combatants"]["pc-bram"].get("heroic_inspiration", True))
 
         # Verify Talia's spell casts emitted readable narrative_hooks in streamed interactive output
-        self.assertIn("Talia Spark casts Shield (+5 AC", joined_out)
+        self.assertNotIn("Talia Spark casts Shield (+5 AC", joined_out)  # no own-turn Shield (#33)
         self.assertIn("Talia Spark casts Magic Missile at Goblin Scout A", joined_out)
         self.assertIn("Ray of Frost", joined_out)
 

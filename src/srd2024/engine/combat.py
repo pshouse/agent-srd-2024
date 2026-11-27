@@ -275,9 +275,14 @@ class _StepTracker:
         self.hooks: list[str] = []
         self.slot_changes: list[dict[str, Any]] = []
         self.before_snapshot: dict[str, Any] = copy.deepcopy(initial_state) if initial_state else {}
+        # Set while the engine resolves an automatic reaction: events emitted meanwhile carry "reaction": True so
+        # scoring can tell engine-made reactions from a driver's own decisions.
+        self.in_reaction: bool = False
 
     def emit(self, event_type: str, **fields: Any) -> dict[str, Any]:
         ev = {"seq": len(self.events) + 1, "type": event_type, **fields}
+        if self.in_reaction:
+            ev["reaction"] = True
         self.events.append(ev)
         return ev
 
@@ -1018,6 +1023,11 @@ def _resolve_single_weapon_attack(
     else:
         hit = total_to_hit >= target_ac
         crit = False
+    if hit:  # Shield (Reaction) can turn the hit into a miss (#33)
+        shielded_ac = _maybe_reactive_shield(state, target_id, attacker_id, d20, total_to_hit, target_ac, rules, tracker)
+        if shielded_ac is not None:
+            target_ac = shielded_ac
+            hit = total_to_hit >= target_ac
 
     # Paralyzed / Unconscious auto-crit within 5ft.
     if hit and not crit and dist <= 5 and _has_modifier_flag(target, "auto_crit_within_5ft", rules):
@@ -1457,6 +1467,11 @@ def _resolve_monster_action(
     else:
         hit = total_to_hit >= target_ac
         crit = False
+    if hit:  # Shield (Reaction) can turn the hit into a miss (#33)
+        shielded_ac = _maybe_reactive_shield(state, tid, actor_id, d20, total_to_hit, target_ac, rules, tracker)
+        if shielded_ac is not None:
+            target_ac = shielded_ac
+            hit = total_to_hit >= target_ac
 
     if hit and not crit and dist <= 5 and _has_modifier_flag(target, "auto_crit_within_5ft", rules):
         crit = True
@@ -1717,24 +1732,183 @@ def _reaction_trigger_applies(
     actor_id: str,
     spell: dict[str, Any],
 ) -> bool:
-    """True only for a reaction spell with a real trigger.
+    """True only for a reaction spell with a real trigger: an engine `reaction_window` naming this caster.
 
-    A trigger is an engine `reaction_window` naming this caster, or the caster
-    spending their own reaction on their own turn. `as_reaction` on any other
-    spell does not qualify.
+    Casting a reaction spell on your own turn with no trigger is not legal (#33); triggered reactions such as Shield
+    are cast by the engine itself (see `_maybe_reactive_shield`).
     """
     if str(spell.get("action_type") or "").lower() != "reaction":
         return False
     if not spell.get("reaction_trigger"):
         return False
     window = state.get("reaction_window")
-    if isinstance(window, dict) and str(window.get("actor_id") or "") == str(actor_id):
-        return True
-    turn_order = state.get("turn_order") or []
-    if not turn_order:
+    return isinstance(window, dict) and str(window.get("actor_id") or "") == str(actor_id)
+
+
+# ----------------------------------------------------------------------
+# Reactions (#33, #38): resolved by the engine with a deterministic policy
+# ----------------------------------------------------------------------
+# A combatant reacts automatically unless its entry sets "reaction_policy": "none". Each combatant has one
+# Reaction per round (restored at the start of its own turn).
+
+
+def _can_react(combatant: dict[str, Any], rules: RulesStore) -> bool:
+    return (
+        bool(combatant.get("alive"))
+        and int(combatant.get("hp", 0)) > 0
+        and str(combatant.get("reaction_policy") or "auto") != "none"
+        and bool((combatant.get("turn_resources") or {}).get("reaction"))
+        and not _has_modifier_flag(combatant, "cannot_act", rules)
+    )
+
+
+def _maybe_reactive_shield(
+    state: dict[str, Any],
+    target_id: str,
+    attacker_id: str,
+    d20: dict[str, Any],
+    total_to_hit: int,
+    target_ac: int,
+    rules: RulesStore,
+    tracker: _StepTracker,
+) -> int | None:
+    """Cast Shield as a Reaction when an attack roll hits and +5 AC would make it miss (SRD 5.2 Shield).
+
+    Requires Shield prepared, a free Reaction, a level-1+ slot, and no Shield already up. A natural 20 still hits,
+    so Shield isn't wasted on it. Returns the new AC when Shield is cast (the caller re-checks the hit), else None.
+    """
+    target = state["combatants"][target_id]
+    sc = target.get("spellcasting")
+    if not isinstance(sc, dict) or "shield" not in (sc.get("prepared_spells") or []):
+        return None
+    if d20.get("nat20") or any(e.get("kind") == "shield" for e in target.get("active_effects", [])):
+        return None
+    if not _can_react(target, rules):
+        return None
+    spell = rules.get_spell("shield") or {}
+    bonus = next((int(b.get("value", 5)) for b in (spell.get("buffs") or []) if b.get("kind") == "ac_bonus"), 5)
+    if total_to_hit >= target_ac + bonus:
+        return None  # Shield wouldn't turn this hit into a miss
+    slots = sc.setdefault("slots", {})
+    slot_level = next((lvl for lvl in sorted(int(k) for k, v in slots.items() if int(v) > 0) if lvl >= 1), None)
+    if slot_level is None:
+        return None
+
+    before = int(slots[str(slot_level)])
+    slots[str(slot_level)] = before - 1
+    tracker.slot_changes.append({"id": target_id, "slot_level": slot_level, "before": before, "after": before - 1})
+    target["turn_resources"]["reaction"] = False
+    target["active_effects"].append(
+        {
+            "id": _next_effect_id(state, "shield"),
+            "kind": "shield",
+            "source_id": target_id,
+            "target_id": target_id,
+            "value": bonus,
+            "blocks_spell": "magic-missile",
+            "expires": "start_of_source_next_turn",
+            "created_round": state["round"],
+            "concentration_spell": None,
+        }
+    )
+    tracker.emit(
+        "spell_cast",
+        reaction=True,
+        actor_id=target_id,
+        spell="shield",
+        slot_level=slot_level,
+        target_ids=[target_id],
+        as_reaction=True,
+        trigger="hit_by_attack",
+        trigger_source_id=attacker_id,
+        coverage=str(spell.get("coverage") or "full"),
+        unmodeled_clauses=list((spell.get("provenance") or {}).get("unmodeled_clauses") or []),
+    )
+    tracker.hook(f"{target['name']} casts Shield as a Reaction (+{bonus} AC until the start of their next turn).")
+    return _effective_ac(target)
+
+
+def _melee_reach_and_attack(combatant: dict[str, Any]) -> tuple[int, dict[str, Any] | None, str]:
+    """(reach in ft, attack to use, 'weapon'|'action') for an Opportunity Attack; (0, None, '') if none.
+
+    PCs use their melee weapon with the best average damage; monsters their best single melee attack action.
+    """
+    def avg(dice: str, bonus: int = 0) -> float:
+        total = float(bonus)
+        for n, d, k in re.findall(r"(?:(\d*)d(\d+)|([+-]?\d+))", str(dice).replace(" ", "")):
+            total += int(n or 1) * (int(d) + 1) / 2 if d else int(k)
+        return total
+
+    best: tuple[float, int, dict[str, Any] | None, str] = (-1.0, 0, None, "")
+    if combatant.get("kind") == "pc":
+        for w in combatant.get("weapons") or []:
+            if str(w.get("weapon_range") or "melee").lower() != "melee":
+                continue
+            reach = int(w.get("reach_ft") or (10 if "reach" in (w.get("properties") or []) else 5))
+            score = avg(str(w.get("damage_dice") or "1"), int(w.get("damage_bonus") or 0))
+            if score > best[0]:
+                best = (score, reach, w, "weapon")
+    else:
+        for a in combatant.get("monster_actions") or []:
+            if a.get("kind") != "attack" or str(a.get("attack_kind") or "").lower() != "melee":
+                continue
+            reach = int(a.get("reach_ft") or 5)
+            score = sum(avg(str(p.get("dice") or "0")) for p in a.get("damage_parts") or [] if not p.get("conditional"))
+            if score > best[0]:
+                best = (score, reach, a, "action")
+    return best[1], best[2], best[3]
+
+
+def _opportunity_attacks(
+    state: dict[str, Any],
+    mover_id: str,
+    from_pos: dict[str, int],
+    to_pos: dict[str, int],
+    rules: RulesStore,
+    rng: DeterministicRNG,
+    tracker: _StepTracker,
+) -> bool:
+    """Resolve Opportunity Attacks against a creature leaving reach (#38). Returns True if the mover was dropped.
+
+    SRD 5.2: a hostile creature that can react makes one melee attack when the mover leaves its reach by moving,
+    unless the mover took the Disengage action. Attacks happen in initiative order while the mover is still at
+    `from_pos`; if one drops it to 0 HP, the move ends there. Teleportation never calls this.
+    """
+    mover = state["combatants"][mover_id]
+    if (mover.get("turn_resources") or {}).get("disengaged"):
         return False
-    active_id = turn_order[int(state.get("active_index", 0)) % len(turn_order)]
-    return str(active_id) == str(actor_id)
+    for rid in state.get("turn_order") or []:
+        if rid == mover_id or rid not in state["combatants"]:
+            continue
+        reactor = state["combatants"][rid]
+        if reactor.get("side") == mover.get("side") or not _can_react(reactor, rules):
+            continue
+        reach, attack, kind = _melee_reach_and_attack(reactor)
+        if attack is None:
+            continue
+        if not (distance_ft(reactor["position"], from_pos) <= reach < distance_ft(reactor["position"], to_pos)):
+            continue
+        reactor["turn_resources"]["reaction"] = False
+        tracker.emit(
+            "opportunity_attack",
+            reaction=True,
+            actor_id=rid,
+            target_id=mover_id,
+            weapon=attack.get("slug") if kind == "weapon" else None,
+            action=attack.get("name") if kind == "action" else None,
+        )
+        tracker.hook(f"{reactor['name']} makes an Opportunity Attack as {mover['name']} leaves its reach!")
+        tracker.in_reaction = True
+        try:
+            if kind == "weapon":
+                _resolve_single_weapon_attack(state, rid, mover_id, attack, rules, rng, tracker, allow_cleave=False)
+            else:
+                _resolve_monster_action(state, rid, attack, [mover_id], rules, rng, tracker)
+        finally:
+            tracker.in_reaction = False
+        if not mover.get("alive") or int(mover.get("hp", 0)) <= 0:
+            return True
+    return False
 
 
 def step(
@@ -1959,6 +2133,21 @@ def step(
                     rules,
                 )
             old_pos = copy.deepcopy(actor["position"])
+            # Opportunity Attacks happen as the mover leaves reach, before it gets away (#38).
+            if _opportunity_attacks(s, actor_id, old_pos, to_pos, rules, rng, tracker):
+                actor["movement_remaining_ft"] = 0
+                tracker.hook(f"{actor['name']} is dropped before getting away; the move ends at ({old_pos['x']}, {old_pos['y']}).")
+                s["rng"] = rng.to_dict()
+                _update_encounter_status(s)
+                return {
+                    "status": "ok",
+                    "error": None,
+                    "events": tracker.events,
+                    "state_diff": tracker.build_diff(s),
+                    "state": s,
+                    "legal_actions": compute_legal_actions(s, rules),
+                    "narrative_hooks": tracker.hooks,
+                }
             actor["position"] = to_pos
             rem -= move_cost
             tracker.emit(
@@ -2563,6 +2752,11 @@ def step(
                 else:
                     hit = total_to_hit >= t_ac
                     crit = False
+                if hit:  # Shield (Reaction) can turn the hit into a miss (#33)
+                    shielded_ac = _maybe_reactive_shield(s, tid, actor_id, d20, total_to_hit, t_ac, rules, tracker)
+                    if shielded_ac is not None:
+                        t_ac = shielded_ac
+                        hit = total_to_hit >= t_ac
 
                 if hit and not crit and dist <= 5 and _has_modifier_flag(t, "auto_crit_within_5ft", rules):
                     crit = True
