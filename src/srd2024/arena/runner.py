@@ -410,6 +410,8 @@ _HIDDEN_NARRATION_RES: tuple[re.Pattern[str], ...] = (
     re.compile(r"\s*\(\s*\d+\s*/\s*\d+\s*HP[^)]*\)", re.IGNORECASE),
     re.compile(r"\b\d+\s*/\s*\d+\s*HP\b", re.IGNORECASE),
     re.compile(r"\b\d+\s+temp(?:orary)?\s+HP\b", re.IGNORECASE),
+    # Stage 4 writes "(Temp HP: 15)" (any spacing, colon optional).
+    re.compile(r"\(\s*temp(?:orary)?\s+HP\s*:?\s*\d+[^)]*\)", re.IGNORECASE),
     re.compile(r"\blevel-\d+\s+spell\s+slots?\b", re.IGNORECASE),
     re.compile(r"\b\d+\s+spell\s+slots?\b", re.IGNORECASE),
 )

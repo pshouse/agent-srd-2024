@@ -335,6 +335,60 @@ class TestObservationHiddenStats(unittest.TestCase):
         for pattern in _LEAK_RES:
             self.assertIsNone(pattern.search(blob), f"{pattern.pattern} in {blob!r}")
 
+    def test_false_life_temp_hp_is_hidden_from_the_opposing_side(self) -> None:
+        scen = load_scenario("goblin-ambush", self.rules)
+        state = step(
+            None,
+            {"type": "start_encounter", "seed": 1, "combatants": scen["combatants"]},
+            self.rules,
+        )["state"]
+        active = ""
+        for _ in range(len(state["turn_order"]) + 1):
+            active = state["turn_order"][int(state["active_index"]) % len(state["turn_order"])]
+            if active == "pc-talia":
+                break
+            state = step(state, {"type": "end_turn", "actor_id": active}, self.rules)["state"]
+        self.assertEqual(active, "pc-talia")
+        cast = step(
+            state,
+            {
+                "type": "cast_spell",
+                "actor_id": "pc-talia",
+                "spell": "false-life",
+                "slot_level": 1,
+                "target_ids": ["pc-talia"],
+            },
+            self.rules,
+        )
+        self.assertEqual(cast["status"], "ok", cast.get("error"))
+        amount = next(ev["amount"] for ev in cast["events"] if ev.get("type") == "temp_hp_applied")
+        self.assertGreater(int(amount), 0)
+        hooks = list(cast.get("narrative_hooks") or []) + [
+            f"(Temp HP: {amount})",
+            "(Temp HP 15)",
+            "( temp  hp:15 )",
+            "(TEMPORARY HP: 15)",
+            "(Temporary HP:15)",
+        ]
+        enemy_id = next(
+            cid for cid, comb in cast["state"]["combatants"].items() if comb.get("side") == "enemy"
+        )
+        obs = build_observation(
+            cast["state"],
+            enemy_id,
+            scen,
+            {"party": [], "enemy": []},
+            hooks,
+            {},
+            self.rules,
+        )
+        visible = "\n".join(_strings(obs))
+        recent = "\n".join(obs["recent_events"])
+        leaked = re.compile(r"(?i)(?:temp(?:orary)?\s+HP\s*:?\s*\d+|\d+\s+temp(?:orary)?\s+HP)")
+        self.assertIsNone(leaked.search(visible), visible)
+        self.assertIsNone(leaked.search(recent), recent)
+        self.assertNotIn("temp_hp", obs["enemies"][0])
+
     def test_full_matches_hide_opposing_ac_hp_dc_and_slots(self) -> None:
         for scenario in _SCENARIOS:
             for seed in _SEEDS:
