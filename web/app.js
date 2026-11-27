@@ -1,5 +1,5 @@
 import { ATTRIBUTION, attributionPieces } from "./lib/attribution.js";
-import { bootViewModel } from "./lib/boot.js";
+import { bootViewModel, trustedAttribution } from "./lib/boot.js";
 import { parseCardRefs } from "./lib/cardmeta.js";
 import {
   FAMILIES,
@@ -49,8 +49,6 @@ async function start() {
     }
     manifest = await manifestRes.json();
     index = await indexRes.json();
-    const official = manifest && manifest.license && manifest.license.attribution;
-    if (quoteEl && typeof official === "string") placeAttribution(quoteEl, official);
   } catch {
     renderHardError(["The manifest and index could not be loaded."]);
     return;
@@ -61,6 +59,8 @@ async function start() {
     renderHardError(decision.errors);
     return;
   }
+  const official = trustedAttribution(manifest);
+  if (quoteEl && official) placeAttribution(quoteEl, official);
 
   const line = document.getElementById("dataset-line");
   if (line) {
@@ -86,6 +86,7 @@ function mount(manifest, catalog) {
   let pageKey = "";
   let cardState = null;
   let cardGen = 0;
+  let viewGen = 0;
 
   mainEl.replaceChildren();
   const hero = el("div", { class: "wrap hero" });
@@ -137,8 +138,16 @@ function mount(manifest, catalog) {
     if (event.key !== "Enter") return;
     event.preventDefault();
     const opened = openTarget(catalog, input.value);
+    if (opened.action === "ambiguous" && readState().route.view === "bundle") {
+      location.hash = `#/bundle/${encodeURIComponent(input.value.trim())}`;
+      return;
+    }
     if (opened.action !== "open") return;
     const state = readState();
+    if (state.route.view === "bundle") {
+      location.hash = `#/bundle/${opened.id}`;
+      return;
+    }
     state.q = input.value;
     state.route = { name: "card", id: opened.id, unknown: false };
     location.hash = hashFor(state);
@@ -154,15 +163,34 @@ function mount(manifest, catalog) {
   window.addEventListener("hashchange", render);
   render();
 
+  async function showBundle(state, gen) {
+    const { renderInspector } = await import("./lib/inspector-view.js");
+    if (gen !== viewGen) return;
+    const attribution = trustedAttribution(manifest) || ATTRIBUTION;
+    await renderInspector(resultsCol, {
+      catalog,
+      manifest,
+      routeId: state.route.id,
+      hash: location.hash,
+      attribution,
+      setHash(next) {
+        if (location.hash !== next) location.hash = next;
+      },
+    });
+  }
+
   function render() {
+    const gen = ++viewGen;
     const state = readState();
     syncNav(state.route);
     syncPlaceholder();
+    const bundleRoute = state.route.name === "later" && state.route.view === "bundle";
     mainEl.classList.toggle("mode-card", state.route.name === "card");
-    document.title =
-      state.route.name === "card" && catalog.byId.get(state.route.id)
-        ? `${catalog.byId.get(state.route.id).name} · 5e 2024 SRD Agent Pack`
-        : "5e 2024 SRD Agent Pack";
+    mainEl.classList.toggle("mode-bundle", bundleRoute);
+    const openEntity = state.route.id ? catalog.byId.get(state.route.id) : null;
+    document.title = openEntity
+      ? `${bundleRoute ? "Bundle for " : ""}${openEntity.name} · 5e 2024 SRD Agent Pack`
+      : "5e 2024 SRD Agent Pack";
     if (input.value !== state.q) input.value = state.q;
     const showTypo = /['"\u2018\u2019\u201C\u201D]/.test(state.q);
     typo.hidden = !showTypo;
@@ -170,6 +198,14 @@ function mount(manifest, catalog) {
       ? "Matching \u201cDragon\u2019s\u201d and \u201cDragon's\u201d alike. Apostrophes and quotes are normalized."
       : "";
     explorer.classList.toggle("solo", state.route.name === "later");
+    if (bundleRoute) {
+      explorer.classList.remove("has-card");
+      side.hidden = true;
+      cardSlot.hidden = true;
+      cardSlot.replaceChildren();
+      void showBundle(state, gen);
+      return;
+    }
     if (state.route.name === "later") {
       explorer.classList.remove("has-card");
       side.hidden = true;

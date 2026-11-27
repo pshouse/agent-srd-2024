@@ -85,6 +85,12 @@ test("first paint does not load the graph or the type shards", () => {
   assert.doesNotMatch(graph, /markdown-it/);
   assert.match(app, /manifest\.json/);
   assert.match(app, /web\/index\.json/);
+  assert.equal(app.includes("graph.json"), false);
+  assert.equal(app.includes("/types/"), false);
+  assert.match(app, /import\("\.\/lib\/inspector-view\.js"\)/);
+  const inspectorData = readFileSync(join(webRoot, "lib", "inspector-data.js"), "utf8");
+  assert.match(inspectorData, /graph\.json/);
+  assert.match(inspectorData, /\/types\//);
 
   const pkg = JSON.parse(readFileSync(join(webRoot, "package.json"), "utf8"));
   assert.equal(pkg.dependencies, undefined);
