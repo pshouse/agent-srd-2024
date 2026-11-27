@@ -20,12 +20,15 @@ from __future__ import annotations
 import copy
 import json
 import re
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from srd2024.engine.combat import distance_ft
 from srd2024.engine.store import RulesStore, strip_prefix
 
 from .agents import (
+    _FENCE_RE,
+    _MAX_DECISION_TEXT,
     AgentDecision,
     BaseLLMDriver,
     _alive_enemies,
@@ -44,6 +47,8 @@ from .agents import (
     _spell_effective_range_ft,
     _step_toward,
     _weapon_max_range,
+    _json_nesting_exceeds,
+    _scan_balanced_json_objects,
     extract_decision_json,
 )
 
@@ -1095,13 +1100,23 @@ def render_tactical_hud(
 
 def _build_nl_system_prompt() -> str:
     return (
-        "You translate a human player's plain-English tabletop action into ONE strict, legal "
-        "5e 2024 (SRD 5.2) combat intent JSON object.\n"
-        "You NEVER roll dice or invent results. Match one of the legal menu intents or emit a valid "
-        "Stage 2 intent (`move`, `attack`, `cast_spell`, `dodge`, `dash`, `disengage`, `help`, `reroll`, `end_turn`) "
-        "with `actor_id` set to `self.id`.\n"
-        "Respond with ONLY a single JSON object:\n"
-        '{"intent": {...}, "rationale": "<short translation note>", "table_talk": "<optional ally callout or null>"}'
+        "You translate one line typed by a human player into a 5e 2024 (SRD 5.2) combat intent for their "
+        "character. The rules engine resolves everything; you NEVER roll dice or invent results.\n\n"
+        "Only translate an explicit order the character can carry out this turn. Match one of the legal menu "
+        "intents, or emit a valid Stage 2 intent (`move`, `attack`, `cast_spell`, `dodge`, `dash`, `disengage`, "
+        "`help`, `reroll`, `end_turn`) with `actor_id` set to `self_id`.\n\n"
+        "Do NOT take an action when the line:\n"
+        "- is not an order (a remark, celebration, reaction, or question, e.g. \"Got him!\"),\n"
+        "- is ambiguous between different actions or targets, or\n"
+        "- asks for something the character cannot do now (no such action, out of range, resource spent).\n"
+        "Never substitute a different action for the one the player asked for, even a reasonable one: the player "
+        "decides. Instead reply with intent null and a short message to the player that says what you understood "
+        "and, if the request isn't possible, names the closest legal options from the menu by number.\n\n"
+        "Never speak for the player: do not write party chat or dialogue (the player uses `say <msg>` for that).\n\n"
+        "Respond with ONLY one JSON object, either\n"
+        '{"intent": {...}, "rationale": "<short translation note>"}\n'
+        "or\n"
+        '{"intent": null, "clarify": "<one or two sentences to the player>"}'
     )
 
 
@@ -1124,13 +1139,57 @@ def _build_nl_user_prompt(
             for e in (observation.get("enemies") or [])
             if e.get("alive")
         ],
+        # Own side only (fully visible to the player), so orders like "move next to Talia" or "heal Lyra" resolve.
+        "allies": [
+            {"id": a["id"], "name": a["name"], "position": a["position"], "distance_ft": a.get("distance_ft"),
+             "hp": a.get("hp"), "hp_max": a.get("hp_max"), "unconscious": bool(a.get("unconscious"))}
+            for a in (observation.get("allies") or [])
+            if a.get("alive")
+        ],
         "menu": compact_menu,
     }
     return (
-        "Translate the human player's command into a strict JSON decision object.\n"
+        "Translate the player's line into one JSON object: an intent, or intent null with a clarify message.\n"
         f"CONTEXT:\n{json.dumps(payload, separators=(',', ':'))}\n\n"
-        "Respond with ONLY the JSON decision object."
+        "Respond with ONLY the JSON object."
     )
+
+
+_NL_CLARIFY_MAX = 600
+_NL_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f​-‏ -‮⁦-⁩﻿]")
+
+
+@dataclass
+class NLClarification:
+    """The translator declined to act: the line wasn't an order, was ambiguous, or asked for something impossible."""
+
+    message: str
+    raw_response: str
+    usage: dict[str, int]
+
+
+def _extract_nl_clarification(raw_text: str) -> str | None:
+    """Return the `clarify` message from a `{"intent": null, "clarify": "..."}` reply, else None."""
+    if not isinstance(raw_text, str) or not raw_text.strip():
+        return None
+    text = raw_text[:_MAX_DECISION_TEXT]
+    if _json_nesting_exceeds(text.strip()):
+        return None
+    candidates = [text.strip()]
+    candidates += [m.group(1).strip() for m in _FENCE_RE.finditer(text)]
+    candidates += _scan_balanced_json_objects(text)
+    for cand in candidates:
+        try:
+            obj = json.loads(cand)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(obj, dict) and "intent" in obj and obj["intent"] is None:
+            msg = obj.get("clarify")
+            if isinstance(msg, str):
+                msg = " ".join(_NL_CONTROL_RE.sub(" ", msg).split())
+                if msg:
+                    return msg[: _NL_CLARIFY_MAX - 1] + "…" if len(msg) > _NL_CLARIFY_MAX else msg
+    return None
 
 
 def _translate_nl_to_decision(
@@ -1138,14 +1197,24 @@ def _translate_nl_to_decision(
     observation: dict[str, Any],
     menu: list[dict[str, Any]],
     nl_driver: BaseLLMDriver,
-) -> AgentDecision:
-    """Translate plain English into a validated `AgentDecision` via `nl_driver`."""
+) -> AgentDecision | NLClarification:
+    """Translate plain English via `nl_driver` into a validated `AgentDecision`, or an `NLClarification` (no action).
+
+    The translator never writes party chat for the player: any `table_talk` in the reply is ignored, so only the
+    player's own `say` lines reach allies (and the coordination score).
+    """
     sys_prompt = _build_nl_system_prompt()
     usr_prompt = _build_nl_user_prompt(user_text, observation, menu)
     url, headers, payload = nl_driver._build_request(sys_prompt, usr_prompt)
     resp_json = nl_driver._transport(url, headers, payload, nl_driver.timeout_s)
     raw_text, usage = nl_driver._parse_response(resp_json)
-    parsed = extract_decision_json(raw_text)
+    try:
+        parsed = extract_decision_json(raw_text)
+    except ValueError:
+        clarify = _extract_nl_clarification(raw_text)
+        if clarify is not None:
+            return NLClarification(message=clarify, raw_response=raw_text, usage=usage)
+        raise
 
     intent = copy.deepcopy(parsed["intent"])
     actor_id = str((observation.get("self") or {}).get("id") or "")
@@ -1153,12 +1222,10 @@ def _translate_nl_to_decision(
         intent["actor_id"] = actor_id
 
     rationale = str(parsed.get("rationale") or f"NL translation of: {user_text}")
-    raw_talk = parsed.get("table_talk")
-    table_talk = str(raw_talk).strip() if isinstance(raw_talk, str) and raw_talk.strip() else None
     return AgentDecision(
         intent=intent,
         rationale=rationale,
-        table_talk=table_talk,
+        table_talk=None,
         raw_response=raw_text,
         usage=usage,
     )
@@ -1179,7 +1246,8 @@ def _help_text(nl_enabled: bool) -> str:
         "  quit         Pause and exit (saves checkpoint if --save was provided)",
     ]
     if nl_enabled:
-        lines.append("  <English>    Natural-language mode active: type plain English to translate to intent")
+        lines.append("  <English>    Natural-language mode active: type an order in plain English to translate it to an intent")
+        lines.append("               (remarks, ambiguous or impossible orders take no action; use 'say' to talk to allies)")
     return "\n".join(lines)
 
 
@@ -1394,13 +1462,18 @@ class HumanDriver:
                         f"Try rephrasing or pick a menu option (1-{len(menu)})."
                     )
                     continue
+                if isinstance(nl_dec, NLClarification):
+                    # No action: the line wasn't an order, was ambiguous, or asked for something impossible.
+                    self._record_rejected(observation, actor_id, text, f"No action taken: {nl_dec.message}")
+                    self._output_fn(f"[NL] No action taken. {nl_dec.message}")
+                    continue
                 self._output_fn(
                     f"[NL -> Intent] {json.dumps(nl_dec.intent, separators=(',', ':'))}"
                 )
                 return AgentDecision(
                     intent=nl_dec.intent,
                     rationale=nl_dec.rationale,
-                    table_talk=self._consume_talk(nl_dec.table_talk),
+                    table_talk=self._consume_talk(),  # only the player's own `say` lines
                     raw_response=nl_dec.raw_response,
                     usage=nl_dec.usage,
                 )
