@@ -1,0 +1,9 @@
+# Informational only. Code owner review is not enabled on this repository.
+
+* @pshouse
+
+/.github/ @pshouse
+/scripts/ @pshouse
+/docs/SECURITY-PAGES.md @pshouse
+/web/vendor/ @pshouse
+/SECURITY.md @pshouse
