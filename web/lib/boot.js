@@ -84,6 +84,24 @@ export function validateBoot(manifest, index) {
  * @param {unknown} index
  * @returns {{ ok: true, errors: string[], entities: object[] } | { ok: false, errors: string[], entities: null }}
  */
+/**
+ * Manifest attribution is usable only after the manifest half of the boot
+ * checks pass. A bad manifest must not supply the footer sentence.
+ * @param {unknown} manifest
+ * @returns {string | null}
+ */
+export function trustedAttribution(manifest) {
+  if (!isObject(manifest)) return null;
+  if (manifest.schema_version !== EXPECTED_SCHEMA_VERSION) return null;
+  if (manifest.dataset_id !== EXPECTED_DATASET_ID) return null;
+  if (!isObject(manifest.counts) || manifest.counts.entities !== EXPECTED_ENTITY_COUNT) return null;
+  const license = manifest.license;
+  if (!isObject(license) || typeof license.attribution !== "string" || license.attribution.length === 0) {
+    return null;
+  }
+  return license.attribution;
+}
+
 export function bootViewModel(manifest, index) {
   const errors = validateBoot(manifest, index);
   if (errors.length) return { ok: false, errors, entities: null };

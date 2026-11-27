@@ -19,7 +19,7 @@ export function parseRoute(hash) {
   const pathOnly = raw.split("?")[0].replace(/\/+$/, "") || "/";
   if (pathOnly === "/") return { name: "explorer", unknown: false };
   const lower = pathOnly.toLowerCase();
-  const later = /^\/(bundle|graph)(?:\/([a-z0-9-]+:[a-z0-9-]+))?$/.exec(lower);
+  const later = /^\/(bundle|graph)(?:\/([^/]+))?$/.exec(lower);
   if (later) return { name: "later", view: later[1], id: later[2] || "", unknown: false };
   const match = /^\/e\/([a-z0-9-]+):([a-z0-9-]+)$/.exec(lower);
   if (!match) return { name: "explorer", unknown: true };

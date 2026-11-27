@@ -45,7 +45,9 @@ test("the page assigns that exact string to the footer", () => {
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   assert.match(app, /placeAttribution\(quoteEl\)/);
-  assert.match(app, /placeAttribution\(quoteEl, official\)/);
+  const gate = app.slice(app.indexOf("const decision = bootViewModel"));
+  assert.match(gate, /if \(!decision\.ok\) \{[\s\S]*?return;\s*\}\s*const official = trustedAttribution\(manifest\);\s*if \(quoteEl && official\) placeAttribution\(quoteEl, official\)/);
+  assert.equal(app.includes("manifest.license.attribution"), false);
   assert.match(app, /attributionPieces\(text\)/);
   assert.match(app, /text = ATTRIBUTION/);
   assert.match(html, /id="attribution"/);
