@@ -233,6 +233,9 @@ def audit(path: Path) -> None:
                 if side[tgt] == "party" and e["hp_before"] == 0 and e["hp_damage"] > 0:
                     nxt = next((x for x in evs[idx + 1: idx + 4] if x["type"] in ("death_save_damage_failure", "combatant_died") and x.get("target_id", x.get("combatant_id")) == tgt), None)
                     check("damage at 0 HP adds death-save failures", nxt is not None, where, f"{tgt}")
+                    died0 = any(x["type"] == "combatant_died" and x.get("combatant_id") == tgt for x in evs[idx + 1: idx + 4])
+                    check("damage at 0 HP >= max HP kills outright", died0 or e["hp_damage"] < hp_max[tgt], where,
+                          f"{tgt} took {e['hp_damage']} at 0 HP, max {hp_max[tgt]}")
                 hp[tgt] = e["hp_after"]
                 if side[tgt] == "party" and e["hp_before"] > 0 and e["hp_after"] == 0:
                     overflow = e["hp_damage"] - e["hp_before"]

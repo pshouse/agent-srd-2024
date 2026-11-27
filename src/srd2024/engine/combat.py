@@ -648,6 +648,19 @@ def _apply_damage_parts(
     if fortitude:
         tracker.hook(f"{target['name']} refuses to fall (Undead Fortitude) and drops to 1 HP instead.")
 
+    # Instant Death (SRD 5.2): a PC dies outright if the damage left over after dropping it to 0 HP, or any damage
+    # taken while at 0 HP, equals or exceeds its Hit Point maximum (#46). Temporary HP absorbed first doesn't count.
+    hp_max = int(target.get("hp_max") or 0)
+    if target.get("kind") == "pc" and target.get("alive") and hp_max > 0 and target["hp"] == 0 and hp_damage > 0 \
+            and hp_damage - hp_before >= hp_max:
+        if target.get("concentration"):
+            _drop_concentration(state, target_id, tracker, reason="dropped_to_0_hp")
+        target["alive"] = False
+        tracker.emit("combatant_died", combatant_id=target_id, reason="massive_damage",
+                     overflow=hp_damage - hp_before, hp_max=hp_max)
+        tracker.hook(f"{target['name']} takes {hp_damage - hp_before} damage past 0 HP (max {hp_max}) and dies instantly.")
+        return total_effective
+
     # Damage at 0 HP on a PC causes death save failure(s).
     if hp_before == 0 and total_effective > 0 and target.get("kind") == "pc" and target.get("alive"):
         fails = 2 if is_crit else 1
