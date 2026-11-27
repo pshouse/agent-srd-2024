@@ -346,7 +346,7 @@ Compiled from `5e-SRD-Monsters.json` (341 monsters). Upstream quirks handled exp
   - **Multiattack (188/838):** normalize all 3 upstream shapes (`actions` only: 93, `actions`+`action_options`: 41, `action_options` only: 54) into deterministic `multiattack: {"total_attacks": int | null, "sequence": [{"action_name": str, "count": int}], "options": [...], "desc": str}`.
   - **Spellcasting (60/838):** extract `ability`, `save_dc`, `attack_bonus`, and structured spell list with usage (`at_will`, `per_day`).
 - **Coverage grading for monsters (honest):**
-  - `full`: Has executable statblock AND all primary combat actions parsed cleanly with no unmodeled `spellcasting` / `legendary_actions` / complex prose traits (empirical floor: **`full >= 220`**).
+  - `full`: Has executable statblock AND all primary combat actions parsed cleanly with no unmodeled `spellcasting` / `legendary_actions` / complex prose traits. Stat-block traits (`special_abilities`), bonus actions and reactions are not executed, so each is listed in `unmodeled_clauses` (`special_ability:<slug>`, `bonus_action:<slug>`, `reaction:<slug>`) and grades the monster `partial`, apart from a short list of traits with no effect in the 2D combat model (#39). Floor after #39: **`full >= 115`** (121 at the fix; was 262 while traits went uncounted).
   - `partial`: Full defensive/offensive statblock & core attacks executable, plus unmodeled spellcasting / legendary actions / complex special abilities / zero actions (`shrieker-fungus`, `vampire-mist`) recorded in `unmodeled_clauses`.
   - `narrative`: **`0`** (all 341 monsters have full deterministic statblocks).
 
@@ -746,7 +746,7 @@ All intents take `intent: dict` with `"type"`:
    - `conditions`: `15/15` (`full == 15`), including 2024 `exhaustion` (`-2` d20 penalty, `-5` ft speed, death at 6).
    - `equipment`: `182` total, `38` weapons (`full`, including `morningstar` reach 5 ft), `13` armor/shields (`full`, including `hide-armor` `max_bonus == 2` and `shield` `+2`).
    - `spells`: `339` total, `full >= 80`, `full + partial >= 200`, `narrative >= 50` (honesty check — e.g. `augury`, `clairvoyance`, `wish` MUST NOT be marked `full`), 9 `"Component:"` range quirks cleanly parsed (`divine-smite`, `guidance`, `sorcerous-burst`, etc.).
-   - `monsters`: `341` total, `full >= 220`, `narrative == 0`, `shrieker-fungus` & `vampire-mist` clean `partial`, `adult-red-dragon` Multiattack + Fire Breath DC 21 DEX half + Rend parsed, `goblin-warrior` Scimitar Advantage `1d4` conditional parsed, `ghoul` Claw CON DC 10 `paralyzed` parsed.
+   - `monsters`: `341` total, `full >= 115` (honest trait/bonus-action/reaction grading, #39), `narrative == 0`, `shrieker-fungus` & `vampire-mist` clean `partial`, `adult-red-dragon` Multiattack + Fire Breath DC 21 DEX half + Rend parsed, `goblin-warrior` Scimitar Advantage `1d4` conditional parsed, `ghoul` Claw CON DC 10 `paralyzed` parsed.
    - `character_creation`: 12 classes, 12 subclasses, 9 species, 24 subspecies, 4 backgrounds, 17 feats, 287 levels, 68 traits.
 
 ### 7.2 `tests/test_stage2_character_engine.py`

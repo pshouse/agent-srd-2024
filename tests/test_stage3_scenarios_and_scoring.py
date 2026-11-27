@@ -209,6 +209,18 @@ def _make_action(
     }
 
 
+# Stat-block elements of the built-in scenario monsters that the engine does not execute yet (#39, #33, #38).
+EXPECTED_SCENARIO_MONSTER_GAPS: dict[str, list[str]] = {
+    "goblin-warrior": ["bonus_action:nimble-escape"],
+    "ghoul": [],
+    "ghast": ["special_ability:stench"],
+    "skeleton": [],
+    "red-dragon-wyrmling": [],
+    "hell-hound": ["special_ability:pack-tactics"],
+    "magmin": ["bonus_action:ignited-illumination", "special_ability:death-burst"],
+}
+
+
 class TestStage3BuiltinScenarios(unittest.TestCase):
     """§8.1.1: Built-in scenarios catalog, zero-warning compilation, full-coverage monsters & encounter init."""
 
@@ -288,11 +300,19 @@ class TestStage3BuiltinScenarios(unittest.TestCase):
                             monster_slug = entry["monster"]
                             m_rule = self.rules.get_monster(f"monsters:{monster_slug}")
                             self.assertIsNotNone(m_rule, f"Missing monster in rules.json: {monster_slug}")
-                            self.assertEqual(
-                                m_rule["coverage"],
-                                "full",
-                                f"Monster {monster_slug} in {sid} must have coverage=='full'",
+                            # Core attacks must be executable: the only allowed gaps are stat-block traits, bonus
+                            # actions and reactions (#39), pinned per monster so implementing one updates this test.
+                            clauses = m_rule["provenance"]["unmodeled_clauses"]
+                            self.assertTrue(
+                                all(c.split(":", 1)[0] in ("special_ability", "bonus_action", "reaction") for c in clauses),
+                                f"Monster {monster_slug} in {sid} has unexecutable core actions: {clauses}",
                             )
+                            self.assertEqual(
+                                clauses,
+                                EXPECTED_SCENARIO_MONSTER_GAPS[monster_slug],
+                                f"Unmodeled clauses changed for {monster_slug}; update EXPECTED_SCENARIO_MONSTER_GAPS",
+                            )
+                            self.assertEqual(m_rule["coverage"], "full" if not clauses else "partial")
                             if sid == "wyrmling-lair":
                                 immunities = {d.lower() for d in m_rule.get("damage_immunities", [])}
                                 self.assertIn(

@@ -444,13 +444,38 @@ class TestRulesCompletenessAndCoverage(unittest.TestCase):
         self.assertIsNotNone(fbolt["scaling"]["cantrip_tiers"])
         self.assertEqual(fbolt["scaling"]["cantrip_tiers"]["5"], "2d10")
 
+    def test_monster_coverage_is_honest_about_traits_bonus_actions_and_reactions(self) -> None:
+        """#39: a monster is only graded full if every stat-block element it has is executed by the engine."""
+        from srd2024.rules_compiler.monsters import _DESCRIPTIVE_TRAITS, _clause_slug, _trait_key
+
+        monsters = self.rules["monsters"]
+        for slug, m in monsters.items():
+            clauses = m["provenance"]["unmodeled_clauses"]
+            with self.subTest(monster=slug):
+                self.assertEqual(m["coverage"] == "full", not clauses, "full iff no unmodeled clauses")
+                for sa in m.get("special_abilities") or []:
+                    listed = f"special_ability:{_clause_slug(sa['name'])}" in clauses
+                    self.assertEqual(listed, _trait_key(sa["name"]) not in _DESCRIPTIVE_TRAITS, sa["name"])
+                for b in m.get("bonus_actions") or []:
+                    self.assertIn(f"bonus_action:{_clause_slug(b['name'])}", clauses)
+                for r in m.get("reactions") or []:
+                    self.assertIn(f"reaction:{_clause_slug(r['name'])}", clauses)
+        # Spot checks from the Phase 2 audit and the built-in scenarios.
+        self.assertEqual(monsters["ghast"]["provenance"]["unmodeled_clauses"], ["special_ability:stench"])
+        self.assertIn("special_ability:pack-tactics", monsters["hell-hound"]["provenance"]["unmodeled_clauses"])
+        self.assertIn("special_ability:legendary-resistance", monsters["balor"]["provenance"]["unmodeled_clauses"])
+        self.assertIn("reaction:parry", monsters["bandit-captain"]["provenance"]["unmodeled_clauses"])
+        self.assertEqual(monsters["frog"]["coverage"], "full")  # only descriptive traits (Amphibious, Standing Leap)
+
     def test_monsters_341_coverage_floors_and_iconic_monsters(self) -> None:
         monsters = self.rules["monsters"]
         self.assertEqual(len(monsters), 341)
 
         full_cnt = sum(1 for m in monsters.values() if m["coverage"] == "full")
         narrative_cnt = sum(1 for m in monsters.values() if m["coverage"] == "narrative")
-        self.assertGreaterEqual(full_cnt, 220, f"Expected >= 220 full monsters, got {full_cnt}")
+        # #39: "full" means nothing in the stat block is left unexecuted. Traits, bonus actions and reactions aren't
+        # executed, so monsters that have them are graded partial (121 full at the time of the fix).
+        self.assertGreaterEqual(full_cnt, 115, f"Expected >= 115 full monsters, got {full_cnt}")
         self.assertEqual(narrative_cnt, 0, f"Expected 0 narrative monsters, got {narrative_cnt}")
 
         # Zero-action edge cases: shrieker-fungus & vampire-mist

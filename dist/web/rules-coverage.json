@@ -1455,7 +1455,10 @@
         "id": "monsters:aboleth",
         "name": "Aboleth",
         "unmodeled_clauses": [
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:eldritch-restoration",
+          "special_ability:legendary-resistance",
+          "special_ability:mucus-cloud"
         ]
       },
       {
@@ -1464,7 +1467,8 @@
         "name": "Adult Black Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1473,7 +1477,8 @@
         "name": "Adult Blue Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1482,7 +1487,8 @@
         "name": "Adult Brass Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1491,7 +1497,8 @@
         "name": "Adult Bronze Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1500,7 +1507,8 @@
         "name": "Adult Copper Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1509,7 +1517,8 @@
         "name": "Adult Gold Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1518,7 +1527,8 @@
         "name": "Adult Green Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1527,7 +1537,8 @@
         "name": "Adult Red Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1536,7 +1547,8 @@
         "name": "Adult Silver Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1544,14 +1556,17 @@
         "id": "monsters:adult-white-dragon",
         "name": "Adult White Dragon",
         "unmodeled_clauses": [
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:air-elemental",
         "name": "Air Elemental",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:air-form"
+        ]
       },
       {
         "coverage": "full",
@@ -1565,7 +1580,8 @@
         "name": "Ancient Black Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1574,7 +1590,8 @@
         "name": "Ancient Blue Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1583,7 +1600,8 @@
         "name": "Ancient Brass Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1592,7 +1610,8 @@
         "name": "Ancient Bronze Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1601,7 +1620,8 @@
         "name": "Ancient Copper Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1610,7 +1630,8 @@
         "name": "Ancient Gold Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1619,7 +1640,8 @@
         "name": "Ancient Green Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1628,7 +1650,8 @@
         "name": "Ancient Red Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1637,7 +1660,8 @@
         "name": "Ancient Silver Dragon",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1645,7 +1669,8 @@
         "id": "monsters:ancient-white-dragon",
         "name": "Ancient White Dragon",
         "unmodeled_clauses": [
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -1695,14 +1720,20 @@
         "id": "monsters:archmage",
         "name": "Archmage",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "bonus_action:misty-step",
+          "innate_spellcasting_prose",
+          "reaction:protective-magic",
+          "special_ability:magic-resistance"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:assassin",
         "name": "Assassin",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:cunning-action",
+          "special_ability:evasion"
+        ]
       },
       {
         "coverage": "full",
@@ -1723,16 +1754,20 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:azer-sentinel",
         "name": "Azer Sentinel",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:fire-aura"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:baboon",
         "name": "Baboon",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
         "coverage": "full",
@@ -1741,10 +1776,16 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:balor",
         "name": "Balor",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:teleport",
+          "special_ability:death-throes",
+          "special_ability:fire-aura",
+          "special_ability:legendary-resistance",
+          "special_ability:magic-resistance"
+        ]
       },
       {
         "coverage": "full",
@@ -1753,22 +1794,30 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:bandit-captain",
         "name": "Bandit Captain",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:parry"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:barbed-devil",
         "name": "Barbed Devil",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:barbed-hide",
+          "special_ability:diabolical-restoration",
+          "special_ability:magic-resistance"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:basilisk",
         "name": "Basilisk",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:petrifying-gaze"
+        ]
       },
       {
         "coverage": "full",
@@ -1777,22 +1826,28 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:bearded-devil",
         "name": "Bearded Devil",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:magic-resistance"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:behir",
         "name": "Behir",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:swallow"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:berserker",
         "name": "Berserker",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:bloodied-frenzy"
+        ]
       },
       {
         "coverage": "full",
@@ -1807,22 +1862,30 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:black-pudding",
         "name": "Black Pudding",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:split",
+          "special_ability:amorphous",
+          "special_ability:corrosive-form"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:blink-dog",
         "name": "Blink Dog",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:teleport"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:blood-hawk",
         "name": "Blood Hawk",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
         "coverage": "full",
@@ -1831,16 +1894,21 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:boar",
         "name": "Boar",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:bloodied-fury"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:bone-devil",
         "name": "Bone Devil",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:diabolical-restoration",
+          "special_ability:magic-resistance"
+        ]
       },
       {
         "coverage": "full",
@@ -1861,22 +1929,29 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:bugbear-stalker",
         "name": "Bugbear Stalker",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:quick-grapple",
+          "special_ability:abduct"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:bugbear-warrior",
         "name": "Bugbear Warrior",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:abduct"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:bulette",
         "name": "Bulette",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:leap"
+        ]
       },
       {
         "coverage": "full",
@@ -1891,16 +1966,22 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:centaur-trooper",
         "name": "Centaur Trooper",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:trampling-charge"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:chain-devil",
         "name": "Chain Devil",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:unnerving-gaze",
+          "special_ability:diabolical-restoration",
+          "special_ability:magic-resistance"
+        ]
       },
       {
         "coverage": "full",
@@ -1915,22 +1996,33 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:clay-golem",
         "name": "Clay Golem",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:hasten",
+          "special_ability:acid-absorption",
+          "special_ability:berserk",
+          "special_ability:immutable-form",
+          "special_ability:magic-resistance"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:cloaker",
         "name": "Cloaker",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:moan",
+          "bonus_action:phantasms",
+          "special_ability:light-sensitivity"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:cloud-giant",
         "name": "Cloud Giant",
         "unmodeled_clauses": [
+          "bonus_action:misty-step",
           "innate_spellcasting_prose"
         ]
       },
@@ -1941,10 +2033,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:commoner",
         "name": "Commoner",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:training"
+        ]
       },
       {
         "coverage": "full",
@@ -1963,7 +2057,9 @@
         "id": "monsters:couatl",
         "name": "Couatl",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "bonus_action:divine-aid",
+          "innate_spellcasting_prose",
+          "special_ability:shielded-mind"
         ]
       },
       {
@@ -1989,6 +2085,7 @@
         "id": "monsters:cultist-fanatic",
         "name": "Cultist Fanatic",
         "unmodeled_clauses": [
+          "bonus_action:spiritual-weapon",
           "innate_spellcasting_prose"
         ]
       },
@@ -2007,31 +2104,41 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:deer",
         "name": "Deer",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:agile"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:deva",
         "name": "Deva",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "bonus_action:divine-aid",
+          "innate_spellcasting_prose",
+          "special_ability:exalted-restoration",
+          "special_ability:magic-resistance"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:dire-wolf",
         "name": "Dire Wolf",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:djinni",
         "name": "Djinni",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:elemental-restoration",
+          "special_ability:magic-resistance",
+          "special_ability:wishes"
         ]
       },
       {
@@ -2039,6 +2146,7 @@
         "id": "monsters:doppelganger",
         "name": "Doppelganger",
         "unmodeled_clauses": [
+          "bonus_action:shape-shift",
           "innate_spellcasting_prose"
         ]
       },
@@ -2061,10 +2169,13 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:drider",
         "name": "Drider",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:magic-of-the-spider-queen",
+          "special_ability:sunlight-sensitivity"
+        ]
       },
       {
         "coverage": "partial",
@@ -2079,7 +2190,9 @@
         "id": "monsters:dryad",
         "name": "Dryad",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "bonus_action:tree-stride",
+          "innate_spellcasting_prose",
+          "special_ability:magic-resistance"
         ]
       },
       {
@@ -2087,7 +2200,8 @@
         "id": "monsters:dust-mephit",
         "name": "Dust Mephit",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:death-burst"
         ]
       },
       {
@@ -2097,24 +2211,31 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:earth-elemental",
         "name": "Earth Elemental",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:siege-monster"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:efreeti",
         "name": "Efreeti",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:elemental-restoration",
+          "special_ability:magic-resistance",
+          "special_ability:wishes"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:elephant",
         "name": "Elephant",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:trample"
+        ]
       },
       {
         "coverage": "full",
@@ -2123,16 +2244,23 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:erinyes",
         "name": "Erinyes",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:parry",
+          "special_ability:diabolical-restoration",
+          "special_ability:magic-resistance",
+          "special_ability:magic-rope"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:ettercap",
         "name": "Ettercap",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:reel"
+        ]
       },
       {
         "coverage": "full",
@@ -2141,10 +2269,14 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:fire-elemental",
         "name": "Fire Elemental",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:fire-aura",
+          "special_ability:fire-form",
+          "special_ability:water-susceptibility"
+        ]
       },
       {
         "coverage": "full",
@@ -2153,16 +2285,24 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:flesh-golem",
         "name": "Flesh Golem",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:aversion-to-fire",
+          "special_ability:berserk",
+          "special_ability:immutable-form",
+          "special_ability:lightning-absorption",
+          "special_ability:magic-resistance"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:flying-snake",
         "name": "Flying Snake",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:flyby"
+        ]
       },
       {
         "coverage": "full",
@@ -2171,35 +2311,45 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:frost-giant",
         "name": "Frost Giant",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:war-cry"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:gargoyle",
         "name": "Gargoyle",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:flyby"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:gelatinous-cube",
         "name": "Gelatinous Cube",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:ooze-cube",
+          "special_ability:transparent"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:ghast",
         "name": "Ghast",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:stench"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:ghost",
         "name": "Ghost",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:incorporeal-movement"
         ]
       },
       {
@@ -2209,10 +2359,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:giant-ape",
         "name": "Giant Ape",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:leap"
+        ]
       },
       {
         "coverage": "full",
@@ -2227,10 +2379,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:giant-boar",
         "name": "Giant Boar",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:bloodied-fury"
+        ]
       },
       {
         "coverage": "full",
@@ -2289,10 +2443,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:giant-hyena",
         "name": "Giant Hyena",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:rampage"
+        ]
       },
       {
         "coverage": "full",
@@ -2301,24 +2457,29 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:giant-octopus",
         "name": "Giant Octopus",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:ink-cloud"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:giant-owl",
         "name": "Giant Owl",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:flyby"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:giant-rat",
         "name": "Giant Rat",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
         "coverage": "full",
@@ -2327,10 +2488,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:giant-seahorse",
         "name": "Giant Seahorse",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:bubble-dash"
+        ]
       },
       {
         "coverage": "full",
@@ -2359,16 +2522,20 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:giant-vulture",
         "name": "Giant Vulture",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:giant-wasp",
         "name": "Giant Wasp",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:flyby"
+        ]
       },
       {
         "coverage": "full",
@@ -2383,30 +2550,39 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:gibbering-mouther",
         "name": "Gibbering Mouther",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:aberrant-ground",
+          "special_ability:gibbering"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:glabrezu",
         "name": "Glabrezu",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:demonic-restoration",
+          "special_ability:magic-resistance"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:gladiator",
         "name": "Gladiator",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:parry"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:gnoll-warrior",
         "name": "Gnoll Warrior",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:rampage"
+        ]
       },
       {
         "coverage": "full",
@@ -2415,22 +2591,29 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:goblin-boss",
         "name": "Goblin Boss",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:nimble-escape",
+          "reaction:redirect-attack"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:goblin-minion",
         "name": "Goblin Minion",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:nimble-escape"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:goblin-warrior",
         "name": "Goblin Warrior",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:nimble-escape"
+        ]
       },
       {
         "coverage": "full",
@@ -2439,16 +2622,21 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:gorgon",
         "name": "Gorgon",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:trample"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:gray-ooze",
         "name": "Gray Ooze",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:amorphous",
+          "special_ability:corrosive-form"
+        ]
       },
       {
         "coverage": "full",
@@ -2461,7 +2649,8 @@
         "id": "monsters:green-hag",
         "name": "Green Hag",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:coven-magic"
         ]
       },
       {
@@ -2499,7 +2688,8 @@
         "id": "monsters:guardian-naga",
         "name": "Guardian Naga",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:celestial-restoration"
         ]
       },
       {
@@ -2507,7 +2697,9 @@
         "id": "monsters:half-dragon",
         "name": "Half-Dragon",
         "unmodeled_clauses": [
-          "conditional_damage_traits"
+          "bonus_action:leap",
+          "conditional_damage_traits",
+          "special_ability:draconic-origin"
         ]
       },
       {
@@ -2523,16 +2715,23 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:hell-hound",
         "name": "Hell Hound",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:hezrou",
         "name": "Hezrou",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:leap",
+          "special_ability:demonic-restoration",
+          "special_ability:magic-resistance",
+          "special_ability:stench"
+        ]
       },
       {
         "coverage": "full",
@@ -2541,10 +2740,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:hippogriff",
         "name": "Hippogriff",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:flyby"
+        ]
       },
       {
         "coverage": "full",
@@ -2553,16 +2754,20 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:hobgoblin-captain",
         "name": "Hobgoblin Captain",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:aura-of-authority"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:hobgoblin-warrior",
         "name": "Hobgoblin Warrior",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
         "coverage": "full",
@@ -2571,10 +2776,13 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:horned-devil",
         "name": "Horned Devil",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:diabolical-restoration",
+          "special_ability:magic-resistance"
+        ]
       },
       {
         "coverage": "full",
@@ -2583,23 +2791,30 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:hydra",
         "name": "Hydra",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:multiple-heads",
+          "special_ability:reactive-heads"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:hyena",
         "name": "Hyena",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:ice-devil",
         "name": "Ice Devil",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:diabolical-restoration",
+          "special_ability:magic-resistance"
         ]
       },
       {
@@ -2607,7 +2822,8 @@
         "id": "monsters:ice-mephit",
         "name": "Ice Mephit",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:death-burst"
         ]
       },
       {
@@ -2616,6 +2832,7 @@
         "name": "Imp",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
+          "special_ability:magic-resistance",
           "special_non_attack_actions"
         ]
       },
@@ -2624,20 +2841,29 @@
         "id": "monsters:incubus",
         "name": "Incubus",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "bonus_action:nightmare",
+          "innate_spellcasting_prose",
+          "special_ability:succubus-form"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:invisible-stalker",
         "name": "Invisible Stalker",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:air-form",
+          "special_ability:invisibility"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:iron-golem",
         "name": "Iron Golem",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:fire-absorption",
+          "special_ability:immutable-form",
+          "special_ability:magic-resistance"
+        ]
       },
       {
         "coverage": "full",
@@ -2652,23 +2878,30 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:knight",
         "name": "Knight",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:parry"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:kobold-warrior",
         "name": "Kobold Warrior",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics",
+          "special_ability:sunlight-sensitivity"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:kraken",
         "name": "Kraken",
         "unmodeled_clauses": [
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance",
+          "special_ability:siege-monster"
         ]
       },
       {
@@ -2676,14 +2909,17 @@
         "id": "monsters:lamia",
         "name": "Lamia",
         "unmodeled_clauses": [
+          "bonus_action:leap",
           "innate_spellcasting_prose"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:lemure",
         "name": "Lemure",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:hellish-restoration"
+        ]
       },
       {
         "coverage": "partial",
@@ -2691,14 +2927,19 @@
         "name": "Lich",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "reaction:protective-magic",
+          "special_ability:legendary-resistance",
+          "special_ability:spirit-jar"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:lion",
         "name": "Lion",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
         "coverage": "full",
@@ -2711,26 +2952,35 @@
         "id": "monsters:mage",
         "name": "Mage",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "bonus_action:misty-step",
+          "innate_spellcasting_prose",
+          "reaction:protective-magic"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:magma-mephit",
         "name": "Magma Mephit",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:death-burst"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:magmin",
         "name": "Magmin",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:ignited-illumination",
+          "special_ability:death-burst"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:mammoth",
         "name": "Mammoth",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:trample"
+        ]
       },
       {
         "coverage": "full",
@@ -2739,10 +2989,16 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:marilith",
         "name": "Marilith",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:teleport",
+          "reaction:parry",
+          "special_ability:demonic-restoration",
+          "special_ability:magic-resistance",
+          "special_ability:reactive"
+        ]
       },
       {
         "coverage": "full",
@@ -2751,10 +3007,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:medusa",
         "name": "Medusa",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:petrifying-gaze"
+        ]
       },
       {
         "coverage": "full",
@@ -2769,10 +3027,13 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:mimic",
         "name": "Mimic",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift",
+          "special_ability:adhesive"
+        ]
       },
       {
         "coverage": "full",
@@ -2804,7 +3065,11 @@
         "name": "Mummy Lord",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "reaction:whirlwind-of-sand",
+          "special_ability:legendary-resistance",
+          "special_ability:magic-resistance",
+          "special_ability:undead-restoration"
         ]
       },
       {
@@ -2812,6 +3077,10 @@
         "id": "monsters:nalfeshnee",
         "name": "Nalfeshnee",
         "unmodeled_clauses": [
+          "bonus_action:horror-nimbus",
+          "reaction:pursuit",
+          "special_ability:demonic-restoration",
+          "special_ability:magic-resistance",
           "special_non_attack_actions"
         ]
       },
@@ -2820,7 +3089,11 @@
         "id": "monsters:night-hag",
         "name": "Night Hag",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "bonus_action:shape-shift",
+          "innate_spellcasting_prose",
+          "special_ability:coven-magic",
+          "special_ability:magic-resistance",
+          "special_ability:soul-bag"
         ]
       },
       {
@@ -2828,20 +3101,26 @@
         "id": "monsters:nightmare",
         "name": "Nightmare",
         "unmodeled_clauses": [
+          "special_ability:confer-fire-resistance",
           "special_non_attack_actions"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:noble",
         "name": "Noble",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:parry"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:ochre-jelly",
         "name": "Ochre Jelly",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:split",
+          "special_ability:amorphous"
+        ]
       },
       {
         "coverage": "full",
@@ -2850,17 +3129,21 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:ogre-zombie",
         "name": "Ogre Zombie",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:undead-fortitude"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:oni",
         "name": "Oni",
         "unmodeled_clauses": [
+          "bonus_action:invisibility",
           "innate_spellcasting_prose",
+          "special_ability:regeneration",
           "special_non_attack_actions"
         ]
       },
@@ -2871,10 +3154,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:owl",
         "name": "Owl",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:flyby"
+        ]
       },
       {
         "coverage": "full",
@@ -2883,10 +3168,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:panther",
         "name": "Panther",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:nimble-escape"
+        ]
       },
       {
         "coverage": "full",
@@ -2895,10 +3182,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:phase-spider",
         "name": "Phase Spider",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:ethereal-jaunt"
+        ]
       },
       {
         "coverage": "full",
@@ -2913,17 +3202,23 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:pirate-captain",
         "name": "Pirate Captain",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:riposte"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:pit-fiend",
         "name": "Pit Fiend",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:diabolical-restoration",
+          "special_ability:fear-aura",
+          "special_ability:legendary-resistance",
+          "special_ability:magic-resistance"
         ]
       },
       {
@@ -2931,7 +3226,10 @@
         "id": "monsters:planetar",
         "name": "Planetar",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "bonus_action:divine-aid",
+          "innate_spellcasting_prose",
+          "special_ability:exalted-restoration",
+          "special_ability:magic-resistance"
         ]
       },
       {
@@ -2957,6 +3255,7 @@
         "id": "monsters:priest",
         "name": "Priest",
         "unmodeled_clauses": [
+          "bonus_action:divine-aid",
           "innate_spellcasting_prose"
         ]
       },
@@ -2965,26 +3264,33 @@
         "id": "monsters:priest-acolyte",
         "name": "Priest Acolyte",
         "unmodeled_clauses": [
+          "bonus_action:divine-aid",
           "innate_spellcasting_prose"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:pseudodragon",
         "name": "Pseudodragon",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:magic-resistance"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:pteranodon",
         "name": "Pteranodon",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:flyby"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:purple-worm",
         "name": "Purple Worm",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:swallow"
+        ]
       },
       {
         "coverage": "partial",
@@ -2992,6 +3298,7 @@
         "name": "Quasit",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
+          "special_ability:magic-resistance",
           "special_non_attack_actions"
         ]
       },
@@ -3001,14 +3308,18 @@
         "name": "Rakshasa",
         "unmodeled_clauses": [
           "conditional_damage_traits",
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:fiendish-restoration",
+          "special_ability:greater-magic-resistance"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:rat",
         "name": "Rat",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:agile"
+        ]
       },
       {
         "coverage": "full",
@@ -3023,16 +3334,21 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:reef-shark",
         "name": "Reef Shark",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:remorhaz",
         "name": "Remorhaz",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:swallow",
+          "special_ability:heat-aura"
+        ]
       },
       {
         "coverage": "full",
@@ -3047,10 +3363,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:roc",
         "name": "Roc",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:swoop"
+        ]
       },
       {
         "coverage": "partial",
@@ -3065,32 +3383,42 @@
         "id": "monsters:rust-monster",
         "name": "Rust Monster",
         "unmodeled_clauses": [
+          "reaction:reflexive-antennae",
           "special_non_attack_actions"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:saber-toothed-tiger",
         "name": "Saber-Toothed Tiger",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:nimble-escape"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:sahuagin-warrior",
         "name": "Sahuagin Warrior",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:aquatic-charge",
+          "special_ability:blood-frenzy"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:salamander",
         "name": "Salamander",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:fire-aura"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:satyr",
         "name": "Satyr",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:magic-resistance"
+        ]
       },
       {
         "coverage": "full",
@@ -3109,7 +3437,9 @@
         "id": "monsters:sea-hag",
         "name": "Sea Hag",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:coven-magic",
+          "special_ability:vile-appearance"
         ]
       },
       {
@@ -3121,29 +3451,41 @@
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:shadow",
         "name": "Shadow",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shadow-stealth",
+          "special_ability:amorphous",
+          "special_ability:sunlight-weakness"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:shambling-mound",
         "name": "Shambling Mound",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:lightning-absorption"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:shield-guardian",
         "name": "Shield Guardian",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:protection",
+          "special_ability:bound",
+          "special_ability:regeneration",
+          "special_ability:spell-storing"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:shrieker-fungus",
         "name": "Shrieker Fungus",
         "unmodeled_clauses": [
-          "no_standard_actions"
+          "no_standard_actions",
+          "reaction:shriek"
         ]
       },
       {
@@ -3163,15 +3505,22 @@
         "id": "monsters:solar",
         "name": "Solar",
         "unmodeled_clauses": [
+          "bonus_action:divine-aid",
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:exalted-restoration",
+          "special_ability:legendary-resistance",
+          "special_ability:magic-resistance"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:specter",
         "name": "Specter",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:incorporeal-movement",
+          "special_ability:sunlight-sensitivity"
+        ]
       },
       {
         "coverage": "partial",
@@ -3179,7 +3528,8 @@
         "name": "Sphinx of Lore",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance"
         ]
       },
       {
@@ -3189,14 +3539,18 @@
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
           "legendary_actions",
+          "special_ability:legendary-resistance",
           "special_non_attack_actions"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:sphinx-of-wonder",
         "name": "Sphinx of Wonder",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:burst-of-ingenuity",
+          "special_ability:magic-resistance"
+        ]
       },
       {
         "coverage": "full",
@@ -3209,7 +3563,8 @@
         "id": "monsters:spirit-naga",
         "name": "Spirit Naga",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "innate_spellcasting_prose",
+          "special_ability:fiendish-restoration"
         ]
       },
       {
@@ -3221,16 +3576,21 @@
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:spy",
         "name": "Spy",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:cunning-action"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:steam-mephit",
         "name": "Steam Mephit",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:blurred-form",
+          "special_ability:death-burst"
+        ]
       },
       {
         "coverage": "full",
@@ -3239,16 +3599,22 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:stone-giant",
         "name": "Stone Giant",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:deflect-missile"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:stone-golem",
         "name": "Stone Golem",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:slow",
+          "special_ability:immutable-form",
+          "special_ability:magic-resistance"
+        ]
       },
       {
         "coverage": "partial",
@@ -3263,82 +3629,110 @@
         "id": "monsters:succubus",
         "name": "Succubus",
         "unmodeled_clauses": [
-          "innate_spellcasting_prose"
+          "bonus_action:shape-shift",
+          "innate_spellcasting_prose",
+          "special_ability:incubus-form"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:swarm-of-bats",
         "name": "Swarm of Bats",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:swarm"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:swarm-of-crawling-claws",
         "name": "Swarm of Crawling Claws",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:swarm"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:swarm-of-insects",
         "name": "Swarm of Insects",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:swarm"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:swarm-of-piranhas",
         "name": "Swarm of Piranhas",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:swarm"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:swarm-of-rats",
         "name": "Swarm of Rats",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:swarm"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:swarm-of-ravens",
         "name": "Swarm of Ravens",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:swarm"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:swarm-of-venomous-snakes",
         "name": "Swarm of Venomous Snakes",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:swarm"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:tarrasque",
         "name": "Tarrasque",
         "unmodeled_clauses": [
-          "legendary_actions"
+          "bonus_action:swallow",
+          "legendary_actions",
+          "special_ability:legendary-resistance",
+          "special_ability:magic-resistance",
+          "special_ability:reflective-carapace",
+          "special_ability:siege-monster"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:tiger",
         "name": "Tiger",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:nimble-escape"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:tough",
         "name": "Tough",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:tough-boss",
         "name": "Tough Boss",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:treant",
         "name": "Treant",
         "unmodeled_clauses": [
+          "special_ability:siege-monster",
           "special_non_attack_actions"
         ]
       },
@@ -3349,16 +3743,23 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:troll",
         "name": "Troll",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:charge",
+          "special_ability:loathsome-limbs",
+          "special_ability:regeneration"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:troll-limb",
         "name": "Troll Limb",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:regeneration",
+          "special_ability:troll-spawn"
+        ]
       },
       {
         "coverage": "full",
@@ -3372,7 +3773,9 @@
         "name": "Unicorn",
         "unmodeled_clauses": [
           "innate_spellcasting_prose",
-          "legendary_actions"
+          "legendary_actions",
+          "special_ability:legendary-resistance",
+          "special_ability:magic-resistance"
         ]
       },
       {
@@ -3380,36 +3783,73 @@
         "id": "monsters:vampire-bat",
         "name": "Vampire, Bat Form",
         "unmodeled_clauses": [
-          "legendary_actions"
+          "bonus_action:charm",
+          "bonus_action:shape-shift",
+          "legendary_actions",
+          "special_ability:forbiddance",
+          "special_ability:legendary-resistance",
+          "special_ability:misty-escape",
+          "special_ability:running-water",
+          "special_ability:stake-to-the-heart",
+          "special_ability:sunlight",
+          "special_ability:vampire-weakness"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:vampire-familiar",
         "name": "Vampire Familiar",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:deathless-agility",
+          "special_ability:vampiric-connection"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:vampire-mist",
         "name": "Vampire, Mist Form",
         "unmodeled_clauses": [
+          "bonus_action:charm",
+          "bonus_action:shape-shift",
           "legendary_actions",
-          "no_standard_actions"
+          "no_standard_actions",
+          "special_ability:forbiddance",
+          "special_ability:legendary-resistance",
+          "special_ability:misty-escape",
+          "special_ability:running-water",
+          "special_ability:stake-to-the-heart",
+          "special_ability:sunlight",
+          "special_ability:vampire-weakness"
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:vampire-spawn",
         "name": "Vampire Spawn",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:deathless-agility",
+          "special_ability:forbiddance",
+          "special_ability:running-water",
+          "special_ability:stake-to-the-heart",
+          "special_ability:sunlight",
+          "special_ability:vampire-weakness"
+        ]
       },
       {
         "coverage": "partial",
         "id": "monsters:vampire-vampire",
         "name": "Vampire, Vampire Form",
         "unmodeled_clauses": [
-          "legendary_actions"
+          "bonus_action:charm",
+          "bonus_action:shape-shift",
+          "legendary_actions",
+          "special_ability:forbiddance",
+          "special_ability:legendary-resistance",
+          "special_ability:misty-escape",
+          "special_ability:running-water",
+          "special_ability:stake-to-the-heart",
+          "special_ability:sunlight",
+          "special_ability:vampire-weakness"
         ]
       },
       {
@@ -3425,16 +3865,21 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:vrock",
         "name": "Vrock",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:demonic-restoration",
+          "special_ability:magic-resistance"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:vulture",
         "name": "Vulture",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
         "coverage": "full",
@@ -3449,22 +3894,29 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:warrior-infantry",
         "name": "Warrior Infantry",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:warrior-veteran",
         "name": "Warrior Veteran",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "reaction:parry"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:water-elemental",
         "name": "Water Elemental",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:freeze",
+          "special_ability:water-form"
+        ]
       },
       {
         "coverage": "full",
@@ -3473,94 +3925,129 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:werebear-bear",
         "name": "Werebear, Bear Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:werebear-human",
         "name": "Werebear, Human Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:werebear-hybrid",
         "name": "Werebear, Hybrid Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:wereboar-boar",
         "name": "Wereboar, Boar Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:wereboar-human",
         "name": "Wereboar, Human Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:wereboar-hybrid",
         "name": "Wereboar, Hybrid Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:wererat-human",
         "name": "Wererat, Human Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:wererat-hybrid",
         "name": "Wererat, Hybrid Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:wererat-rat",
         "name": "Wererat, Rat Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:weretiger-human",
         "name": "Weretiger, Human Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:weretiger-hybrid",
         "name": "Weretiger, Hybrid Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:prowl",
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:weretiger-tiger",
         "name": "Weretiger, Tiger Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:prowl",
+          "bonus_action:shape-shift"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:werewolf-human",
         "name": "Werewolf, Human Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift",
+          "special_ability:pack-tactics"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:werewolf-hybrid",
         "name": "Werewolf, Hybrid Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift",
+          "special_ability:pack-tactics"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:werewolf-wolf",
         "name": "Werewolf, Wolf Form",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:shape-shift",
+          "special_ability:pack-tactics"
+        ]
       },
       {
         "coverage": "full",
@@ -3569,28 +4056,39 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:wight",
         "name": "Wight",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:sunlight-sensitivity"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:will-o-wisp",
         "name": "Will-o’-Wisp",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:consume-life",
+          "bonus_action:vanish",
+          "special_ability:ephemeral",
+          "special_ability:incorporeal-movement"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:winter-wolf",
         "name": "Winter Wolf",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:wolf",
         "name": "Wolf",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:pack-tactics"
+        ]
       },
       {
         "coverage": "full",
@@ -3603,6 +4101,8 @@
         "id": "monsters:wraith",
         "name": "Wraith",
         "unmodeled_clauses": [
+          "special_ability:incorporeal-movement",
+          "special_ability:sunlight-sensitivity",
           "special_non_attack_actions"
         ]
       },
@@ -3613,10 +4113,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:xorn",
         "name": "Xorn",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "bonus_action:charge"
+        ]
       },
       {
         "coverage": "full",
@@ -3679,10 +4181,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "monsters:zombie",
         "name": "Zombie",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "special_ability:undead-fortitude"
+        ]
       }
     ],
     "spells": [
@@ -6338,9 +6842,9 @@
       },
       "monsters": {
         "executable_pct": 100.0,
-        "full": 262,
+        "full": 121,
         "narrative": 0,
-        "partial": 79,
+        "partial": 220,
         "total": 341
       },
       "spells": {
@@ -6369,9 +6873,9 @@
       "traits": 68
     },
     "executable_pct": 76.0,
-    "full": 417,
+    "full": 276,
     "narrative": 212,
-    "partial": 256,
+    "partial": 397,
     "total_compiled": 885
   }
 }
