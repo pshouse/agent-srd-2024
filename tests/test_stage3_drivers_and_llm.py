@@ -15,7 +15,7 @@ Covers:
 4. End-to-End Local HTTPServer Tests (127.0.0.1:0, zero external network!) for ALL 3 Live LLM Drivers:
    - OpenAICompatDriver: POST /v1/chat/completions, Authorization: Bearer, request JSON, fenced JSON parse, usage.
    - AnthropicDriver: POST /v1/messages, x-api-key + anthropic-version: 2023-06-01, request JSON, text blocks, usage.
-   - GeminiDriver: POST /v1beta/models/<model>:generateContent?key=<key>, system_instruction + contents, usageMetadata.
+   - GeminiDriver: POST /v1beta/models/<model>:generateContent with x-goog-api-key (never the query string), system_instruction + contents, usageMetadata.
    - Clean error handling on HTTP 500 and invalid/non-JSON model responses.
 """
 
@@ -476,7 +476,10 @@ class TestStage3LiveLLMDriversOverLocalHTTP(unittest.TestCase):
 
             self.assertEqual(len(srv.requests), 1)
             req = srv.requests[0]
-            self.assertEqual(req["path"], "/v1beta/models/gemini-2.5-flash-test:generateContent?key=gem-key-789")
+            self.assertEqual(req["path"], "/v1beta/models/gemini-2.5-flash-test:generateContent")
+            self.assertNotIn("key=", req["path"])
+            self.assertNotIn("gem-key-789", req["path"])
+            self.assertEqual(req["headers"].get("x-goog-api-key"), "gem-key-789")
             self.assertIn("system_instruction", req["body"])
             self.assertIn("contents", req["body"])
 

@@ -109,6 +109,8 @@ Drive encounters with structured intents via `srd_encounter` (or `bin/srd encoun
 
 ## Stage 3: Multi-Agent Tabletop & Eval Arena
 
+Experimental: arena scoring and isolation fixes are in progress. Do not run the arena or srd-mcp --arena with a model API key set in your environment.
+
 Stage 3 layers a deterministic, partial-observability **Multi-Agent 5e 2024 (SRD 5.2) Tabletop & Model Evaluation Arena** (`src/srd2024/arena/`) on top of Stage 2. Every PC is compiled through `compile_character()` and every move, attack, mastery, spell, concentration save, and death save is adjudicated strictly by `combat.step()`—drivers only emit structured intents, rationales, and private party `table_talk`.
 
 ### 1. Scenarios & CLI Surfaces (`bin/srd-arena` / `bin/srd arena`)

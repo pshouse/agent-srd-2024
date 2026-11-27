@@ -29,10 +29,23 @@ from .rules_bridge import (
 )
 
 SERVER_NAME = "agent-srd-2024"
-SERVER_VERSION = "0.3.0"
+SERVER_VERSION = "0.3.1"
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 ENV_ENGINE_VAR = "SRD2024_ENGINE"
 ENV_ARENA_VAR = "SRD2024_ARENA"
+ENV_ARENA_ALLOW_LLM_VAR = "SRD2024_ARENA_ALLOW_LLM"
+
+_ARENA_TOOL_NAMES = frozenset({"srd_arena_scenarios", "srd_arena_run", "srd_arena_bench"})
+_MCP_MAX_LINE_CHARS = 256 * 1024
+_MCP_MAX_SEEDS = 10
+_MCP_MAX_ROUNDS = 50
+_MCP_MAX_SCENARIO_ID_CHARS = 256
+_MCP_MAX_INLINE_SCENARIO_CHARS = 64 * 1024
+_MCP_MAX_AGENT_SPEC_CHARS = 256
+_MCP_MAX_ERROR_CHARS = 300
+# seeds × scenarios × agents × rounds. 15 is the longest built-in scenario.
+_MCP_MAX_BENCH_WORK = 500
+_MCP_ASSUMED_ROUNDS = 15
 
 TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
@@ -380,7 +393,7 @@ STAGE3_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": (
                         "Built-in scenario ID ('goblin-ambush', 'crypt-of-ghouls', 'wyrmling-lair') "
-                        "or custom scenario JSON file path."
+                        "or inline scenario JSON (64KB cap). Filesystem paths are rejected."
                     ),
                 },
                 "party_agent": {
@@ -535,6 +548,90 @@ def _env_flag_enabled(name: str) -> bool:
     return val in ("1", "true", "yes", "on")
 
 
+def _looks_like_filesystem_path(text: str) -> bool:
+    if text.startswith(("/", "\\", "~", ".")) or ".." in text:
+        return True
+    if "/" in text or "\\" in text:
+        return True
+    if len(text) >= 3 and text[1] == ":" and text[0].isalpha():
+        return True
+    return False
+
+
+def _spec_has_whitespace_or_control(spec: str) -> bool:
+    return any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in spec)
+
+
+def _builtin_scenario_ids() -> set[str]:
+    from srd2024.arena.scenarios import BUILTIN_SCENARIO_IDS
+
+    return {sid.lower() for sid in BUILTIN_SCENARIO_IDS}
+
+
+def _resolve_mcp_scenario(raw: str) -> str | dict[str, Any]:
+    """Accept a built-in scenario id or inline JSON. Never a filesystem path."""
+    text = raw.strip()
+    if not text:
+        raise ValueError("Scenario must be a built-in id or inline JSON.")
+    if text.startswith("{"):
+        if len(text) > _MCP_MAX_INLINE_SCENARIO_CHARS:
+            raise ValueError("Inline scenario JSON exceeds 64KB.")
+        from srd2024.arena.agents import _json_nesting_exceeds
+
+        if _json_nesting_exceeds(text):
+            raise ValueError("JSON nesting exceeds the limit.")
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Inline scenario JSON is not valid.") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("Inline scenario JSON must be an object.")
+        return parsed
+    if len(text) > _MCP_MAX_SCENARIO_ID_CHARS:
+        raise ValueError("Scenario id exceeds 256 characters.")
+    if _looks_like_filesystem_path(text):
+        raise ValueError("Scenario must be a built-in id or inline JSON, not a filesystem path.")
+    if text.lower() not in _builtin_scenario_ids():
+        raise ValueError("Unknown built-in scenario.")
+    return text
+
+
+def _check_mcp_agent_spec(spec: str, *, allow_llm: bool, rules: Any) -> None:
+    """Reject whitespace tricks and any driver that would call a paid LLM.
+
+    The paid-LLM decision uses the object `create_driver` actually returns.
+    A second parse of the spec string is not the gate: `openai-compat :gpt-x`
+    still constructs `OpenAICompatDriver`.
+    """
+    if len(spec) > _MCP_MAX_AGENT_SPEC_CHARS:
+        raise ValueError("Agent spec exceeds 256 characters.")
+    if _spec_has_whitespace_or_control(spec):
+        raise ValueError("Agent spec must not contain whitespace or control characters.")
+    from srd2024.arena.agents import BaseLLMDriver, create_driver
+
+    driver = create_driver(spec, rules=rules, seed=1)
+    if isinstance(driver, BaseLLMDriver) and not allow_llm:
+        raise ValueError(
+            "Paid LLM drivers require --arena-allow-llm or SRD2024_ARENA_ALLOW_LLM=1 at server start."
+        )
+
+
+def _bench_work_limit_exceeded(
+    *,
+    n_scenarios: int,
+    n_agents: int,
+    n_seeds: int,
+    rounds: int,
+) -> bool:
+    return n_scenarios * n_agents * n_seeds * rounds > _MCP_MAX_BENCH_WORK
+
+
+def _clip_error(message: str) -> str:
+    if len(message) <= _MCP_MAX_ERROR_CHARS:
+        return message
+    return message[:_MCP_MAX_ERROR_CHARS] + "…"
+
+
 class SRDMCPServer:
     """JSON-RPC 2.0 stdio MCP server backed by read-only SRDStore and lazy Stage 2 RulesStore."""
 
@@ -546,12 +643,14 @@ class SRDMCPServer:
         rules_store: Any | None = None,
         expose_engine_tools: bool = False,
         expose_arena_tools: bool = False,
+        allow_arena_llm: bool = False,
     ) -> None:
         self.store = store
         self._rules_path = rules_path
         self._rules_store = rules_store
         self.expose_engine_tools = expose_engine_tools
         self.expose_arena_tools = expose_arena_tools
+        self.allow_arena_llm = allow_arena_llm
         self._encounter_sessions: dict[str, dict[str, Any]] = {}
 
     def _get_rules_store(self) -> Any:
@@ -615,8 +714,9 @@ class SRDMCPServer:
         except _InvalidParamsError as exc:
             return _jsonrpc_error(req_id, -32602, str(exc))
         except Exception as exc:  # pragma: no cover - defensive loop guard
-            print(f"[srd-mcp] internal error handling {method}: {exc}", file=sys.stderr)
-            return _jsonrpc_error(req_id, -32603, f"Internal error: {exc}")
+            detail = _clip_error(str(exc))
+            print(f"[srd-mcp] internal error handling {method}: {detail}", file=sys.stderr)
+            return _jsonrpc_error(req_id, -32603, f"Internal error: {detail}")
 
     def _handle_initialize(self, params: Any) -> dict[str, Any]:
         proto = DEFAULT_PROTOCOL_VERSION
@@ -811,6 +911,9 @@ class SRDMCPServer:
                 ):
                     self._encounter_sessions[session_id] = copy.deepcopy(payload["state"])
 
+            elif tool_name in _ARENA_TOOL_NAMES and not self.expose_arena_tools:
+                return self._tool_error(f"Unknown tool: '{tool_name}'.")
+
             elif tool_name == "srd_arena_scenarios":
                 payload = execute_arena_scenarios()
                 op = "arena_scenarios"
@@ -832,12 +935,20 @@ class SRDMCPServer:
                     if max_rounds_raw is not None
                     else None
                 )
-                rules = self._get_rules_store()
+                if max_rounds is not None and (max_rounds < 1 or max_rounds > _MCP_MAX_ROUNDS):
+                    return self._tool_error(f"'max_rounds' must be between 1 and {_MCP_MAX_ROUNDS}.")
+                try:
+                    scenario_ref = _resolve_mcp_scenario(scenario)
+                    rules = self._get_rules_store()
+                    _check_mcp_agent_spec(party_agent, allow_llm=self.allow_arena_llm, rules=rules)
+                    _check_mcp_agent_spec(enemy_agent, allow_llm=self.allow_arena_llm, rules=rules)
+                except ValueError as exc:
+                    return self._tool_error(str(exc))
                 payload = execute_arena_run(
                     rules,
-                    scenario=scenario.strip(),
-                    party_agent=party_agent.strip(),
-                    enemy_agent=enemy_agent.strip(),
+                    scenario=scenario_ref,
+                    party_agent=party_agent,
+                    enemy_agent=enemy_agent,
                     seed=seed,
                     max_rounds=max_rounds,
                 )
@@ -849,11 +960,15 @@ class SRDMCPServer:
                     not isinstance(scenarios, list) or not all(isinstance(s, str) for s in scenarios)
                 ):
                     return self._tool_error("'scenarios' must be an array of strings.")
+                if isinstance(scenarios, list) and len(scenarios) > _MCP_MAX_SEEDS:
+                    return self._tool_error(f"'scenarios' must contain at most {_MCP_MAX_SEEDS} ids.")
                 agents = arguments.get("agents")
                 if agents is not None and (
                     not isinstance(agents, list) or not all(isinstance(a, str) for a in agents)
                 ):
                     return self._tool_error("'agents' must be an array of strings.")
+                if isinstance(agents, list) and len(agents) > _MCP_MAX_SEEDS:
+                    return self._tool_error(f"'agents' must contain at most {_MCP_MAX_SEEDS} specs.")
                 enemy_agent = arguments.get("enemy_agent", "heuristic-tactical")
                 if not isinstance(enemy_agent, str) or not enemy_agent.strip():
                     return self._tool_error("'enemy_agent' must be a non-empty string.")
@@ -862,18 +977,45 @@ class SRDMCPServer:
                     isinstance(x, bool) or not isinstance(x, int) for x in seeds_raw
                 ):
                     return self._tool_error("'seeds' must be an array of integers.")
+                if len(seeds_raw) > _MCP_MAX_SEEDS:
+                    return self._tool_error(f"'seeds' must contain at most {_MCP_MAX_SEEDS} integers.")
                 max_rounds_raw = arguments.get("max_rounds")
                 max_rounds = (
                     _coerce_int(max_rounds_raw, "max_rounds")
                     if max_rounds_raw is not None
                     else None
                 )
-                rules = self._get_rules_store()
+                if max_rounds is not None and (max_rounds < 1 or max_rounds > _MCP_MAX_ROUNDS):
+                    return self._tool_error(f"'max_rounds' must be between 1 and {_MCP_MAX_ROUNDS}.")
+                n_scenarios = len(scenarios) if isinstance(scenarios, list) else len(_builtin_scenario_ids())
+                n_agents = len(agents) if isinstance(agents, list) else 3
+                rounds_for_cap = max_rounds if max_rounds is not None else _MCP_ASSUMED_ROUNDS
+                if _bench_work_limit_exceeded(
+                    n_scenarios=n_scenarios,
+                    n_agents=n_agents,
+                    n_seeds=len(seeds_raw),
+                    rounds=rounds_for_cap,
+                ):
+                    return self._tool_error(
+                        "Bench work exceeds the limit (seeds × scenarios × agents × rounds)."
+                    )
+                try:
+                    if scenarios is not None:
+                        scenarios = [_resolve_mcp_scenario(s) for s in scenarios]
+                        if any(not isinstance(s, str) for s in scenarios):
+                            return self._tool_error("Bench scenarios must be built-in ids.")
+                    rules = self._get_rules_store()
+                    if agents is not None:
+                        for spec in agents:
+                            _check_mcp_agent_spec(spec, allow_llm=self.allow_arena_llm, rules=rules)
+                    _check_mcp_agent_spec(enemy_agent, allow_llm=self.allow_arena_llm, rules=rules)
+                except ValueError as exc:
+                    return self._tool_error(str(exc))
                 payload = execute_arena_bench(
                     rules,
                     scenarios=scenarios,
                     agents=agents,
-                    enemy_agent=enemy_agent.strip(),
+                    enemy_agent=enemy_agent,
                     seeds=seeds_raw,
                     max_rounds=max_rounds,
                 )
@@ -882,7 +1024,7 @@ class SRDMCPServer:
             else:
                 return self._tool_error(f"Unknown tool: '{tool_name}'.")
         except (ValueError, FileNotFoundError) as exc:
-            return self._tool_error(str(exc))
+            return self._tool_error(_clip_error(str(exc)))
 
         rendered = render_operation(op, payload, fmt=fmt)
         is_error = payload.get("status") == "error"
@@ -937,6 +1079,8 @@ class SRDMCPServer:
             )
 
         if uri == "srd://arena/scenarios":
+            if not self.expose_arena_tools:
+                return _jsonrpc_error(req_id, -32002, f"Unknown resource URI: {uri}")
             arena_scenarios_payload = get_arena_scenarios_resource()
             return _jsonrpc_result(
                 req_id,
@@ -1021,6 +1165,11 @@ class SRDMCPServer:
         out_stream = stdout if stdout is not None else sys.stdout
 
         for raw_line in in_stream:
+            if len(raw_line) > _MCP_MAX_LINE_CHARS:
+                resp = _jsonrpc_error(None, -32700, "Parse error: message exceeds 256KB.")
+                out_stream.write(json.dumps(resp, ensure_ascii=False) + "\n")
+                out_stream.flush()
+                continue
             line = raw_line.strip()
             if not line:
                 continue
@@ -1082,12 +1231,26 @@ def main(argv: Sequence[str] | None = None, *, default_engine: bool = False) -> 
         "--arena",
         action="store_true",
         default=False,
-        help="Advertise all 11 Stage 1+2+3 MCP tools (including multi-agent arena tools) and srd://arena/scenarios.",
+        help=(
+            "Advertise and enable arena MCP tools and srd://arena/scenarios. "
+            "Without this flag those tools are not advertised or callable."
+        ),
+    )
+    parser.add_argument(
+        "--arena-allow-llm",
+        action="store_true",
+        default=False,
+        help=(
+            "Allow MCP arena calls to select a paid LLM driver "
+            "(openai-compat, anthropic, gemini). Requires --arena. "
+            "Default: deterministic built-in drivers only."
+        ),
     )
     args = parser.parse_args(argv)
 
     expose_engine = bool(args.engine) or _env_flag_enabled(ENV_ENGINE_VAR)
     expose_arena = bool(args.arena) or _env_flag_enabled(ENV_ARENA_VAR)
+    allow_arena_llm = bool(args.arena_allow_llm) or _env_flag_enabled(ENV_ARENA_ALLOW_LLM_VAR)
 
     try:
         with SRDStore(db_path=args.db) as store:
@@ -1096,6 +1259,7 @@ def main(argv: Sequence[str] | None = None, *, default_engine: bool = False) -> 
                 rules_path=args.rules,
                 expose_engine_tools=expose_engine,
                 expose_arena_tools=expose_arena,
+                allow_arena_llm=allow_arena_llm,
             )
             return server.serve_stdio()
     except FileNotFoundError as exc:
