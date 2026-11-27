@@ -113,6 +113,8 @@ Experimental: arena scoring and isolation fixes are in progress. Do not run the 
 
 Stage 3 layers a deterministic, partial-observability **Multi-Agent 5e 2024 (SRD 5.2) Tabletop & Model Evaluation Arena** (`src/srd2024/arena/`) on top of Stage 2. Every PC is compiled through `compile_character()` and every move, attack, mastery, spell, concentration save, and death save is adjudicated strictly by `combat.step()`—drivers only emit structured intents, rationales, and private party `table_talk`.
 
+Off-turn reaction spells such as Shield, sent through `srd encounter` or `srd_encounter`, are accepted only when the encounter state already has a `reaction_window` naming that caster. The engine does not open that window when an attack hits; the caller has to set it. On the caster's own turn a reaction spell still spends their reaction.
+
 ### 1. Scenarios & CLI Surfaces (`bin/srd-arena` / `bin/srd arena`)
 Both `bin/srd-arena <subcommand>` and `bin/srd arena <subcommand>` expose identical subcommands and 1:1 JSON parity:
 - **Built-in scenarios:** `goblin-ambush` (Tier 1, L1), `crypt-of-ghouls` (Tier 2, L5), `wyrmling-lair` (Tier 2, L5 fire-immune lair) — plus custom scenario JSON files.
