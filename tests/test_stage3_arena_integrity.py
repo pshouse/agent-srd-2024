@@ -544,6 +544,24 @@ class TestScoreFloorAndOrdering(unittest.TestCase):
         self.assertEqual(replayed["original_digest"], replayed["replayed_digest"])
 
 
+class TestCommittedTracesReplay(unittest.TestCase):
+    """Every committed example trace must replay to the same digest.
+
+    The digest covers the scorecard, so a scorer change must refresh committed traces (#25 follow-up to #30).
+    """
+
+    def test_example_traces_replay_deterministically(self) -> None:
+        from pathlib import Path
+
+        rules = RulesStore()
+        traces = sorted((Path(__file__).resolve().parents[1] / "examples" / "sessions").glob("*.trace.json"))
+        self.assertTrue(traces, "no committed traces found")
+        for path in traces:
+            with self.subTest(trace=path.name):
+                rep = replay_match(json.loads(path.read_text(encoding="utf-8")), rules)
+                self.assertTrue(rep["deterministic_match"], rep.get("diffs"))
+
+
 class TestHelpCredit(unittest.TestCase):
     """Help counts as productive only when the helped ally attack happens and hits."""
 
