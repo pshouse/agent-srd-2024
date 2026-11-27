@@ -343,6 +343,64 @@ _DESCRIPTIVE_TRAITS = frozenset({
 })
 
 
+_ABILITY_WORDS = {"strength": "str", "dexterity": "dex", "constitution": "con", "intelligence": "int", "wisdom": "wis", "charisma": "cha"}
+_DMG = r"(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)"
+
+
+def _parse_trait_ir(name: str, desc: str, usage: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """Structured, engine-executable form of a stat-block trait or reaction (#39), or None if not modeled.
+
+    A trait counts as executed only if its whole text matches one of these shapes; anything with extra clauses
+    stays in `unmodeled_clauses`.
+    """
+    key = _trait_key(name)
+    d = " ".join(desc.split())
+    if key == "pack tactics" and re.fullmatch(
+        r"The [\w\s-]+ has Advantage on (?:an attack roll|attack rolls) against a creature if at least one of the [\w\s'-]+ allies is "
+        r"within 5 feet of the creature and the ally doesn't have the Incapacitated condition\.", d):
+        return {"kind": "pack_tactics"}
+    if key == "magic resistance" and re.fullmatch(
+        r"The [\w\s-]+ has Advantage on saving throws against spells and other magical effects\.", d):
+        return {"kind": "magic_resistance"}
+    if key == "legendary resistance":
+        # Uses per day come from the upstream `usage` field (not the lair count: the arena has no lairs).
+        times = (usage or {}).get("times") if (usage or {}).get("type") == "per day" else None
+        if times and re.fullmatch(r"If the [\w\s-]+ fails a saving throw, it can choose to succeed instead\.", d):
+            return {"kind": "legendary_resistance", "uses": int(times)}
+    if key == "stench":
+        m = re.fullmatch(
+            r"(\w+) Saving Throw: DC (\d+), any creature that starts its turn in a (\d+)-foot Emanation originating from "
+            r"the [\w\s-]+\. Failure: The target has the (\w+) condition until the start of its next turn\."
+            r"( Success: The target is immune to this [\w\s-]+'s Stench for 24 hours\.)?", d)
+        if m and m.group(1).lower() in _ABILITY_WORDS:
+            return {"kind": "start_of_turn_aura_save", "ability": _ABILITY_WORDS[m.group(1).lower()], "dc": int(m.group(2)),
+                    "radius_ft": int(m.group(3)), "condition": m.group(4).lower(), "immune_on_success": bool(m.group(5))}
+    if key == "death burst":
+        m = re.fullmatch(
+            r"The [\w\s-]+ explodes when it dies\. (\w+) Saving Throw: DC (\d+), each creature in a (\d+)-foot Emanation "
+            r"originating from the [\w\s-]+\. Failure: \d+ \((\d+d\d+(?:\s*[+-]\s*\d+)?)\) " + _DMG + r" damage\. "
+            r"Success: Half damage\.", d, re.IGNORECASE)
+        if m and m.group(1).lower() in _ABILITY_WORDS:
+            return {"kind": "death_burst", "ability": _ABILITY_WORDS[m.group(1).lower()], "dc": int(m.group(2)),
+                    "radius_ft": int(m.group(3)), "dice": m.group(4).replace(" ", ""), "damage_type": m.group(5).lower()}
+    if key == "regeneration":
+        m = re.fullmatch(r"The [\w\s-]+ regains (\d+) Hit Points at the start of each of its turns if it has at least "
+                         r"1 Hit Point\.", d)
+        if m:
+            return {"kind": "regeneration", "hp": int(m.group(1))}
+    if key == "undead fortitude" and re.fullmatch(
+        r"If damage reduces the [\w\s-]+ to 0 Hit Points, it makes a Constitution saving throw \(DC 5 plus the damage "
+        r"taken\) unless the damage is Radiant or from a Critical Hit\. On a successful save, the [\w\s-]+ drops to "
+        r"1 Hit Point instead\.", d):
+        return {"kind": "undead_fortitude"}
+    if key == "parry":
+        m = re.fullmatch(r"Trigger: The [\w\s-]+ is hit by a melee attack roll while holding a weapon\. Response: The "
+                         r"[\w\s-]+ adds (\d+) to its AC against that attack, possibly causing it to miss\.", d)
+        if m:
+            return {"kind": "parry", "ac_bonus": int(m.group(1))}
+    return None
+
+
 def _trait_key(name: str) -> str:
     """'Legendary Resistance (3/Day, or 4/Day in Lair)' -> 'legendary resistance'."""
     return name.split(" (")[0].strip().lower()
@@ -397,7 +455,8 @@ def _compile_monster(rec: dict[str, Any]) -> dict[str, Any]:
     parsed_actions = [_parse_monster_action(a) for a in rec.get("actions", [])]
 
     special_abilities = [
-        {"name": sa["name"], "desc": normalize_prose(sa.get("desc", ""))}
+        {"name": sa["name"], "desc": normalize_prose(sa.get("desc", "")),
+         **({"usage": sa["usage"]} if isinstance(sa.get("usage"), dict) else {})}
         for sa in rec.get("special_abilities", [])
     ]
     reactions = [
@@ -432,13 +491,21 @@ def _compile_monster(rec: dict[str, Any]) -> dict[str, Any]:
     # #39: the engine never executes stat-block traits, bonus actions or reactions (no reaction system yet: #33/#38).
     # Each one is listed by name so agents can see exactly what isn't automated. The exception is a short set of
     # traits that can't affect this engine's 2D, combat-only model (water, climbing, senses, communication, lore).
+    traits_ir: list[dict[str, Any]] = []
     for sa in special_abilities:
-        if _trait_key(sa["name"]) not in _DESCRIPTIVE_TRAITS:
+        ir = _parse_trait_ir(sa["name"], sa["desc"], sa.get("usage"))
+        if ir is not None:
+            traits_ir.append({**ir, "name": sa["name"]})
+        elif _trait_key(sa["name"]) not in _DESCRIPTIVE_TRAITS:
             unmodeled.append(f"special_ability:{_clause_slug(sa['name'])}")
     for b in bonus_actions:
         unmodeled.append(f"bonus_action:{_clause_slug(b['name'])}")
     for r in reactions:
-        unmodeled.append(f"reaction:{_clause_slug(r['name'])}")
+        ir = _parse_trait_ir(r["name"], r["desc"])
+        if ir is not None:
+            traits_ir.append({**ir, "name": r["name"], "reaction": True})
+        else:
+            unmodeled.append(f"reaction:{_clause_slug(r['name'])}")
 
     coverage = "full" if not unmodeled else "partial"
 
@@ -474,6 +541,8 @@ def _compile_monster(rec: dict[str, Any]) -> dict[str, Any]:
         "reactions": reactions,
         "legendary_actions": legendary_actions,
         "special_abilities": special_abilities,
+        # Executable traits/reactions the engine runs (#39); everything else stays in unmodeled_clauses.
+        "traits_ir": traits_ir,
         "coverage": coverage,
         "provenance": make_provenance(eid, SOURCE_FILE, "regex+structured", unmodeled),
     }
