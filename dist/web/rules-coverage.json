@@ -1,0 +1,6377 @@
+{
+  "dataset_id": "srd-2024-5.2",
+  "entities": {
+    "conditions": [
+      {
+        "coverage": "full",
+        "id": "conditions:blinded",
+        "name": "Blinded",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:charmed",
+        "name": "Charmed",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:deafened",
+        "name": "Deafened",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:exhaustion",
+        "name": "Exhaustion",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:frightened",
+        "name": "Frightened",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:grappled",
+        "name": "Grappled",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:incapacitated",
+        "name": "Incapacitated",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:invisible",
+        "name": "Invisible",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:paralyzed",
+        "name": "Paralyzed",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:petrified",
+        "name": "Petrified",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:poisoned",
+        "name": "Poisoned",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:prone",
+        "name": "Prone",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:restrained",
+        "name": "Restrained",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:stunned",
+        "name": "Stunned",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "conditions:unconscious",
+        "name": "Unconscious",
+        "unmodeled_clauses": []
+      }
+    ],
+    "equipment": [
+      {
+        "coverage": "narrative",
+        "id": "equipment:acid",
+        "name": "Acid",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:alchemists-fire",
+        "name": "Alchemist's Fire",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:alchemists-supplies",
+        "name": "Alchemist's Supplies",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:amulet",
+        "name": "Amulet",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:antitoxin",
+        "name": "Antitoxin",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:arrows",
+        "name": "Arrows",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:backpack",
+        "name": "Backpack",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:bagpipes",
+        "name": "Bagpipes",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:ball-bearings",
+        "name": "Ball bearings",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:barrel",
+        "name": "Barrel",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:basket",
+        "name": "Basket",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:battleaxe",
+        "name": "Battleaxe",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:bedroll",
+        "name": "Bedroll",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:bell",
+        "name": "Bell",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:blanket",
+        "name": "Blanket",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:block-and-tackle",
+        "name": "Block and tackle",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:blowgun",
+        "name": "Blowgun",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:bolts",
+        "name": "Bolts",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:book",
+        "name": "Book",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:bottle-glass",
+        "name": "Bottle, Glass",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:breastplate",
+        "name": "Breastplate",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:brewers-supplies",
+        "name": "Brewer's Supplies",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:bucket",
+        "name": "Bucket",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:bullets-firearm",
+        "name": "Bullets, Firearm",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:bullets-sling",
+        "name": "Bullets, Sling",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:burglars-pack",
+        "name": "Burglar's Pack",
+        "unmodeled_clauses": [
+          "pack_inventory_narrative_use"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:calligraphers-supplies",
+        "name": "Calligrapher's Supplies",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:caltrops",
+        "name": "Caltrops",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:candle",
+        "name": "Candle",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:carpenters-tools",
+        "name": "Carpenter's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:cartographer-tools",
+        "name": "Cartographer's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:case-crossbow-bolt",
+        "name": "Case, Crossbow Bolt",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:case-map-or-scroll",
+        "name": "Case, Map or Scroll",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:chain",
+        "name": "Chain",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:chain-mail",
+        "name": "Chain Mail",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:chain-shirt",
+        "name": "Chain Shirt",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:chest",
+        "name": "Chest",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:climbers-kit",
+        "name": "Climber's Kit",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:clothes-fine",
+        "name": "Clothes, Fine",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:clothes-travelers",
+        "name": "Clothes, Traveler's",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:club",
+        "name": "Club",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:cobblers-tools",
+        "name": "Cobbler's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:component-pouch",
+        "name": "Component Pouch",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:cooks-utensils",
+        "name": "Cook's Utensils",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:costume",
+        "name": "Costume",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:crowbar",
+        "name": "Crowbar",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:crystal",
+        "name": "Crystal",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:dagger",
+        "name": "Dagger",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:dart",
+        "name": "Dart",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:dice",
+        "name": "Dice",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:diplomat-pack",
+        "name": "Diplomat's Pack",
+        "unmodeled_clauses": [
+          "pack_inventory_narrative_use"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:disguise-kit",
+        "name": "Disguise Kit",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:dragonchess",
+        "name": "Dragonchess",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:drum",
+        "name": "Drum",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:dulcimer",
+        "name": "Dulcimer",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:dungeoneer-pack",
+        "name": "Dungeoneer's Pack",
+        "unmodeled_clauses": [
+          "pack_inventory_narrative_use"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:emblem",
+        "name": "Emblem",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:entertainers-pack",
+        "name": "Entertainer's Pack",
+        "unmodeled_clauses": [
+          "pack_inventory_narrative_use"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:explorers-pack",
+        "name": "Explorer's Pack",
+        "unmodeled_clauses": [
+          "pack_inventory_narrative_use"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:flail",
+        "name": "Flail",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:flask",
+        "name": "Flask",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:flute",
+        "name": "Flute",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:forgery-kit",
+        "name": "Forgery Kit",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:glaive",
+        "name": "Glaive",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:glassblowers-tools",
+        "name": "Glassblower's Tools",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:grappling-hook",
+        "name": "Grappling Hook",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:greataxe",
+        "name": "Greataxe",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:greatclub",
+        "name": "Greatclub",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:greatsword",
+        "name": "Greatsword",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:halberd",
+        "name": "Halberd",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:half-plate-armor",
+        "name": "Half-Plate Armor",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:hand-crossbow",
+        "name": "Hand Crossbow",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:handaxe",
+        "name": "Handaxe",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:healers-kit",
+        "name": "Healer's Kit",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:heavy-crossbow",
+        "name": "Heavy Crossbow",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:herbalism-kit",
+        "name": "Herbalism Kit",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:hide-armor",
+        "name": "Hide Armor",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:holy-water",
+        "name": "Holy Water",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:horn",
+        "name": "Horn",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:hunting-trap",
+        "name": "Hunting Trap",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:ink",
+        "name": "Ink",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:ink-pen",
+        "name": "Ink Pen",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:javelin",
+        "name": "Javelin",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:jewelers-tools",
+        "name": "Jeweler's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:jug",
+        "name": "Jug",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:ladder",
+        "name": "Ladder",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:lamp",
+        "name": "Lamp",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:lance",
+        "name": "Lance",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:lantern-bullseye",
+        "name": "Lantern, Bullseye",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:lantern-hooded",
+        "name": "Lantern, Hooded",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:leather-armor",
+        "name": "Leather Armor",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:leatherworkers-tools",
+        "name": "Leatherworker's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:light-crossbow",
+        "name": "Light Crossbow",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:light-hammer",
+        "name": "Light Hammer",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:lock",
+        "name": "Lock",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:longbow",
+        "name": "Longbow",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:longsword",
+        "name": "Longsword",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:lute",
+        "name": "Lute",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:lyre",
+        "name": "Lyre",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:mace",
+        "name": "Mace",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:magnifying-glass",
+        "name": "Magnifying Glass",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:manacles",
+        "name": "Manacles",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:map",
+        "name": "Map",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:masons-tools",
+        "name": "Mason's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:maul",
+        "name": "Maul",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:mirror",
+        "name": "Mirror",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:morningstar",
+        "name": "Morningstar",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:musket",
+        "name": "Musket",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:navigators-tools",
+        "name": "Navigator's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:needles",
+        "name": "Needles",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:net",
+        "name": "Net",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:oil",
+        "name": "Oil",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:orb",
+        "name": "Orb",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:padded-armor",
+        "name": "Padded Armor",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:painters-supplies",
+        "name": "Painter's Supplies",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:pan-flute",
+        "name": "Pan flute",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:paper",
+        "name": "Paper",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:parchment",
+        "name": "Parchment",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:perfume",
+        "name": "Perfume",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:pike",
+        "name": "Pike",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:pistol",
+        "name": "Pistol",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:plate-armor",
+        "name": "Plate Armor",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:playing-cards",
+        "name": "Playing Cards",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:poison-basic",
+        "name": "Poison, Basic",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:poisoners-kit",
+        "name": "Poisoner's Kit",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:pole",
+        "name": "Pole",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:pot-iron",
+        "name": "Pot, Iron",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:potion-of-healing",
+        "name": "Potion of Healing",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:potters-tools",
+        "name": "Potter's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:pouch",
+        "name": "Pouch",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:priests-pack",
+        "name": "Priest's Pack",
+        "unmodeled_clauses": [
+          "pack_inventory_narrative_use"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:quarterstaff",
+        "name": "Quarterstaff",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:quiver",
+        "name": "Quiver",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:ram-portable",
+        "name": "Ram, Portable",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:rapier",
+        "name": "Rapier",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:rations",
+        "name": "Rations",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:reliquary",
+        "name": "Reliquary",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:ring-mail",
+        "name": "Ring Mail",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:robe",
+        "name": "Robe",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:rod",
+        "name": "Rod",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:rope",
+        "name": "Rope",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:sack",
+        "name": "Sack",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:scale-mail",
+        "name": "Scale Mail",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:scholars-pack",
+        "name": "Scholar's Pack",
+        "unmodeled_clauses": [
+          "pack_inventory_narrative_use"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:scimitar",
+        "name": "Scimitar",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:shawm",
+        "name": "Shawm",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:shield",
+        "name": "Shield",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:shortbow",
+        "name": "Shortbow",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:shortsword",
+        "name": "Shortsword",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:shovel",
+        "name": "Shovel",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:sickle",
+        "name": "Sickle",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:signal-whistle",
+        "name": "Signal Whistle",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:sling",
+        "name": "Sling",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:smiths-tools",
+        "name": "Smith's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:spear",
+        "name": "Spear",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:spell-scroll-cantrip",
+        "name": "Spell Scroll, Cantrip",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:spell-scroll-level-1",
+        "name": "Spell Scroll, Level 1",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:spellbook",
+        "name": "Spellbook",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:spikes-iron",
+        "name": "Spikes, Iron",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:splint-armor",
+        "name": "Splint Armor",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:sprig-of-mistletoe",
+        "name": "Sprig of Mistletoe",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:spyglass",
+        "name": "Spyglass",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:staff",
+        "name": "Staff",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:string",
+        "name": "String",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:studded-leather-armor",
+        "name": "Studded Leather Armor",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:tent",
+        "name": "Tent",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:thieves-tools",
+        "name": "Thieves' Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:three-dragon-ante",
+        "name": "Three-Dragon Ante",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:tinderbox",
+        "name": "Tinderbox",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:tinkers-tools",
+        "name": "Tinker's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:torch",
+        "name": "Torch",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:trident",
+        "name": "Trident",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:vial",
+        "name": "Vial",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:viol",
+        "name": "Viol",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:wand",
+        "name": "Wand",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:war-pick",
+        "name": "War Pick",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:warhammer",
+        "name": "Warhammer",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:waterskin",
+        "name": "Waterskin",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:weavers-tools",
+        "name": "Weaver's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "equipment:whip",
+        "name": "Whip",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "equipment:woodcarvers-tools",
+        "name": "Woodcarver's Tools",
+        "unmodeled_clauses": [
+          "tool_utilize_situational_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "equipment:yew-wand",
+        "name": "Yew Wand",
+        "unmodeled_clauses": [
+          "non_combat_adventuring_gear"
+        ]
+      }
+    ],
+    "monsters": [
+      {
+        "coverage": "partial",
+        "id": "monsters:aboleth",
+        "name": "Aboleth",
+        "unmodeled_clauses": [
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:adult-black-dragon",
+        "name": "Adult Black Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:adult-blue-dragon",
+        "name": "Adult Blue Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:adult-brass-dragon",
+        "name": "Adult Brass Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:adult-bronze-dragon",
+        "name": "Adult Bronze Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:adult-copper-dragon",
+        "name": "Adult Copper Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:adult-gold-dragon",
+        "name": "Adult Gold Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:adult-green-dragon",
+        "name": "Adult Green Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:adult-red-dragon",
+        "name": "Adult Red Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:adult-silver-dragon",
+        "name": "Adult Silver Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:adult-white-dragon",
+        "name": "Adult White Dragon",
+        "unmodeled_clauses": [
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:air-elemental",
+        "name": "Air Elemental",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:allosaurus",
+        "name": "Allosaurus",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ancient-black-dragon",
+        "name": "Ancient Black Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ancient-blue-dragon",
+        "name": "Ancient Blue Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ancient-brass-dragon",
+        "name": "Ancient Brass Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ancient-bronze-dragon",
+        "name": "Ancient Bronze Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ancient-copper-dragon",
+        "name": "Ancient Copper Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ancient-gold-dragon",
+        "name": "Ancient Gold Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ancient-green-dragon",
+        "name": "Ancient Green Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ancient-red-dragon",
+        "name": "Ancient Red Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ancient-silver-dragon",
+        "name": "Ancient Silver Dragon",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ancient-white-dragon",
+        "name": "Ancient White Dragon",
+        "unmodeled_clauses": [
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:animated-armor",
+        "name": "Animated Armor",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:animated-flying-sword",
+        "name": "Animated Flying Sword",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:animated-rug-of-smothering",
+        "name": "Animated Rug of Smothering",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:ankheg",
+        "name": "Ankheg",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:ankylosaurus",
+        "name": "Ankylosaurus",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:ape",
+        "name": "Ape",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:archelon",
+        "name": "Archelon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:archmage",
+        "name": "Archmage",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:assassin",
+        "name": "Assassin",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:awakened-shrub",
+        "name": "Awakened Shrub",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:awakened-tree",
+        "name": "Awakened Tree",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:axe-beak",
+        "name": "Axe Beak",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:azer-sentinel",
+        "name": "Azer Sentinel",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:baboon",
+        "name": "Baboon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:badger",
+        "name": "Badger",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:balor",
+        "name": "Balor",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:bandit",
+        "name": "Bandit",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:bandit-captain",
+        "name": "Bandit Captain",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:barbed-devil",
+        "name": "Barbed Devil",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:basilisk",
+        "name": "Basilisk",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:bat",
+        "name": "Bat",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:bearded-devil",
+        "name": "Bearded Devil",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:behir",
+        "name": "Behir",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:berserker",
+        "name": "Berserker",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:black-bear",
+        "name": "Black Bear",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:black-dragon-wyrmling",
+        "name": "Black Dragon Wyrmling",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:black-pudding",
+        "name": "Black Pudding",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:blink-dog",
+        "name": "Blink Dog",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:blood-hawk",
+        "name": "Blood Hawk",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:blue-dragon-wyrmling",
+        "name": "Blue Dragon Wyrmling",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:boar",
+        "name": "Boar",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:bone-devil",
+        "name": "Bone Devil",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:brass-dragon-wyrmling",
+        "name": "Brass Dragon Wyrmling",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:bronze-dragon-wyrmling",
+        "name": "Bronze Dragon Wyrmling",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:brown-bear",
+        "name": "Brown Bear",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:bugbear-stalker",
+        "name": "Bugbear Stalker",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:bugbear-warrior",
+        "name": "Bugbear Warrior",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:bulette",
+        "name": "Bulette",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:camel",
+        "name": "Camel",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:cat",
+        "name": "Cat",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:centaur-trooper",
+        "name": "Centaur Trooper",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:chain-devil",
+        "name": "Chain Devil",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:chimera",
+        "name": "Chimera",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:chuul",
+        "name": "Chuul",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:clay-golem",
+        "name": "Clay Golem",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:cloaker",
+        "name": "Cloaker",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:cloud-giant",
+        "name": "Cloud Giant",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:cockatrice",
+        "name": "Cockatrice",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:commoner",
+        "name": "Commoner",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:constrictor-snake",
+        "name": "Constrictor Snake",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:copper-dragon-wyrmling",
+        "name": "Copper Dragon Wyrmling",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:couatl",
+        "name": "Couatl",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:crab",
+        "name": "Crab",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:crocodile",
+        "name": "Crocodile",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:cultist",
+        "name": "Cultist",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:cultist-fanatic",
+        "name": "Cultist Fanatic",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:darkmantle",
+        "name": "Darkmantle",
+        "unmodeled_clauses": [
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:death-dog",
+        "name": "Death Dog",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:deer",
+        "name": "Deer",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:deva",
+        "name": "Deva",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:dire-wolf",
+        "name": "Dire Wolf",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:djinni",
+        "name": "Djinni",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:doppelganger",
+        "name": "Doppelganger",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:draft-horse",
+        "name": "Draft Horse",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:dragon-turtle",
+        "name": "Dragon Turtle",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:dretch",
+        "name": "Dretch",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:drider",
+        "name": "Drider",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:druid",
+        "name": "Druid",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:dryad",
+        "name": "Dryad",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:dust-mephit",
+        "name": "Dust Mephit",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:eagle",
+        "name": "Eagle",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:earth-elemental",
+        "name": "Earth Elemental",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:efreeti",
+        "name": "Efreeti",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:elephant",
+        "name": "Elephant",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:elk",
+        "name": "Elk",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:erinyes",
+        "name": "Erinyes",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:ettercap",
+        "name": "Ettercap",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:ettin",
+        "name": "Ettin",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:fire-elemental",
+        "name": "Fire Elemental",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:fire-giant",
+        "name": "Fire Giant",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:flesh-golem",
+        "name": "Flesh Golem",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:flying-snake",
+        "name": "Flying Snake",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:frog",
+        "name": "Frog",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:frost-giant",
+        "name": "Frost Giant",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:gargoyle",
+        "name": "Gargoyle",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:gelatinous-cube",
+        "name": "Gelatinous Cube",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:ghast",
+        "name": "Ghast",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ghost",
+        "name": "Ghost",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:ghoul",
+        "name": "Ghoul",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-ape",
+        "name": "Giant Ape",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-badger",
+        "name": "Giant Badger",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-bat",
+        "name": "Giant Bat",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-boar",
+        "name": "Giant Boar",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-centipede",
+        "name": "Giant Centipede",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-constrictor-snake",
+        "name": "Giant Constrictor Snake",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-crab",
+        "name": "Giant Crab",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-crocodile",
+        "name": "Giant Crocodile",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-eagle",
+        "name": "Giant Eagle",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-elk",
+        "name": "Giant Elk",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-fire-beetle",
+        "name": "Giant Fire Beetle",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:giant-frog",
+        "name": "Giant Frog",
+        "unmodeled_clauses": [
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-goat",
+        "name": "Giant Goat",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-hyena",
+        "name": "Giant Hyena",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-lizard",
+        "name": "Giant Lizard",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-octopus",
+        "name": "Giant Octopus",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:giant-owl",
+        "name": "Giant Owl",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-rat",
+        "name": "Giant Rat",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-scorpion",
+        "name": "Giant Scorpion",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-seahorse",
+        "name": "Giant Seahorse",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-shark",
+        "name": "Giant Shark",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-spider",
+        "name": "Giant Spider",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:giant-toad",
+        "name": "Giant Toad",
+        "unmodeled_clauses": [
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-venomous-snake",
+        "name": "Giant Venomous Snake",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-vulture",
+        "name": "Giant Vulture",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-wasp",
+        "name": "Giant Wasp",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-weasel",
+        "name": "Giant Weasel",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:giant-wolf-spider",
+        "name": "Giant Wolf Spider",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:gibbering-mouther",
+        "name": "Gibbering Mouther",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:glabrezu",
+        "name": "Glabrezu",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:gladiator",
+        "name": "Gladiator",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:gnoll-warrior",
+        "name": "Gnoll Warrior",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:goat",
+        "name": "Goat",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:goblin-boss",
+        "name": "Goblin Boss",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:goblin-minion",
+        "name": "Goblin Minion",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:goblin-warrior",
+        "name": "Goblin Warrior",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:gold-dragon-wyrmling",
+        "name": "Gold Dragon Wyrmling",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:gorgon",
+        "name": "Gorgon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:gray-ooze",
+        "name": "Gray Ooze",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:green-dragon-wyrmling",
+        "name": "Green Dragon Wyrmling",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:green-hag",
+        "name": "Green Hag",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:grick",
+        "name": "Grick",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:griffon",
+        "name": "Griffon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:grimlock",
+        "name": "Grimlock",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:guard",
+        "name": "Guard",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:guard-captain",
+        "name": "Guard Captain",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:guardian-naga",
+        "name": "Guardian Naga",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:half-dragon",
+        "name": "Half-Dragon",
+        "unmodeled_clauses": [
+          "conditional_damage_traits"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:harpy",
+        "name": "Harpy",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:hawk",
+        "name": "Hawk",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:hell-hound",
+        "name": "Hell Hound",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:hezrou",
+        "name": "Hezrou",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:hill-giant",
+        "name": "Hill Giant",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:hippogriff",
+        "name": "Hippogriff",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:hippopotamus",
+        "name": "Hippopotamus",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:hobgoblin-captain",
+        "name": "Hobgoblin Captain",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:hobgoblin-warrior",
+        "name": "Hobgoblin Warrior",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:homunculus",
+        "name": "Homunculus",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:horned-devil",
+        "name": "Horned Devil",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:hunter-shark",
+        "name": "Hunter Shark",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:hydra",
+        "name": "Hydra",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:hyena",
+        "name": "Hyena",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ice-devil",
+        "name": "Ice Devil",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:ice-mephit",
+        "name": "Ice Mephit",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:imp",
+        "name": "Imp",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:incubus",
+        "name": "Incubus",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:invisible-stalker",
+        "name": "Invisible Stalker",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:iron-golem",
+        "name": "Iron Golem",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:jackal",
+        "name": "Jackal",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:killer-whale",
+        "name": "Killer Whale",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:knight",
+        "name": "Knight",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:kobold-warrior",
+        "name": "Kobold Warrior",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:kraken",
+        "name": "Kraken",
+        "unmodeled_clauses": [
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:lamia",
+        "name": "Lamia",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:lemure",
+        "name": "Lemure",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:lich",
+        "name": "Lich",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:lion",
+        "name": "Lion",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:lizard",
+        "name": "Lizard",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:mage",
+        "name": "Mage",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:magma-mephit",
+        "name": "Magma Mephit",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:magmin",
+        "name": "Magmin",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:mammoth",
+        "name": "Mammoth",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:manticore",
+        "name": "Manticore",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:marilith",
+        "name": "Marilith",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:mastiff",
+        "name": "Mastiff",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:medusa",
+        "name": "Medusa",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:merfolk-skirmisher",
+        "name": "Merfolk Skirmisher",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:merrow",
+        "name": "Merrow",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:mimic",
+        "name": "Mimic",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:minotaur-of-baphomet",
+        "name": "Minotaur of Baphomet",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:minotaur-skeleton",
+        "name": "Minotaur Skeleton",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:mule",
+        "name": "Mule",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:mummy",
+        "name": "Mummy",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:mummy-lord",
+        "name": "Mummy Lord",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:nalfeshnee",
+        "name": "Nalfeshnee",
+        "unmodeled_clauses": [
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:night-hag",
+        "name": "Night Hag",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:nightmare",
+        "name": "Nightmare",
+        "unmodeled_clauses": [
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:noble",
+        "name": "Noble",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:ochre-jelly",
+        "name": "Ochre Jelly",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:ogre",
+        "name": "Ogre",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:ogre-zombie",
+        "name": "Ogre Zombie",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:oni",
+        "name": "Oni",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:otyugh",
+        "name": "Otyugh",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:owl",
+        "name": "Owl",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:owlbear",
+        "name": "Owlbear",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:panther",
+        "name": "Panther",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:pegasus",
+        "name": "Pegasus",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:phase-spider",
+        "name": "Phase Spider",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:piranha",
+        "name": "Piranha",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:pirate",
+        "name": "Pirate",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:pirate-captain",
+        "name": "Pirate Captain",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:pit-fiend",
+        "name": "Pit Fiend",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:planetar",
+        "name": "Planetar",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:plesiosaurus",
+        "name": "Plesiosaurus",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:polar-bear",
+        "name": "Polar Bear",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:pony",
+        "name": "Pony",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:priest",
+        "name": "Priest",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:priest-acolyte",
+        "name": "Priest Acolyte",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:pseudodragon",
+        "name": "Pseudodragon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:pteranodon",
+        "name": "Pteranodon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:purple-worm",
+        "name": "Purple Worm",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:quasit",
+        "name": "Quasit",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:rakshasa",
+        "name": "Rakshasa",
+        "unmodeled_clauses": [
+          "conditional_damage_traits",
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:rat",
+        "name": "Rat",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:raven",
+        "name": "Raven",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:red-dragon-wyrmling",
+        "name": "Red Dragon Wyrmling",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:reef-shark",
+        "name": "Reef Shark",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:remorhaz",
+        "name": "Remorhaz",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:rhinoceros",
+        "name": "Rhinoceros",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:riding-horse",
+        "name": "Riding Horse",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:roc",
+        "name": "Roc",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:roper",
+        "name": "Roper",
+        "unmodeled_clauses": [
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:rust-monster",
+        "name": "Rust Monster",
+        "unmodeled_clauses": [
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:saber-toothed-tiger",
+        "name": "Saber-Toothed Tiger",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:sahuagin-warrior",
+        "name": "Sahuagin Warrior",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:salamander",
+        "name": "Salamander",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:satyr",
+        "name": "Satyr",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:scorpion",
+        "name": "Scorpion",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:scout",
+        "name": "Scout",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:sea-hag",
+        "name": "Sea Hag",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:seahorse",
+        "name": "Seahorse",
+        "unmodeled_clauses": [
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:shadow",
+        "name": "Shadow",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:shambling-mound",
+        "name": "Shambling Mound",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:shield-guardian",
+        "name": "Shield Guardian",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:shrieker-fungus",
+        "name": "Shrieker Fungus",
+        "unmodeled_clauses": [
+          "no_standard_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:silver-dragon-wyrmling",
+        "name": "Silver Dragon Wyrmling",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:skeleton",
+        "name": "Skeleton",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:solar",
+        "name": "Solar",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:specter",
+        "name": "Specter",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:sphinx-of-lore",
+        "name": "Sphinx of Lore",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:sphinx-of-valor",
+        "name": "Sphinx of Valor",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions",
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:sphinx-of-wonder",
+        "name": "Sphinx of Wonder",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:spider",
+        "name": "Spider",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:spirit-naga",
+        "name": "Spirit Naga",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:sprite",
+        "name": "Sprite",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:spy",
+        "name": "Spy",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:steam-mephit",
+        "name": "Steam Mephit",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:stirge",
+        "name": "Stirge",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:stone-giant",
+        "name": "Stone Giant",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:stone-golem",
+        "name": "Stone Golem",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:storm-giant",
+        "name": "Storm Giant",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:succubus",
+        "name": "Succubus",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:swarm-of-bats",
+        "name": "Swarm of Bats",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:swarm-of-crawling-claws",
+        "name": "Swarm of Crawling Claws",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:swarm-of-insects",
+        "name": "Swarm of Insects",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:swarm-of-piranhas",
+        "name": "Swarm of Piranhas",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:swarm-of-rats",
+        "name": "Swarm of Rats",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:swarm-of-ravens",
+        "name": "Swarm of Ravens",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:swarm-of-venomous-snakes",
+        "name": "Swarm of Venomous Snakes",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:tarrasque",
+        "name": "Tarrasque",
+        "unmodeled_clauses": [
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:tiger",
+        "name": "Tiger",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:tough",
+        "name": "Tough",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:tough-boss",
+        "name": "Tough Boss",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:treant",
+        "name": "Treant",
+        "unmodeled_clauses": [
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:triceratops",
+        "name": "Triceratops",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:troll",
+        "name": "Troll",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:troll-limb",
+        "name": "Troll Limb",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:tyrannosaurus-rex",
+        "name": "Tyrannosaurus Rex",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:unicorn",
+        "name": "Unicorn",
+        "unmodeled_clauses": [
+          "innate_spellcasting_prose",
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:vampire-bat",
+        "name": "Vampire, Bat Form",
+        "unmodeled_clauses": [
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:vampire-familiar",
+        "name": "Vampire Familiar",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:vampire-mist",
+        "name": "Vampire, Mist Form",
+        "unmodeled_clauses": [
+          "legendary_actions",
+          "no_standard_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:vampire-spawn",
+        "name": "Vampire Spawn",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:vampire-vampire",
+        "name": "Vampire, Vampire Form",
+        "unmodeled_clauses": [
+          "legendary_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:venomous-snake",
+        "name": "Venomous Snake",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:violet-fungus",
+        "name": "Violet Fungus",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:vrock",
+        "name": "Vrock",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:vulture",
+        "name": "Vulture",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:warhorse",
+        "name": "Warhorse",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:warhorse-skeleton",
+        "name": "Warhorse Skeleton",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:warrior-infantry",
+        "name": "Warrior Infantry",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:warrior-veteran",
+        "name": "Warrior Veteran",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:water-elemental",
+        "name": "Water Elemental",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:weasel",
+        "name": "Weasel",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:werebear-bear",
+        "name": "Werebear, Bear Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:werebear-human",
+        "name": "Werebear, Human Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:werebear-hybrid",
+        "name": "Werebear, Hybrid Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:wereboar-boar",
+        "name": "Wereboar, Boar Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:wereboar-human",
+        "name": "Wereboar, Human Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:wereboar-hybrid",
+        "name": "Wereboar, Hybrid Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:wererat-human",
+        "name": "Wererat, Human Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:wererat-hybrid",
+        "name": "Wererat, Hybrid Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:wererat-rat",
+        "name": "Wererat, Rat Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:weretiger-human",
+        "name": "Weretiger, Human Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:weretiger-hybrid",
+        "name": "Weretiger, Hybrid Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:weretiger-tiger",
+        "name": "Weretiger, Tiger Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:werewolf-human",
+        "name": "Werewolf, Human Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:werewolf-hybrid",
+        "name": "Werewolf, Hybrid Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:werewolf-wolf",
+        "name": "Werewolf, Wolf Form",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:white-dragon-wyrmling",
+        "name": "White Dragon Wyrmling",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:wight",
+        "name": "Wight",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:will-o-wisp",
+        "name": "Will-o’-Wisp",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:winter-wolf",
+        "name": "Winter Wolf",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:wolf",
+        "name": "Wolf",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:worg",
+        "name": "Worg",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "monsters:wraith",
+        "name": "Wraith",
+        "unmodeled_clauses": [
+          "special_non_attack_actions"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:wyvern",
+        "name": "Wyvern",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:xorn",
+        "name": "Xorn",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:young-black-dragon",
+        "name": "Young Black Dragon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:young-blue-dragon",
+        "name": "Young Blue Dragon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:young-brass-dragon",
+        "name": "Young Brass Dragon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:young-bronze-dragon",
+        "name": "Young Bronze Dragon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:young-copper-dragon",
+        "name": "Young Copper Dragon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:young-gold-dragon",
+        "name": "Young Gold Dragon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:young-green-dragon",
+        "name": "Young Green Dragon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:young-red-dragon",
+        "name": "Young Red Dragon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:young-silver-dragon",
+        "name": "Young Silver Dragon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:young-white-dragon",
+        "name": "Young White Dragon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "monsters:zombie",
+        "name": "Zombie",
+        "unmodeled_clauses": []
+      }
+    ],
+    "spells": [
+      {
+        "coverage": "full",
+        "id": "spells:acid-arrow",
+        "name": "Acid Arrow",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:acid-splash",
+        "name": "Acid Splash",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:aid",
+        "name": "Aid",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:alarm",
+        "name": "Alarm",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:alter-self",
+        "name": "Alter Self",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:animal-friendship",
+        "name": "Animal Friendship",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:animal-messenger",
+        "name": "Animal Messenger",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:animal-shapes",
+        "name": "Animal Shapes",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:animate-dead",
+        "name": "Animate Dead",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:animate-objects",
+        "name": "Animate Objects",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:antilife-shell",
+        "name": "Antilife Shell",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:antimagic-field",
+        "name": "Antimagic Field",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:antipathy-sympathy",
+        "name": "Antipathy/Sympathy",
+        "unmodeled_clauses": [
+          "non_combat_casting_time"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:arcane-eye",
+        "name": "Arcane Eye",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:arcane-hand",
+        "name": "Arcane Hand",
+        "unmodeled_clauses": [
+          "ongoing_turn_trigger",
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:arcane-lock",
+        "name": "Arcane Lock",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:arcane-sword",
+        "name": "Arcane Sword",
+        "unmodeled_clauses": [
+          "secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:arcanists-magic-aura",
+        "name": "Arcanist's Magic Aura",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:astral-projection",
+        "name": "Astral Projection",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:augury",
+        "name": "Augury",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:aura-of-life",
+        "name": "Aura of Life",
+        "unmodeled_clauses": [
+          "zero_hp_start_of_turn_revive"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:awaken",
+        "name": "Awaken",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:bane",
+        "name": "Bane",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:banishment",
+        "name": "Banishment",
+        "unmodeled_clauses": [
+          "extradimensional_exile_and_native_plane_rules"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:barkskin",
+        "name": "Barkskin",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:beacon-of-hope",
+        "name": "Beacon of Hope",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:befuddlement",
+        "name": "Befuddlement",
+        "unmodeled_clauses": [
+          "spellcasting_block_and_30_day_repeat_save"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:bestow-curse",
+        "name": "Bestow Curse",
+        "unmodeled_clauses": [
+          "ongoing_turn_trigger"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:black-tentacles",
+        "name": "Black Tentacles",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:blade-barrier",
+        "name": "Blade Barrier",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:bless",
+        "name": "Bless",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:blight",
+        "name": "Blight",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:blindness-deafness",
+        "name": "Blindness/Deafness",
+        "unmodeled_clauses": [
+          "caster_choice_blinded_or_deafened"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:blink",
+        "name": "Blink",
+        "unmodeled_clauses": [
+          "ethereal_plane_vanish_and_return"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:blur",
+        "name": "Blur",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:burning-hands",
+        "name": "Burning Hands",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:call-lightning",
+        "name": "Call Lightning",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:calm-emotions",
+        "name": "Calm Emotions",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:chain-lightning",
+        "name": "Chain Lightning",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:charm-monster",
+        "name": "Charm Monster",
+        "unmodeled_clauses": [
+          "social_friendly_attitude_rules"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:charm-person",
+        "name": "Charm Person",
+        "unmodeled_clauses": [
+          "social_friendly_attitude_rules"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:chill-touch",
+        "name": "Chill Touch",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:chromatic-orb",
+        "name": "Chromatic Orb",
+        "unmodeled_clauses": [
+          "leap_on_matching_damage_dice"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:circle-of-death",
+        "name": "Circle of Death",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:clairvoyance",
+        "name": "Clairvoyance",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:clone",
+        "name": "Clone",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:cloudkill",
+        "name": "Cloudkill",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:color-spray",
+        "name": "Color Spray",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:command",
+        "name": "Command",
+        "unmodeled_clauses": [
+          "one_word_behavioral_command_adjudication"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:commune",
+        "name": "Commune",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:commune-with-nature",
+        "name": "Commune with Nature",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:comprehend-languages",
+        "name": "Comprehend Languages",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:compulsion",
+        "name": "Compulsion",
+        "unmodeled_clauses": [
+          "forced_directional_movement_each_turn"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:cone-of-cold",
+        "name": "Cone of Cold",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:confusion",
+        "name": "Confusion",
+        "unmodeled_clauses": [
+          "non_standard_save_effect",
+          "ongoing_turn_trigger",
+          "special_narrative_rider"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:conjure-animals",
+        "name": "Conjure Animals",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall",
+          "summoning_or_minion_statblock"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:conjure-celestial",
+        "name": "Conjure Celestial",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall",
+          "summoning_or_minion_statblock"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:conjure-elemental",
+        "name": "Conjure Elemental",
+        "unmodeled_clauses": [
+          "ongoing_turn_trigger",
+          "summoning_or_minion_statblock"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:conjure-fey",
+        "name": "Conjure Fey",
+        "unmodeled_clauses": [
+          "ongoing_turn_trigger",
+          "summoning_or_minion_statblock"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:conjure-minor-elementals",
+        "name": "Conjure Minor Elementals",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:conjure-woodland-beings",
+        "name": "Conjure Woodland Beings",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall",
+          "summoning_or_minion_statblock"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:contact-other-plane",
+        "name": "Contact Other Plane",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:contagion",
+        "name": "Contagion",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:contingency",
+        "name": "Contingency",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:continual-flame",
+        "name": "Continual Flame",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:control-water",
+        "name": "Control Water",
+        "unmodeled_clauses": [
+          "forced_movement_or_terrain",
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:control-weather",
+        "name": "Control Weather",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:counterspell",
+        "name": "Counterspell",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:create-food-and-water",
+        "name": "Create Food and Water",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:create-or-destroy-water",
+        "name": "Create or Destroy Water",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:create-undead",
+        "name": "Create Undead",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:creation",
+        "name": "Creation",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:cure-wounds",
+        "name": "Cure Wounds",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:dancing-lights",
+        "name": "Dancing Lights",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:darkness",
+        "name": "Darkness",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:darkvision",
+        "name": "Darkvision",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:daylight",
+        "name": "Daylight",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:death-ward",
+        "name": "Death Ward",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:delayed-blast-fireball",
+        "name": "Delayed Blast Fireball",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:demiplane",
+        "name": "Demiplane",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:detect-evil-and-good",
+        "name": "Detect Evil and Good",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:detect-magic",
+        "name": "Detect Magic",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:detect-poison-and-disease",
+        "name": "Detect Poison and Disease",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:detect-thoughts",
+        "name": "Detect Thoughts",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:dimension-door",
+        "name": "Dimension Door",
+        "unmodeled_clauses": [
+          "forced_movement_or_terrain"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:disguise-self",
+        "name": "Disguise Self",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:disintegrate",
+        "name": "Disintegrate",
+        "unmodeled_clauses": [
+          "instant_death_or_disintegration",
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:dispel-evil-and-good",
+        "name": "Dispel Evil and Good",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:dispel-magic",
+        "name": "Dispel Magic",
+        "unmodeled_clauses": [
+          "spellcasting_ability_check_for_higher_slot_spells"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:dissonant-whispers",
+        "name": "Dissonant Whispers",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:divination",
+        "name": "Divination",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:divine-favor",
+        "name": "Divine Favor",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:divine-smite",
+        "name": "Divine Smite",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:divine-word",
+        "name": "Divine Word",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:dominate-beast",
+        "name": "Dominate Beast",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:dominate-monster",
+        "name": "Dominate Monster",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:dominate-person",
+        "name": "Dominate Person",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:dragons-breath",
+        "name": "Dragon's Breath",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:dream",
+        "name": "Dream",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:druidcraft",
+        "name": "Druidcraft",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:earthquake",
+        "name": "Earthquake",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:eldritch-blast",
+        "name": "Eldritch Blast",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:elementalism",
+        "name": "Elementalism",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:enhance-ability",
+        "name": "Enhance Ability",
+        "unmodeled_clauses": [
+          "chosen_ability_selection"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:enlarge-reduce",
+        "name": "Enlarge/Reduce",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:ensnaring-strike",
+        "name": "Ensnaring Strike",
+        "unmodeled_clauses": [
+          "ongoing_turn_trigger"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:entangle",
+        "name": "Entangle",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:enthrall",
+        "name": "Enthrall",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:etherealness",
+        "name": "Etherealness",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:expeditious-retreat",
+        "name": "Expeditious Retreat",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:eyebite",
+        "name": "Eyebite",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:fabricate",
+        "name": "Fabricate",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:faerie-fire",
+        "name": "Faerie Fire",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:faithful-hound",
+        "name": "Faithful Hound",
+        "unmodeled_clauses": [
+          "summoning_or_minion_statblock"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:false-life",
+        "name": "False Life",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:fear",
+        "name": "Fear",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:feather-fall",
+        "name": "Feather Fall",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:find-familiar",
+        "name": "Find Familiar",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:find-steed",
+        "name": "Find Steed",
+        "unmodeled_clauses": [
+          "summoning_or_minion_statblock"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:find-the-path",
+        "name": "Find the Path",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:find-traps",
+        "name": "Find Traps",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:finger-of-death",
+        "name": "Finger of Death",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:fire-bolt",
+        "name": "Fire Bolt",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:fire-shield",
+        "name": "Fire Shield",
+        "unmodeled_clauses": [
+          "retaliatory_melee_damage_and_warm_chill_choice"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:fire-storm",
+        "name": "Fire Storm",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:fireball",
+        "name": "Fireball",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:flame-blade",
+        "name": "Flame Blade",
+        "unmodeled_clauses": [
+          "secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:flame-strike",
+        "name": "Flame Strike",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:flaming-sphere",
+        "name": "Flaming Sphere",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:flesh-to-stone",
+        "name": "Flesh to Stone",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:floating-disk",
+        "name": "Floating Disk",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:fly",
+        "name": "Fly",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:fog-cloud",
+        "name": "Fog Cloud",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:forbiddance",
+        "name": "Forbiddance",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:forcecage",
+        "name": "Forcecage",
+        "unmodeled_clauses": [
+          "non_standard_save_effect",
+          "special_narrative_rider"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:foresight",
+        "name": "Foresight",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:freedom-of-movement",
+        "name": "Freedom of Movement",
+        "unmodeled_clauses": [
+          "escape_grapple_cost_and_underwater_rules"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:freezing-sphere",
+        "name": "Freezing Sphere",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:gaseous-form",
+        "name": "Gaseous Form",
+        "unmodeled_clauses": [
+          "misty_cloud_movement_and_action_restrictions"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:gate",
+        "name": "Gate",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:geas",
+        "name": "Geas",
+        "unmodeled_clauses": [
+          "non_combat_casting_time"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:gentle-repose",
+        "name": "Gentle Repose",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:giant-insect",
+        "name": "Giant Insect",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:glibness",
+        "name": "Glibness",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:globe-of-invulnerability",
+        "name": "Globe of Invulnerability",
+        "unmodeled_clauses": [
+          "barrier_excludes_external_spells_level_5_or_lower"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:glyph-of-warding",
+        "name": "Glyph of Warding",
+        "unmodeled_clauses": [
+          "non_combat_casting_time",
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:goodberry",
+        "name": "Goodberry",
+        "unmodeled_clauses": [
+          "creates_10_consumable_berries"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:grease",
+        "name": "Grease",
+        "unmodeled_clauses": [
+          "non_standard_save_effect",
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:greater-invisibility",
+        "name": "Greater Invisibility",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:greater-restoration",
+        "name": "Greater Restoration",
+        "unmodeled_clauses": [
+          "exhaustion_reduction_and_curse_removal"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:guardian-of-faith",
+        "name": "Guardian of Faith",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:guards-and-wards",
+        "name": "Guards and Wards",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:guidance",
+        "name": "Guidance",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:guiding-bolt",
+        "name": "Guiding Bolt",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:gust-of-wind",
+        "name": "Gust of Wind",
+        "unmodeled_clauses": [
+          "forced_movement_or_terrain",
+          "non_standard_save_effect",
+          "ongoing_turn_trigger",
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:hallow",
+        "name": "Hallow",
+        "unmodeled_clauses": [
+          "forced_movement_or_terrain",
+          "non_combat_casting_time"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:hallucinatory-terrain",
+        "name": "Hallucinatory Terrain",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:harm",
+        "name": "Harm",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:haste",
+        "name": "Haste",
+        "unmodeled_clauses": [
+          "extra_haste_action_and_lethargy_on_end"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:heal",
+        "name": "Heal",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:healing-word",
+        "name": "Healing Word",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:heat-metal",
+        "name": "Heat Metal",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:hellish-rebuke",
+        "name": "Hellish Rebuke",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:heroes-feast",
+        "name": "Heroes' Feast",
+        "unmodeled_clauses": [
+          "feast_consumption_and_max_hp_boost"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:heroism",
+        "name": "Heroism",
+        "unmodeled_clauses": [
+          "frightened_immunity_and_recurring_temp_hp"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:hex",
+        "name": "Hex",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:hideous-laughter",
+        "name": "Hideous Laughter",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:hold-monster",
+        "name": "Hold Monster",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:hold-person",
+        "name": "Hold Person",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:holy-aura",
+        "name": "Holy Aura",
+        "unmodeled_clauses": [
+          "aura_advantage_and_retaliatory_blindness"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:hunters-mark",
+        "name": "Hunter's Mark",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:hypnotic-pattern",
+        "name": "Hypnotic Pattern",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:ice-knife",
+        "name": "Ice Knife",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:ice-storm",
+        "name": "Ice Storm",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:identify",
+        "name": "Identify",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:illusory-script",
+        "name": "Illusory Script",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:imprisonment",
+        "name": "Imprisonment",
+        "unmodeled_clauses": [
+          "non_combat_casting_time",
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:incendiary-cloud",
+        "name": "Incendiary Cloud",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:inflict-wounds",
+        "name": "Inflict Wounds",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:insect-plague",
+        "name": "Insect Plague",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:instant-summons",
+        "name": "Instant Summons",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:invisibility",
+        "name": "Invisibility",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:irresistible-dance",
+        "name": "Irresistible Dance",
+        "unmodeled_clauses": [
+          "forced_dance_movement_and_action_spend"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:jump",
+        "name": "Jump",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:knock",
+        "name": "Knock",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:legend-lore",
+        "name": "Legend Lore",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:lesser-restoration",
+        "name": "Lesser Restoration",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:levitate",
+        "name": "Levitate",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:light",
+        "name": "Light",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:lightning-bolt",
+        "name": "Lightning Bolt",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:locate-animals-or-plants",
+        "name": "Locate Animals or Plants",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:locate-creature",
+        "name": "Locate Creature",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:locate-object",
+        "name": "Locate Object",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:longstrider",
+        "name": "Longstrider",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:mage-armor",
+        "name": "Mage Armor",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:mage-hand",
+        "name": "Mage Hand",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:magic-circle",
+        "name": "Magic Circle",
+        "unmodeled_clauses": [
+          "non_combat_casting_time",
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:magic-jar",
+        "name": "Magic Jar",
+        "unmodeled_clauses": [
+          "non_combat_casting_time"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:magic-missile",
+        "name": "Magic Missile",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:magic-mouth",
+        "name": "Magic Mouth",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:magic-weapon",
+        "name": "Magic Weapon",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:magnificent-mansion",
+        "name": "Magnificent Mansion",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:major-image",
+        "name": "Major Image",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:mass-cure-wounds",
+        "name": "Mass Cure Wounds",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:mass-heal",
+        "name": "Mass Heal",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:mass-healing-word",
+        "name": "Mass Healing Word",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:mass-suggestion",
+        "name": "Mass Suggestion",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:maze",
+        "name": "Maze",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:meld-into-stone",
+        "name": "Meld into Stone",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:mending",
+        "name": "Mending",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:message",
+        "name": "Message",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:meteor-swarm",
+        "name": "Meteor Swarm",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:mind-blank",
+        "name": "Mind Blank",
+        "unmodeled_clauses": [
+          "divination_and_mind_reading_immunity"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:mind-spike",
+        "name": "Mind Spike",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:minor-illusion",
+        "name": "Minor Illusion",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:mirage-arcane",
+        "name": "Mirage Arcane",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:mirror-image",
+        "name": "Mirror Image",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:mislead",
+        "name": "Mislead",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:misty-step",
+        "name": "Misty Step",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:modify-memory",
+        "name": "Modify Memory",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:moonbeam",
+        "name": "Moonbeam",
+        "unmodeled_clauses": [
+          "ongoing_turn_trigger",
+          "persistent_zone_or_wall",
+          "transformation_or_polymorph"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:move-earth",
+        "name": "Move Earth",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:nondetection",
+        "name": "Nondetection",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:pass-without-trace",
+        "name": "Pass without Trace",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:passwall",
+        "name": "Passwall",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:phantasmal-force",
+        "name": "Phantasmal Force",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:phantasmal-killer",
+        "name": "Phantasmal Killer",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:phantom-steed",
+        "name": "Phantom Steed",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:planar-ally",
+        "name": "Planar Ally",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:planar-binding",
+        "name": "Planar Binding",
+        "unmodeled_clauses": [
+          "non_combat_casting_time",
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:plane-shift",
+        "name": "Plane Shift",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:plant-growth",
+        "name": "Plant Growth",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:poison-spray",
+        "name": "Poison Spray",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:polymorph",
+        "name": "Polymorph",
+        "unmodeled_clauses": [
+          "non_standard_save_effect",
+          "summoning_or_minion_statblock",
+          "transformation_or_polymorph"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:power-word-heal",
+        "name": "Power Word Heal",
+        "unmodeled_clauses": [
+          "full_hp_restore_and_stand_up_reaction"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:power-word-kill",
+        "name": "Power Word Kill",
+        "unmodeled_clauses": [
+          "hp_threshold_100_instant_death"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:power-word-stun",
+        "name": "Power Word Stun",
+        "unmodeled_clauses": [
+          "hp_threshold_150_stun_or_speed_zero"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:prayer-of-healing",
+        "name": "Prayer of Healing",
+        "unmodeled_clauses": [
+          "short_rest_benefits_once_per_long_rest"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:prestidigitation",
+        "name": "Prestidigitation",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:prismatic-spray",
+        "name": "Prismatic Spray",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:prismatic-wall",
+        "name": "Prismatic Wall",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:private-sanctum",
+        "name": "Private Sanctum",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:produce-flame",
+        "name": "Produce Flame",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:programmed-illusion",
+        "name": "Programmed Illusion",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:project-image",
+        "name": "Project Image",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:protection-from-energy",
+        "name": "Protection from Energy",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:protection-from-evil-and-good",
+        "name": "Protection from Evil and Good",
+        "unmodeled_clauses": [
+          "creature_type_filtered_protection_and_possession_immunity"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:protection-from-poison",
+        "name": "Protection from Poison",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:purify-food-and-drink",
+        "name": "Purify Food and Drink",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:raise-dead",
+        "name": "Raise Dead",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:ray-of-enfeeblement",
+        "name": "Ray of Enfeeblement",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:ray-of-frost",
+        "name": "Ray of Frost",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:ray-of-sickness",
+        "name": "Ray of Sickness",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:regenerate",
+        "name": "Regenerate",
+        "unmodeled_clauses": [
+          "ongoing_turn_trigger"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:reincarnate",
+        "name": "Reincarnate",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:remove-curse",
+        "name": "Remove Curse",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:resilient-sphere",
+        "name": "Resilient Sphere",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:resistance",
+        "name": "Resistance",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:resurrection",
+        "name": "Resurrection",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:reverse-gravity",
+        "name": "Reverse Gravity",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:revivify",
+        "name": "Revivify",
+        "unmodeled_clauses": [
+          "revives_creature_dead_within_1_minute"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:rope-trick",
+        "name": "Rope Trick",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:sacred-flame",
+        "name": "Sacred Flame",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:sanctuary",
+        "name": "Sanctuary",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:scorching-ray",
+        "name": "Scorching Ray",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:scrying",
+        "name": "Scrying",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:searing-smite",
+        "name": "Searing Smite",
+        "unmodeled_clauses": [
+          "ongoing_turn_trigger"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:secret-chest",
+        "name": "Secret Chest",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:see-invisibility",
+        "name": "See Invisibility",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:seeming",
+        "name": "Seeming",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:sending",
+        "name": "Sending",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:sequester",
+        "name": "Sequester",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:shapechange",
+        "name": "Shapechange",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:shatter",
+        "name": "Shatter",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:shield",
+        "name": "Shield",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:shield-of-faith",
+        "name": "Shield of Faith",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:shillelagh",
+        "name": "Shillelagh",
+        "unmodeled_clauses": [
+          "club_or_quarterstaff_cantrip_die_scaling"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:shining-smite",
+        "name": "Shining Smite",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:shocking-grasp",
+        "name": "Shocking Grasp",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:silence",
+        "name": "Silence",
+        "unmodeled_clauses": [
+          "blocks_verbal_components_and_sound_in_sphere"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:silent-image",
+        "name": "Silent Image",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:simulacrum",
+        "name": "Simulacrum",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:sleep",
+        "name": "Sleep",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:sleet-storm",
+        "name": "Sleet Storm",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:slow",
+        "name": "Slow",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:sorcerous-burst",
+        "name": "Sorcerous Burst",
+        "unmodeled_clauses": [
+          "exploding_d8_bonus_dice"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:spare-the-dying",
+        "name": "Spare the Dying",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:speak-with-animals",
+        "name": "Speak with Animals",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:speak-with-dead",
+        "name": "Speak with Dead",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:speak-with-plants",
+        "name": "Speak with Plants",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:spider-climb",
+        "name": "Spider Climb",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:spike-growth",
+        "name": "Spike Growth",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:spirit-guardians",
+        "name": "Spirit Guardians",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:spiritual-weapon",
+        "name": "Spiritual Weapon",
+        "unmodeled_clauses": [
+          "ongoing_turn_trigger"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:starry-wisp",
+        "name": "Starry Wisp",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:stinking-cloud",
+        "name": "Stinking Cloud",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:stone-shape",
+        "name": "Stone Shape",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:stoneskin",
+        "name": "Stoneskin",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:storm-of-vengeance",
+        "name": "Storm of Vengeance",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:suggestion",
+        "name": "Suggestion",
+        "unmodeled_clauses": [
+          "extended_secondary_prose_mechanics"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:summon-dragon",
+        "name": "Summon Dragon",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:sunbeam",
+        "name": "Sunbeam",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:sunburst",
+        "name": "Sunburst",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:symbol",
+        "name": "Symbol",
+        "unmodeled_clauses": [
+          "non_combat_casting_time",
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:telekinesis",
+        "name": "Telekinesis",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:telepathic-bond",
+        "name": "Telepathic Bond",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:teleport",
+        "name": "Teleport",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:teleportation-circle",
+        "name": "Teleportation Circle",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:thaumaturgy",
+        "name": "Thaumaturgy",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:thunderwave",
+        "name": "Thunderwave",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:time-stop",
+        "name": "Time Stop",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:tiny-hut",
+        "name": "Tiny Hut",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:tongues",
+        "name": "Tongues",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:transport-via-plants",
+        "name": "Transport via Plants",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:tree-stride",
+        "name": "Tree Stride",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:true-polymorph",
+        "name": "True Polymorph",
+        "unmodeled_clauses": [
+          "non_standard_save_effect",
+          "summoning_or_minion_statblock",
+          "transformation_or_polymorph"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:true-resurrection",
+        "name": "True Resurrection",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:true-seeing",
+        "name": "True Seeing",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:true-strike",
+        "name": "True Strike",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:tsunami",
+        "name": "Tsunami",
+        "unmodeled_clauses": [
+          "non_combat_casting_time",
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:unseen-servant",
+        "name": "Unseen Servant",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:vampiric-touch",
+        "name": "Vampiric Touch",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "full",
+        "id": "spells:vicious-mockery",
+        "name": "Vicious Mockery",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "spells:vitriolic-sphere",
+        "name": "Vitriolic Sphere",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:wall-of-fire",
+        "name": "Wall of Fire",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:wall-of-force",
+        "name": "Wall of Force",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:wall-of-ice",
+        "name": "Wall of Ice",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:wall-of-stone",
+        "name": "Wall of Stone",
+        "unmodeled_clauses": [
+          "non_standard_save_effect",
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:wall-of-thorns",
+        "name": "Wall of Thorns",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:warding-bond",
+        "name": "Warding Bond",
+        "unmodeled_clauses": [
+          "shared_damage_transfer_within_60ft"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:water-breathing",
+        "name": "Water Breathing",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:water-walk",
+        "name": "Water Walk",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:web",
+        "name": "Web",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall",
+          "summoning_or_minion_statblock"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:weird",
+        "name": "Weird",
+        "unmodeled_clauses": [
+          "concentration_sustained_damage_prose"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:wind-walk",
+        "name": "Wind Walk",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:wind-wall",
+        "name": "Wind Wall",
+        "unmodeled_clauses": [
+          "persistent_zone_or_wall"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:wish",
+        "name": "Wish",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "narrative",
+        "id": "spells:word-of-recall",
+        "name": "Word of Recall",
+        "unmodeled_clauses": [
+          "narrative_or_non_combat_spell_effect"
+        ]
+      },
+      {
+        "coverage": "partial",
+        "id": "spells:zone-of-truth",
+        "name": "Zone of Truth",
+        "unmodeled_clauses": [
+          "non_standard_save_effect"
+        ]
+      }
+    ],
+    "weapon_masteries": [
+      {
+        "coverage": "full",
+        "id": "weapon-mastery-properties:cleave",
+        "name": "Cleave",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "weapon-mastery-properties:graze",
+        "name": "Graze",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "weapon-mastery-properties:nick",
+        "name": "Nick",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "weapon-mastery-properties:push",
+        "name": "Push",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "weapon-mastery-properties:sap",
+        "name": "Sap",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "weapon-mastery-properties:slow",
+        "name": "Slow",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "weapon-mastery-properties:topple",
+        "name": "Topple",
+        "unmodeled_clauses": []
+      },
+      {
+        "coverage": "full",
+        "id": "weapon-mastery-properties:vex",
+        "name": "Vex",
+        "unmodeled_clauses": []
+      }
+    ]
+  },
+  "schema_version": "2",
+  "source_hash": "b31fee9482ebceeb7b6ba2d8072b4eb1a6b0aadbd6a695b213193821b4c6f363",
+  "summary": {
+    "by_domain": {
+      "conditions": {
+        "executable_pct": 100.0,
+        "full": 15,
+        "narrative": 0,
+        "partial": 0,
+        "total": 15
+      },
+      "equipment": {
+        "executable_pct": 51.6,
+        "full": 51,
+        "narrative": 88,
+        "partial": 43,
+        "total": 182
+      },
+      "monsters": {
+        "executable_pct": 100.0,
+        "full": 262,
+        "narrative": 0,
+        "partial": 79,
+        "total": 341
+      },
+      "spells": {
+        "executable_pct": 63.4,
+        "full": 81,
+        "narrative": 124,
+        "partial": 134,
+        "total": 339
+      },
+      "weapon_masteries": {
+        "executable_pct": 100.0,
+        "full": 8,
+        "narrative": 0,
+        "partial": 0,
+        "total": 8
+      }
+    },
+    "character_creation_counts": {
+      "backgrounds": 4,
+      "classes": 12,
+      "feats": 17,
+      "levels": 287,
+      "species": 9,
+      "subclasses": 12,
+      "subspecies": 24,
+      "traits": 68
+    },
+    "executable_pct": 76.0,
+    "full": 417,
+    "narrative": 212,
+    "partial": 256,
+    "total_compiled": 885
+  }
+}

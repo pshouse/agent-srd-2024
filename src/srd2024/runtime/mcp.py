@@ -1,19 +1,31 @@
-"""Pure-stdlib stdio MCP server (JSON-RPC 2.0) for Agent-Native 5e 2024 SRD Pack (§9.3)."""
+"""Pure-stdlib stdio MCP server (JSON-RPC 2.0) for Agent-Native 5e 2024 SRD Pack (§9.3 & Stage 2 §6.2)."""
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import os
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any, TextIO
 
 from .engine import SRDStore
 from .render import render_operation
+from .rules_bridge import (
+    execute_compile_character,
+    execute_encounter_step,
+    get_coverage_payload,
+    get_rule_resource,
+    load_rules_store,
+    query_rule,
+)
 
 SERVER_NAME = "agent-srd-2024"
-SERVER_VERSION = "0.1.0"
+SERVER_VERSION = "0.2.0"
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
+ENV_ENGINE_VAR = "SRD2024_ENGINE"
 
 TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
@@ -231,6 +243,102 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
 ]
 
+STAGE2_TOOL_DEFINITIONS: list[dict[str, Any]] = [
+    {
+        "name": "srd_rule",
+        "description": (
+            "Fetch compiled deterministic 5e 2024 Rules IR (with explicit full/partial/narrative "
+            "coverage and provenance) for a single entity, or inspect the global rules coverage summary."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Canonical ID (e.g. 'spells:fireball', 'monsters:goblin-warrior'), bare slug, or 'coverage'.",
+                },
+                "coverage": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Return the global compiled rules coverage summary.",
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["markdown", "json"],
+                    "default": "markdown",
+                    "description": "Response rendering format.",
+                },
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "srd_compile_character",
+        "description": (
+            "Deterministically validate and compile a 5e 2024 CharacterBuildSpec JSON into an "
+            "authoritative derived statblock (abilities, AC, HP, saves, skills, weapon mastery "
+            "profiles, spellcasting) plus structured validation errors and warnings."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "spec": {
+                    "type": "object",
+                    "description": "CharacterBuildSpec JSON object (species, background, background_asi, class, level, base_abilities, equipment, etc.).",
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["markdown", "json"],
+                    "default": "markdown",
+                    "description": "Response rendering format.",
+                },
+            },
+            "required": ["spec"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "srd_encounter",
+        "description": (
+            "Advance the deterministic 5e 2024 combat state machine with a structured intent "
+            "(start_encounter, move, attack, cast_spell, dodge, dash, disengage, help, end_turn). "
+            "Supports both stateless 'state' round-tripping and stateful server-side 'session_id' caching."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "intent": {
+                    "type": "object",
+                    "description": "Structured combat intent object with 'type' and intent-specific parameters.",
+                },
+                "state": {
+                    "type": "object",
+                    "description": "Current EncounterState JSON (omit for 'start_encounter' or when using 'session_id').",
+                },
+                "session_id": {
+                    "type": "string",
+                    "description": "Optional server-side session key to cache EncounterState across turns.",
+                },
+                "roll_overrides": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "Optional deterministic die override queue for exact testing or replay.",
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["markdown", "json"],
+                    "default": "markdown",
+                    "description": "Response rendering format.",
+                },
+            },
+            "required": ["intent"],
+            "additionalProperties": False,
+        },
+    },
+]
+
+ALL_TOOL_DEFINITIONS: list[dict[str, Any]] = TOOL_DEFINITIONS + STAGE2_TOOL_DEFINITIONS
+
 STATIC_RESOURCES: list[dict[str, Any]] = [
     {
         "uri": "srd://meta",
@@ -240,6 +348,17 @@ STATIC_RESOURCES: list[dict[str, Any]] = [
     }
 ]
 
+STAGE2_STATIC_RESOURCES: list[dict[str, Any]] = [
+    {
+        "uri": "srd://rules/coverage",
+        "name": "SRD 2024 Rules IR Coverage",
+        "description": "Compiled Stage 2 rules coverage summary across weapon masteries, conditions, equipment, spells, monsters, and character creation.",
+        "mimeType": "application/json",
+    }
+]
+
+ALL_STATIC_RESOURCES: list[dict[str, Any]] = STATIC_RESOURCES + STAGE2_STATIC_RESOURCES
+
 RESOURCE_TEMPLATES: list[dict[str, Any]] = [
     {
         "uriTemplate": "srd://card/{type}/{slug}",
@@ -248,6 +367,17 @@ RESOURCE_TEMPLATES: list[dict[str, Any]] = [
         "mimeType": "text/markdown",
     }
 ]
+
+STAGE2_RESOURCE_TEMPLATES: list[dict[str, Any]] = [
+    {
+        "uriTemplate": "srd://rule/{type}/{slug}",
+        "name": "SRD 2024 Compiled Rule IR",
+        "description": "Single compiled deterministic Rules IR JSON object for an SRD entity.",
+        "mimeType": "application/json",
+    }
+]
+
+ALL_RESOURCE_TEMPLATES: list[dict[str, Any]] = RESOURCE_TEMPLATES + STAGE2_RESOURCE_TEMPLATES
 
 
 def _jsonrpc_result(req_id: Any, result: Any) -> dict[str, Any]:
@@ -261,11 +391,32 @@ def _jsonrpc_error(req_id: Any, code: int, message: str, data: Any = None) -> di
     return {"jsonrpc": "2.0", "id": req_id, "error": err}
 
 
-class SRDMCPServer:
-    """Stateless JSON-RPC 2.0 stdio MCP server backed by a read-only SRDStore."""
+def _env_flag_enabled(name: str) -> bool:
+    val = os.environ.get(name, "").strip().lower()
+    return val in ("1", "true", "yes", "on")
 
-    def __init__(self, store: SRDStore) -> None:
+
+class SRDMCPServer:
+    """JSON-RPC 2.0 stdio MCP server backed by read-only SRDStore and lazy Stage 2 RulesStore."""
+
+    def __init__(
+        self,
+        store: SRDStore,
+        *,
+        rules_path: str | Path | None = None,
+        rules_store: Any | None = None,
+        expose_engine_tools: bool = False,
+    ) -> None:
         self.store = store
+        self._rules_path = rules_path
+        self._rules_store = rules_store
+        self.expose_engine_tools = expose_engine_tools
+        self._encounter_sessions: dict[str, dict[str, Any]] = {}
+
+    def _get_rules_store(self) -> Any:
+        if self._rules_store is None:
+            self._rules_store = load_rules_store(self._rules_path)
+        return self._rules_store
 
     def handle_message(self, msg: Any) -> dict[str, Any] | None:
         if not isinstance(msg, dict):
@@ -293,13 +444,18 @@ class SRDMCPServer:
             if method == "ping":
                 return _jsonrpc_result(req_id, {})
             if method == "tools/list":
-                return _jsonrpc_result(req_id, {"tools": TOOL_DEFINITIONS})
+                tools = ALL_TOOL_DEFINITIONS if self.expose_engine_tools else TOOL_DEFINITIONS
+                return _jsonrpc_result(req_id, {"tools": tools})
             if method == "tools/call":
                 return _jsonrpc_result(req_id, self._handle_tools_call(params))
             if method == "resources/list":
-                return _jsonrpc_result(req_id, {"resources": STATIC_RESOURCES})
+                resources = ALL_STATIC_RESOURCES if self.expose_engine_tools else STATIC_RESOURCES
+                return _jsonrpc_result(req_id, {"resources": resources})
             if method == "resources/templates/list":
-                return _jsonrpc_result(req_id, {"resourceTemplates": RESOURCE_TEMPLATES})
+                templates = (
+                    ALL_RESOURCE_TEMPLATES if self.expose_engine_tools else RESOURCE_TEMPLATES
+                )
+                return _jsonrpc_result(req_id, {"resourceTemplates": templates})
             if method == "resources/read":
                 return self._handle_resources_read(req_id, params)
             return _jsonrpc_error(req_id, -32601, f"Method not found: {method}")
@@ -426,9 +582,85 @@ class SRDMCPServer:
                 payload = self.store.validate(ids=ids, check_links=check_links)
                 op = "validate"
 
+            elif tool_name == "srd_rule":
+                identifier = arguments.get("id")
+                if identifier is not None and not isinstance(identifier, str):
+                    return self._tool_error("'id' must be a string.")
+                coverage = _coerce_bool(arguments.get("coverage", False), "coverage")
+                rules = self._get_rules_store()
+                payload = query_rule(rules, identifier=identifier, coverage=coverage)
+                op = "rule"
+
+            elif tool_name == "srd_compile_character":
+                spec = arguments.get("spec")
+                if not isinstance(spec, dict):
+                    return self._tool_error("srd_compile_character requires object argument 'spec'.")
+                rules = self._get_rules_store()
+                payload = execute_compile_character(rules, spec)
+                op = "character"
+
+            elif tool_name == "srd_encounter":
+                intent = arguments.get("intent")
+                if not isinstance(intent, dict):
+                    return self._tool_error("srd_encounter requires object argument 'intent'.")
+                state = arguments.get("state")
+                if state is not None and not isinstance(state, dict):
+                    return self._tool_error("'state' must be a JSON object.")
+                session_id = arguments.get("session_id")
+                if session_id is not None and (
+                    not isinstance(session_id, str) or not session_id.strip()
+                ):
+                    return self._tool_error("'session_id' must be a non-empty string.")
+                roll_overrides = arguments.get("roll_overrides")
+                if roll_overrides is not None and (
+                    not isinstance(roll_overrides, list)
+                    or any(isinstance(x, bool) or not isinstance(x, int) for x in roll_overrides)
+                ):
+                    return self._tool_error("'roll_overrides' must be an array of integers.")
+
+                rules = self._get_rules_store()
+                intent_type = intent.get("type")
+                effective_state = state
+
+                if intent_type != "start_encounter" and effective_state is None and session_id is not None:
+                    cached = self._encounter_sessions.get(session_id)
+                    if cached is None:
+                        payload = {
+                            "status": "error",
+                            "error": (
+                                f"Unknown encounter session_id '{session_id}'. "
+                                "Call start_encounter with this session_id first or pass 'state'."
+                            ),
+                        }
+                        op = "encounter"
+                    else:
+                        effective_state = copy.deepcopy(cached)
+                        payload = execute_encounter_step(
+                            rules,
+                            intent=intent,
+                            state=effective_state,
+                            roll_overrides=roll_overrides,
+                        )
+                        op = "encounter"
+                else:
+                    payload = execute_encounter_step(
+                        rules,
+                        intent=intent,
+                        state=effective_state,
+                        roll_overrides=roll_overrides,
+                    )
+                    op = "encounter"
+
+                if (
+                    session_id is not None
+                    and payload.get("status") == "ok"
+                    and isinstance(payload.get("state"), dict)
+                ):
+                    self._encounter_sessions[session_id] = copy.deepcopy(payload["state"])
+
             else:
                 return self._tool_error(f"Unknown tool: '{tool_name}'.")
-        except ValueError as exc:
+        except (ValueError, FileNotFoundError) as exc:
             return self._tool_error(str(exc))
 
         rendered = render_operation(op, payload, fmt=fmt)
@@ -464,9 +696,28 @@ class SRDMCPServer:
                 },
             )
 
-        prefix = "srd://card/"
-        if uri.startswith(prefix):
-            remainder = uri[len(prefix) :]
+        if uri == "srd://rules/coverage":
+            try:
+                rules = self._get_rules_store()
+            except FileNotFoundError as exc:
+                return _jsonrpc_error(req_id, -32002, str(exc))
+            cov = get_coverage_payload(rules)
+            return _jsonrpc_result(
+                req_id,
+                {
+                    "contents": [
+                        {
+                            "uri": uri,
+                            "mimeType": "application/json",
+                            "text": json.dumps(cov["summary"], ensure_ascii=False, indent=2),
+                        }
+                    ]
+                },
+            )
+
+        card_prefix = "srd://card/"
+        if uri.startswith(card_prefix):
+            remainder = uri[len(card_prefix) :]
             parts = remainder.split("/")
             if len(parts) != 2 or not parts[0] or not parts[1]:
                 return _jsonrpc_error(
@@ -485,6 +736,36 @@ class SRDMCPServer:
                             "uri": uri,
                             "mimeType": "text/markdown",
                             "text": card_md,
+                        }
+                    ]
+                },
+            )
+
+        rule_prefix = "srd://rule/"
+        if uri.startswith(rule_prefix):
+            remainder = uri[len(rule_prefix) :]
+            parts = remainder.split("/")
+            if len(parts) != 2 or not parts[0] or not parts[1]:
+                return _jsonrpc_error(
+                    req_id,
+                    -32602,
+                    f"Invalid rule URI '{uri}'. Expected format: srd://rule/<type>/<slug>",
+                )
+            try:
+                rules = self._get_rules_store()
+            except FileNotFoundError as exc:
+                return _jsonrpc_error(req_id, -32002, str(exc))
+            rule_obj = get_rule_resource(rules, parts[0], parts[1])
+            if rule_obj is None:
+                return _jsonrpc_error(req_id, -32002, f"Resource not found: {uri}")
+            return _jsonrpc_result(
+                req_id,
+                {
+                    "contents": [
+                        {
+                            "uri": uri,
+                            "mimeType": "application/json",
+                            "text": json.dumps(rule_obj, ensure_ascii=False, indent=2),
                         }
                     ]
                 },
@@ -539,27 +820,50 @@ def _coerce_bool(value: Any, name: str) -> bool:
     return value
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None, *, default_engine: bool = False) -> int:
+    prog = "srd-engine-mcp" if default_engine else "srd-mcp"
     parser = argparse.ArgumentParser(
-        prog="srd-mcp",
-        description="Stdio JSON-RPC 2.0 MCP server for the 5e 2024 (SRD 5.2) SQLite pack.",
+        prog=prog,
+        description="Stdio JSON-RPC 2.0 MCP server for the 5e 2024 (SRD 5.2) SQLite pack and Stage 2 rules engine.",
     )
     parser.add_argument(
         "--db",
         default=None,
         help="Path to srd2024.sqlite (overrides SRD2024_DB and default dist/srd2024.sqlite).",
     )
+    parser.add_argument(
+        "--rules",
+        default=None,
+        help="Path to rules.json (overrides SRD2024_RULES and default dist/rules.json).",
+    )
+    parser.add_argument(
+        "--engine",
+        action="store_true",
+        default=default_engine,
+        help="Advertise Stage 2 deterministic rules/character/encounter tools and resources in MCP discovery.",
+    )
     args = parser.parse_args(argv)
+
+    expose_engine = bool(args.engine) or _env_flag_enabled(ENV_ENGINE_VAR)
 
     try:
         with SRDStore(db_path=args.db) as store:
-            server = SRDMCPServer(store)
+            server = SRDMCPServer(
+                store,
+                rules_path=args.rules,
+                expose_engine_tools=expose_engine,
+            )
             return server.serve_stdio()
     except FileNotFoundError as exc:
-        print(f"[srd-mcp] {exc}", file=sys.stderr)
+        print(f"[{prog}] {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         return 0
+
+
+def main_engine(argv: Sequence[str] | None = None) -> int:
+    """Entry point for `bin/srd-engine-mcp` advertising all 8 Stage 1 + Stage 2 tools."""
+    return main(argv, default_engine=True)
 
 
 if __name__ == "__main__":

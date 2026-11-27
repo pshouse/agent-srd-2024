@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Zero-install executable wrapper for the 5e 2024 SRD + Stage 2 Rules Engine stdio MCP server."""
+
+from pathlib import Path
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = str(REPO_ROOT / "src")
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
+
+from srd2024.runtime.mcp import main_engine
+
+if __name__ == "__main__":
+    raise SystemExit(main_engine())

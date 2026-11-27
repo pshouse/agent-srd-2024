@@ -14,6 +14,8 @@ dependencies = []
 srd-build = "srd2024.compiler.__main__:main"
 srd = "srd2024.runtime.cli:main"
 srd-mcp = "srd2024.runtime.mcp:main"
+srd-rules-build = "srd2024.rules_compiler.__main__:main"
+srd-engine-mcp = "srd2024.runtime.mcp:main_engine"
 
 [tool.setuptools.packages.find]
 where = ["src"]

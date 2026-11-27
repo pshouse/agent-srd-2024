@@ -71,6 +71,42 @@ If you only have filesystem read tools and cannot run `bin/srd` or connect to `b
 
 ---
 
+## Stage 2: Neuro-Symbolic Playbook (Deterministic Rules Engine)
+
+Stage 2 layers a deterministic, zero-LLM 5e 2024 rules engine (`dist/rules.json`, `srd2024.engine`) on top of Stage 1 retrieval. Follow the neuro-symbolic division of labor: **you translate intent and narrate outcomes; Python computes every rule, roll, DC, modifier, and state transition.**
+
+### 1. Inspect Compiled Rules & Coverage Before Assuming Automation
+Call `srd_rule(id)` (or `bin/srd rule <id>`) or `srd_rule(coverage=true)` (or `bin/srd rule --coverage`) to check a rule's explicit coverage grade (`full` | `partial` | `narrative`) and `provenance.unmodeled_clauses`:
+- **`full`**: All combat/character mechanics are compiled and executed deterministically (all 8 weapon masteries, all 15 conditions, all 38 weapons, all 13 armor/shields, core combat spells & monsters).
+- **`partial`**: Core numeric mechanics (attacks, saves, damage, AC/HP, slots) run deterministically while listed `unmodeled_clauses` require GM/agent adjudication.
+- **`narrative`**: Exploration/social/divination/utility spells and mundane gear—the engine validates and logs use honestly without inventing mechanics.
+
+### 2. Compile & Validate Characters Deterministically (Never Hand-Calculate)
+Instead of calculating AC, HP, saves, weapon bonuses, or 2024 legality by hand, pass a `CharacterBuildSpec` JSON to `srd_compile_character(spec)` (or `bin/srd character <spec.json>`):
+- Enforces 2024 Background ASI (`+2/+1` or `+1/+1/+1` restricted to background abilities), point-buy / standard-array, Origin/General/Fighting-Style/Epic-Boon feats & prerequisites, species/subspecies traits, weapon mastery counts, and class spell lists/slots.
+- Returns structured `errors`, `warnings`, and an authoritative `statblock` ready to feed directly into `srd_encounter`.
+
+### 3. Run Combat Strictly Through `srd_encounter` & Narrate From Output
+Drive encounters with structured intents via `srd_encounter` (or `bin/srd encounter`):
+- **Supported intents:** `start_encounter`, `move`, `attack`, `cast_spell`, `dodge`, `dash`, `disengage`, `help`, `end_turn`.
+- **Stateless vs. session mode:** Pass `state` round-trip (CLI uses `--state` / `--out-state`) OR pass a `session_id` over MCP so `SRDMCPServer` caches the latest `EncounterState` in memory across turns.
+- **Narrate faithfully:** Base every tactical narration strictly on the returned `events`, `state_diff`, `legal_actions`, and `narrative_hooks`. Never override or fudge engine math.
+
+### 4. MCP Discovery Mode & Rules Path Override
+- Connect via **`bin/srd-engine-mcp`** (or `bin/srd-mcp --engine`, or env `SRD2024_ENGINE=1`) to advertise all **8 MCP tools** (`srd_search`, `srd_get`, `srd_list`, `srd_graph`, `srd_validate`, `srd_rule`, `srd_compile_character`, `srd_encounter`) plus `srd://rules/coverage` and `srd://rule/<type>/<slug>` resources.
+- Default `bin/srd-mcp` keeps Stage 1 5-tool discovery in `tools/list` while still accepting `tools/call` for all 8 tools.
+- Rules IR override order: `--rules <path>` -> `SRD2024_RULES` env var -> `<repo_root>/dist/rules.json`.
+
+### Stage 2 Tool & CLI Quick Reference
+
+| MCP Tool | CLI Equivalent | Purpose |
+|---|---|---|
+| `srd_rule` | `bin/srd rule [<id>] [--coverage]` | Inspect compiled Rules IR or global coverage summary |
+| `srd_compile_character` | `bin/srd character (<spec.json> \| --spec <json>)` | Validate & compile a 2024 PC spec into a derived statblock |
+| `srd_encounter` | `bin/srd encounter (--intent <json> \| <payload.json>) [--state S] [--out-state O]` | Advance a deterministic 5e 2024 encounter step |
+
+---
+
 ## Attribution (CC-BY-4.0)
 
 When quoting or summarizing rules from this pack, include this notice:
