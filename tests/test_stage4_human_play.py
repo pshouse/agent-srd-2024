@@ -257,6 +257,8 @@ class TestHumanMenuAndHud(unittest.TestCase):
 class TestInteractiveSessionsAndSeats(unittest.TestCase):
     """Per-seat resolution, 1-PC play, DM play, mixed seats, save/resume, and NL mode."""
 
+    _start_scenario_state = TestHumanMenuAndHud._start_scenario_state
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.rules = RulesStore()
@@ -489,6 +491,83 @@ class TestInteractiveSessionsAndSeats(unittest.TestCase):
 
         rep = replay_match(transcript, self.rules)
         self.assertTrue(rep["deterministic_match"], rep["diffs"])
+
+    # ------------------------------------------------------------------ #24 / #25: NL translator must not invent
+    def _nl_driver_replying(self, replies: dict[str, Any]) -> tuple[OpenAICompatDriver, list[dict[str, Any]]]:
+        """An NL driver whose mock reply is chosen by a keyword found in the player's line."""
+        calls: list[dict[str, Any]] = []
+
+        def _mock_transport(url: str, headers: dict[str, str], payload: dict[str, Any], timeout_s: float) -> dict[str, Any]:
+            calls.append(payload)
+            user_msg = payload["messages"][-1]["content"]
+            line = json.loads(user_msg.split("CONTEXT:\n", 1)[1].split("\n\n", 1)[0])["player_command"]
+            content = next(v for k, v in replies.items() if k.lower() in line.lower())
+            return {"choices": [{"message": {"content": content if isinstance(content, str) else json.dumps(content)}}],
+                    "usage": {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70}}
+
+        return OpenAICompatDriver("mock-nl", api_base="http://127.0.0.1:11434/v1", http_transport=_mock_transport), calls
+
+    def test_nl_remark_or_impossible_order_takes_no_action(self) -> None:
+        compiled, state = self._start_scenario_state("goblin-ambush", seed=0)
+        obs = build_observation(state, "pc-bram", compiled, {"party": [], "enemy": []}, [], {}, self.rules)
+        nl, calls = self._nl_driver_replying({
+            "got him": {"intent": None, "clarify": "That sounds like a remark, not an order. What should Bram do?"},
+            # fenced, with a stray control character: still read as a clarification
+            "block": "```json\n{\"intent\": null, \"clarify\": \"Bram has no Block action.\\u0007 Closest: [5] move next to Talia, or [8] Dodge.\"}\n```",
+            "javelin": {"intent": {"type": "attack", "actor_id": "pc-bram", "target_id": "goblin-1", "weapon": "javelin"},
+                        "rationale": "Javelin at Goblin Scout A."},
+        })
+        in_fn, out_fn, outputs = _make_scripted_io(["Got him!", "block for Talia", "throw a javelin at the goblin ahead"])
+        drv = HumanDriver(rules=self.rules, input_fn=in_fn, output_fn=out_fn, nl_driver=nl)
+        dec = drv.decide(obs)
+
+        # Only the explicit order became an action; the remark and the impossible request did nothing.
+        self.assertEqual(dec.intent, {"type": "attack", "actor_id": "pc-bram", "target_id": "goblin-1", "weapon": "javelin"})
+        self.assertEqual(len(calls), 3)
+        # Allies are in the translator's context (needed for "block for Talia" / "heal Lyra"); enemy HP/AC are not.
+        ctx = json.loads(calls[0]["messages"][-1]["content"].split("CONTEXT:\n", 1)[1].split("\n\n", 1)[0])
+        self.assertEqual([a["id"] for a in ctx["allies"]], ["pc-talia"])
+        self.assertEqual(ctx["allies"][0]["position"], {"x": 0, "y": 15})
+        self.assertTrue(all(set(e) == {"id", "name", "position", "distance_ft"} for e in ctx["enemies"]))
+        joined = "\n".join(outputs)
+        self.assertIn("[NL] No action taken. That sounds like a remark, not an order.", joined)
+        self.assertIn("[NL] No action taken. Bram has no Block action. Closest: [5] move next to Talia, or [8] Dodge.", joined)
+        self.assertNotIn("\x07", joined)
+        rejected = drv.drain_rejected_inputs()
+        self.assertEqual([r["input"] for r in rejected], ["Got him!", "block for Talia"])
+        self.assertTrue(all(r["reason"].startswith("No action taken:") for r in rejected))
+
+    def test_nl_translator_never_writes_party_chat(self) -> None:
+        compiled, state = self._start_scenario_state("goblin-ambush", seed=0)
+        obs = build_observation(state, "pc-bram", compiled, {"party": [], "enemy": []}, [], {}, self.rules)
+        order = {"intent": {"type": "dodge", "actor_id": "pc-bram"}, "rationale": "Dodge.",
+                 "table_talk": "Talia, stay behind me, it'll have to get past me first!"}
+        nl, _ = self._nl_driver_replying({"dodge": order})
+
+        # Translator-written chat is dropped...
+        in_fn, out_fn, _ = _make_scripted_io(["dodge"])
+        dec = HumanDriver(rules=self.rules, input_fn=in_fn, output_fn=out_fn, nl_driver=nl).decide(obs)
+        self.assertEqual(dec.intent, {"type": "dodge", "actor_id": "pc-bram"})
+        self.assertIsNone(dec.table_talk)
+        # ...while the player's own `say` still goes out, unchanged.
+        in_fn, out_fn, _ = _make_scripted_io(["say Watch my back!", "dodge"])
+        dec = HumanDriver(rules=self.rules, input_fn=in_fn, output_fn=out_fn, nl_driver=nl).decide(obs)
+        self.assertEqual(dec.table_talk, "Watch my back!")
+
+    def test_nl_system_prompt_forbids_substitution_and_chat(self) -> None:
+        from srd2024.arena.human import _build_nl_system_prompt, _extract_nl_clarification
+
+        prompt = _build_nl_system_prompt()
+        self.assertIn("Never substitute a different action", prompt)
+        self.assertIn('{"intent": null, "clarify":', prompt)
+        self.assertIn("Never speak for the player", prompt)
+        self.assertNotIn('"table_talk"', prompt)
+        # Clarification parsing: only intent null + a non-empty string counts; length is capped.
+        self.assertIsNone(_extract_nl_clarification('{"clarify": "no intent key"}'))
+        self.assertIsNone(_extract_nl_clarification('{"intent": null, "clarify": "   "}'))
+        self.assertIsNone(_extract_nl_clarification('{"intent": null, "clarify": 7}'))
+        self.assertLessEqual(len(_extract_nl_clarification(json.dumps({"intent": None, "clarify": "x" * 2000}))), 600)
+        self.assertEqual(_extract_nl_clarification('noise {"intent": null, "clarify": "Which goblin?"} noise'), "Which goblin?")
 
     def test_retry_feedback_handled_cleanly_on_invalid_human_move(self) -> None:
         # First human move exceeds 30 ft movement budget -> step() rejects -> HumanDriver receives retry_feedback and recovers!
