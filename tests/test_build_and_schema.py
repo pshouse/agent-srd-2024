@@ -20,6 +20,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from srd2024.compiler.build import SRD_ATTRIBUTION
 from tests.helpers import (
     BIN_BUILD,
     BIN_MCP,
@@ -117,7 +118,7 @@ class TestBuildAndCompleteness(unittest.TestCase):
             self.assertEqual(meta["upstream_database_version"], prov["upstream_database_version"])
             self.assertEqual(meta["license"], "CC-BY-4.0")
             self.assertEqual(meta["license_url"], prov["content_license"]["url"])
-            self.assertEqual(meta["attribution"], prov["content_license"]["attribution"])
+            self.assertEqual(meta["attribution"], SRD_ATTRIBUTION)
             self.assertEqual(meta["entity_count"], str(EXPECTED_ENTITY_COUNT))
             self.assertEqual(meta["dangling_ref_count"], "0")
             self.assertEqual(len(meta["source_hash"]), 64)
@@ -331,9 +332,13 @@ class TestGraphAndSchemaIntegrity(unittest.TestCase):
 class TestAttributionAndSkill(unittest.TestCase):
     """Criterion 10: CC-BY-4.0 SRD 5.2 attribution & skill/SKILL.md quality."""
 
+    def test_manifest_attribution_equals_official_statement(self) -> None:
+        """manifest.json attribution is the official SRD 5.2 statement."""
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["license"]["attribution"], SRD_ATTRIBUTION)
+
     def test_cc_by_4_attribution_in_all_required_locations(self) -> None:
-        prov = load_provenance()
-        expected_attr = prov["content_license"]["attribution"]
+        expected_attr = SRD_ATTRIBUTION
 
         # 1. SQLite meta
         with open_db_ro() as conn:
@@ -348,16 +353,15 @@ class TestAttributionAndSkill(unittest.TestCase):
 
         # 3. dist/cards/INDEX.md
         index_md = (CARDS_DIR / "INDEX.md").read_text(encoding="utf-8")
-        self.assertIn("SRD 5.2", index_md)
-        self.assertIn("Wizards of the Coast", index_md)
-        self.assertIn("creativecommons.org/licenses/by/4.0", index_md)
+        self.assertIn(expected_attr, index_md)
 
         # 4. README.md
         self.assertTrue(README_PATH.is_file(), "README.md missing")
         readme_md = README_PATH.read_text(encoding="utf-8")
-        self.assertIn("SRD 5.2", readme_md)
-        self.assertIn("Wizards of the Coast", readme_md)
-        self.assertIn("creativecommons.org/licenses/by/4.0", readme_md)
+        self.assertIn(expected_attr, readme_md)
+
+        # 5. skill/SKILL.md
+        self.assertIn(expected_attr, SKILL_PATH.read_text(encoding="utf-8"))
 
     def test_skill_md_quality(self) -> None:
         self.assertTrue(SKILL_PATH.is_file(), "skill/SKILL.md missing")

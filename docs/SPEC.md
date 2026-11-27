@@ -216,7 +216,7 @@ CREATE VIRTUAL TABLE entities_fts USING fts5(
 | `upstream_database_version` | Read from `data/raw/PROVENANCE.json` (`"7.10.0"`) |
 | `license` | `"CC-BY-4.0"` |
 | `license_url` | `"https://creativecommons.org/licenses/by/4.0/legalcode"` |
-| `attribution` | Exact string from `data/raw/PROVENANCE.json -> content_license.attribution` |
+| `attribution` | Official SRD 5.2 statement from `SRD_ATTRIBUTION` in `src/srd2024/compiler/build.py` |
 | `entity_count` | `"2029"` (computed at build time) |
 | `edge_count` | computed count of rows in `edges` |
 | `dangling_ref_count` | computed count of rows in `dangling_refs` (expected `"0"`) |

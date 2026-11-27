@@ -1,11 +1,11 @@
 ---
 name: srd-2024
-description: Query, bundle, filter, traverse, and validate D&D 5e 2024 (SRD 5.2) rules locally via MCP (`bin/srd-mcp`), CLI (`bin/srd`), or compiled Markdown cards (`dist/cards/`) using progressive disclosure and single-shot resolved bundles.
+description: Query, bundle, filter, traverse, and validate 5e 2024 (SRD 5.2) rules locally via MCP (`bin/srd-mcp`), CLI (`bin/srd`), or compiled Markdown cards (`dist/cards/`) using progressive disclosure and single-shot resolved bundles.
 ---
 
 # 5e 2024 SRD (v5.2) Agent Playbook
 
-Use this skill whenever answering D&D 5e 2024 (SRD 5.2) rules questions, building or validating characters, designing encounters, or resolving mechanical cross-references (weapon masteries, conditions, damage types, spells, feats, species, monsters).
+Use this skill whenever answering 5e 2024 (SRD 5.2) rules questions, building or validating characters, designing encounters, or resolving mechanical cross-references (weapon masteries, conditions, damage types, spells, feats, species, monsters).
 
 All queries run locally and read-only against `dist/srd2024.sqlite` (25 resource types, 2,029 entities, zero external server calls).
 
@@ -68,3 +68,11 @@ If you only have filesystem read tools and cannot run `bin/srd` or connect to `b
 - Pass `--format json` on the CLI or `format: "json"` on any MCP tool when structured JSON is preferred over Markdown.
 - MCP Resources: read `srd://meta` for provenance/catalog JSON and `srd://card/<type>/<slug>` for a single full Markdown card with YAML frontmatter.
 - Database override order: `--db <path>` -> `SRD2024_DB` env var -> `<repo_root>/dist/srd2024.sqlite`.
+
+---
+
+## Attribution (CC-BY-4.0)
+
+When quoting or summarizing rules from this pack, include this notice:
+
+This work includes material from the System Reference Document 5.2 (“SRD 5.2”) by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.

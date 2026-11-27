@@ -1,6 +1,6 @@
-# Agent-Native 5e 2024 SRD Pack
+# 5e 2024 SRD Agent Pack
 
-A zero-server, local-first **D&D 5e 2024 (SRD 5.2)** knowledge pack compiled for AI agents, CLIs, and static web frontends. Built from the upstream CC-BY-4.0 English dataset [`5e-bits/5e-srd-api`](https://github.com/5e-bits/5e-srd-api) (`packages/5e-database/src/2024/en`, 25 files, 2,029 entities), replacing Web 2.0 server infrastructure (MongoDB, Express, GraphQL, Docker) with deterministic offline artifacts and pure Python 3.11+ standard-library tooling.
+A zero-server, local-first **5e 2024 (SRD 5.2)** knowledge pack compiled for AI agents, CLIs, and static web frontends. Built from the upstream CC-BY-4.0 English dataset [`5e-bits/5e-srd-api`](https://github.com/5e-bits/5e-srd-api) (`packages/5e-database/src/2024/en`, 25 files, 2,029 entities), replacing Web 2.0 server infrastructure (MongoDB, Express, GraphQL, Docker) with deterministic offline artifacts and pure Python 3.11+ standard-library tooling.
 
 ## Key Capabilities
 
@@ -144,7 +144,7 @@ See [`docs/SPEC.md`](docs/SPEC.md) for the complete schema and contract specific
 
 ### Underlying SRD 5.2 Content (CC-BY-4.0)
 
-> This work includes material from the System Reference Document 5.2 ("SRD 5.2") by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.
+> This work includes material from the System Reference Document 5.2 (“SRD 5.2”) by Wizards of the Coast LLC, available at https://www.dndbeyond.com/srd. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0 International License, available at https://creativecommons.org/licenses/by/4.0/legalcode.
 
 ### Upstream Structured Dataset (MIT)
 
