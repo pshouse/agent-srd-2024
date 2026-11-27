@@ -20,16 +20,43 @@ export function parseRoute(hash) {
   if (pathOnly === "/") return { name: "explorer", unknown: false };
   const lower = pathOnly.toLowerCase();
   const later = /^\/(bundle|graph)(?:\/([^/]+))?$/.exec(lower);
-  if (later) return { name: "later", view: later[1], id: later[2] || "", unknown: false };
+  if (later) {
+    if (!later[2]) return { name: "later", view: later[1], id: "", unknown: false };
+    const id = safeEntityId(later[2]);
+    if (!id) return { name: "explorer", unknown: true };
+    return { name: "later", view: later[1], id, unknown: false };
+  }
   const match = /^\/e\/([a-z0-9-]+):([a-z0-9-]+)$/.exec(lower);
   if (!match) return { name: "explorer", unknown: true };
+  const id = safeEntityId(`${match[1]}:${match[2]}`);
+  if (!id) return { name: "explorer", unknown: true };
   return {
     name: "card",
     type: match[1],
     slug: match[2],
-    id: `${match[1]}:${match[2]}`,
+    id,
     unknown: false,
   };
+}
+
+const BLOCKED_IDS = new Set(["__proto__", "constructor", "prototype"]);
+const SAFE_PART = /^[a-z0-9-]{1,64}$/;
+
+/**
+ * Accept a canonical id or a bare slug. Reject prototype keys, slashes, and oversized ids.
+ * @param {string} raw
+ * @returns {string}
+ */
+export function safeEntityId(raw) {
+  const id = String(raw || "");
+  if (!id || id.length > 160) return "";
+  if (id.includes("/") || id.includes("\\") || id.includes("%") || id.includes(".")) return "";
+  const parts = id.split(":");
+  if (parts.length > 2) return "";
+  for (const part of parts) {
+    if (!SAFE_PART.test(part) || BLOCKED_IDS.has(part)) return "";
+  }
+  return id;
 }
 
 /**

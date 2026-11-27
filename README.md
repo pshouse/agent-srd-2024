@@ -200,6 +200,17 @@ Static web apps (interactive SRD explorers, cross-reference graph visualizers, r
 - `dist/web/graph.json` — compact directed graph (`nodes` map + sorted `[src_id, dst_id, rel, meta]` edge tuples) supporting client-side BFS, reverse lookups, and ego-graphs.
 - `dist/web/types/<type>.json` — 25 lazy-loaded per-type shards containing `card_body_md` and `refs`, enabling full browser-side resolved-bundle parity using the same token estimator (`Math.ceil(text.length / 4)`) and anti-hub rule (`tier === 1 || card_tokens_est <= 400`).
 
+The static explorer under `web/` loads a different set of those files on each route (gzip -9):
+
+| Route | What it fetches beyond the shell | Gzipped |
+|---|---|---:|
+| `#/` Explorer | `dist/manifest.json` and `dist/web/index.json` | 1,224 and 85,101 |
+| `#/e/<id>` Card | the explorer files, then one `dist/cards/<type>/<slug>.md` | a card is a few KB |
+| `#/bundle/<id>` Inspector | the explorer files, then `dist/web/graph.json` and only the type shards the bundle touches | graph 70,903; Longsword depth 1 adds 105,476 including that graph and five shards |
+| `#/graph/<id>` Graph | the explorer files, then `dist/web/graph.json` plus `web/lib/ego.js` and `web/lib/graph-view.js` | 70,903 + 2,289 + 3,250. No type shards |
+
+`graph.json` and the type shards are not requested on the explorer route. The graph view draws at most 80 nodes from that file.
+
 See [`docs/SPEC.md`](docs/SPEC.md) for the complete schema and contract specification.
 
 ---

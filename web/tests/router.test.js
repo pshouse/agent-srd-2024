@@ -59,6 +59,28 @@ test("boot and hashchange both read the hash through readHashState", () => {
   assert.match(app, /\n {2}render\(\);\n/);
 });
 
+test("hostile graph and card ids are not routes", () => {
+  for (const id of ["__proto__", "constructor", "prototype"]) {
+    const graph = parseRoute(`#/graph/${id}`);
+    assert.equal(graph.name, "explorer");
+    assert.equal(graph.unknown, true);
+    assert.equal(graph.id, undefined);
+    const card = parseRoute(`#/e/${id}:x`);
+    assert.equal(card.name, "explorer");
+    assert.equal(card.unknown, true);
+  }
+  const slashed = parseRoute("#/graph/spells%2Ffireball");
+  assert.equal(slashed.name, "explorer");
+  assert.equal(slashed.unknown, true);
+  assert.equal(JSON.stringify(slashed).includes("spells/fireball"), false);
+  const longId = `spells:${"a".repeat(500)}`;
+  const longRoute = parseRoute(`#/graph/${longId}`);
+  assert.equal(longRoute.name, "explorer");
+  assert.equal(longRoute.unknown, true);
+  assert.equal(parseRoute("#/graph/spells:fireball").id, "spells:fireball");
+  assert.equal(parseRoute("#/graph/").id, "");
+});
+
 test("asset URLs stay relative to the app under both base paths", () => {
   const pages = distAssetUrl(
     "https://example.github.io/agent-srd-2024/web/app.js",

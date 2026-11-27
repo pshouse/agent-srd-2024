@@ -479,6 +479,87 @@ export function packBundle(world, identifier, options = {}) {
   };
 }
 
+/** Relation kinds emitted by the compiler. Anything else fails closed. */
+export const KNOWN_EDGE_KINDS = new Set([
+  "ability_score",
+  "actions_damage_type",
+  "actions_dc_type",
+  "actions_spell",
+  "actions_spellcasting_ability",
+  "ammunition",
+  "armor",
+  "background",
+  "bonus_actions_damage_type",
+  "bonus_actions_dc_type",
+  "bonus_actions_spell",
+  "bonus_actions_spellcasting_ability",
+  "class",
+  "condition_immunity",
+  "contents",
+  "craft",
+  "damage_type",
+  "equipment",
+  "equipment_categories",
+  "equipment_category",
+  "equipment_options",
+  "feat",
+  "feature",
+  "form",
+  "legendary_actions_damage_type",
+  "legendary_actions_dc_type",
+  "legendary_actions_spell",
+  "legendary_actions_spellcasting_ability",
+  "level",
+  "multiclass_prerequisite",
+  "multiclass_proficiency",
+  "multiclass_proficiency_choice",
+  "prerequisite_ability",
+  "primary_ability",
+  "proficiency",
+  "proficiency_choices",
+  "reactions_damage_type",
+  "reactions_dc_type",
+  "reactions_spell",
+  "reactions_spellcasting_ability",
+  "reference",
+  "saving_throw",
+  "school",
+  "skill",
+  "special_abilities_damage_type",
+  "special_abilities_dc_type",
+  "special_abilities_spell",
+  "special_abilities_spellcasting_ability",
+  "species",
+  "spell",
+  "spellcasting_ability",
+  "starting_equipment",
+  "storage",
+  "subclass",
+  "subspecies",
+  "trait",
+  "two_handed_damage_type",
+  "utilize_dc_type",
+  "variant",
+  "weapon_mastery",
+  "weapon_property",
+]);
+
+const NODE_ID = /^[a-z0-9-]+:[a-z0-9-]+$/;
+
+/**
+ * @param {string[]} ids
+ * @returns {string[]}
+ */
+export function duplicateNodeIds(ids) {
+  const seen = new Set();
+  const dups = [];
+  for (const id of ids) {
+    if (seen.has(id)) dups.push(id);
+    else seen.add(id);
+  }
+  return dups;
+}
+
 /**
  * @param {unknown} graph
  * @param {{ counts?: { edges?: number } }} manifest
@@ -493,6 +574,11 @@ export function validateGraph(graph, manifest) {
   if (graph.schema_version !== "1") {
     errors.push(`graph.schema_version is ${graph.schema_version === undefined ? "missing" : JSON.stringify(graph.schema_version)} (expected "1")`);
   }
+  if (Array.isArray(graph.nodes)) {
+    const listed = graph.nodes.map((node) => (typeof node === "string" ? node : node && node.id)).filter((id) => typeof id === "string");
+    if (duplicateNodeIds(listed).length) errors.push("duplicate nodes");
+    errors.push("graph nodes must be an object");
+  }
   const nodes = graph.nodes && typeof graph.nodes === "object" && !Array.isArray(graph.nodes) ? graph.nodes : null;
   const nodeCount = nodes ? Object.keys(nodes).length : "unavailable";
   if (nodeCount !== 2029) errors.push(`graph node count is ${nodeCount} (expected 2029)`);
@@ -501,5 +587,34 @@ export function validateGraph(graph, manifest) {
   if (edgeCount !== expectedEdges) {
     errors.push(`graph.edges.length is ${edgeCount} (expected ${expectedEdges})`);
   }
+  if (!nodes || !Array.isArray(graph.edges)) return errors;
+
+  const recordIds = [];
+  let badIds = 0;
+  for (const [key, record] of Object.entries(nodes)) {
+    if (!NODE_ID.test(key)) badIds += 1;
+    const recordId = record && typeof record === "object" && typeof record.id === "string" ? record.id : key;
+    recordIds.push(recordId);
+  }
+  if (badIds) errors.push(`bad node id (${badIds})`);
+  const dups = duplicateNodeIds(recordIds);
+  if (dups.length) errors.push(`duplicate nodes: ${dups[0]}`);
+
+  const known = new Set(Object.keys(nodes));
+  let missingEndpoint = 0;
+  let unknownKind = 0;
+  let brokenEdge = 0;
+  for (const edge of graph.edges) {
+    if (!Array.isArray(edge) || edge.length < 3) {
+      brokenEdge += 1;
+      continue;
+    }
+    const [src, dst, rel] = edge;
+    if (!known.has(src) || !known.has(dst)) missingEndpoint += 1;
+    if (!KNOWN_EDGE_KINDS.has(rel)) unknownKind += 1;
+  }
+  if (brokenEdge) errors.push("edge is missing an endpoint or a kind");
+  if (missingEndpoint) errors.push(`edge endpoint is not a node (${missingEndpoint})`);
+  if (unknownKind) errors.push(`unknown edge kind (${unknownKind})`);
   return errors;
 }

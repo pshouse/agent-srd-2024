@@ -62,7 +62,15 @@ globalThis.document = {
 
 function countValidGraph(edges) {
   const nodes = {};
-  for (let i = 0; i < 2029; i += 1) nodes[`n-${i}`] = 1;
+  for (const edge of edges) {
+    nodes[edge[0]] = { name: edge[0] };
+    nodes[edge[1]] = { name: edge[1] };
+  }
+  let i = 0;
+  while (Object.keys(nodes).length < 2029) {
+    nodes[`pad:n${i}`] = 1;
+    i += 1;
+  }
   return { schema_version: "1", nodes, edges };
 }
 
