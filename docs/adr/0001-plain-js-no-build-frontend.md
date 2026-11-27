@@ -22,7 +22,7 @@ This is a choice over Vite + TypeScript and over Astro, for these reasons:
 ## Consequences
 
 - Routes are hashes (`#/` and `#/e/<type>:<slug>`), so the same files work under the Pages base path `/agent-srd-2024/` and from the repo root without a server rewrite.
-- GitHub Pages is not enabled in this milestone. There is no Pages workflow.
+- GitHub Pages is not enabled. ADR 0002 adds a `workflow_dispatch`-only Pages workflow and leaves Pages off until the CTO and Patrick sign off.
 - The page loads `../dist/` and links to `../bin/` and `../skill/` relative to `web/`. M3 has to publish that repository layout.
 
 ## Tests
@@ -39,4 +39,4 @@ node --disable-warning=ExperimentalWarning --test
 
 - M2: inspector and Copy Agent Context.
 - M2b: visual ego-graph capped at 80 nodes, hand-rolled SVG or canvas, no dependency. Patrick kept this milestone.
-- M3: Pages workflow, kept off until sign-off. Publish the repository root so `web/`, `dist/`, and `bin/` stay siblings. Do not set the Pages root to `web/`. A site rooted at `web/` cannot see `../dist` or `../bin`.
+- M3: Pages workflow, kept off until sign-off. See ADR 0002. Publish so `web/`, `dist/`, and `bin/` stay siblings. Do not set the Pages root to `web/`. A site rooted at `web/` cannot see `../dist` or `../bin`.

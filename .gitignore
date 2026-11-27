@@ -14,3 +14,6 @@ dist/*.sqlite-shm
 
 # OS
 .DS_Store
+
+# Pages staging tree (scripts/check_site.sh)
+_site/
