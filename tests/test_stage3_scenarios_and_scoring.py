@@ -213,11 +213,11 @@ def _make_action(
 EXPECTED_SCENARIO_MONSTER_GAPS: dict[str, list[str]] = {
     "goblin-warrior": ["bonus_action:nimble-escape"],
     "ghoul": [],
-    "ghast": ["special_ability:stench"],
+    "ghast": [],  # Stench executes (#39)
     "skeleton": [],
     "red-dragon-wyrmling": [],
-    "hell-hound": ["special_ability:pack-tactics"],
-    "magmin": ["bonus_action:ignited-illumination", "special_ability:death-burst"],
+    "hell-hound": [],  # Pack Tactics executes (#39)
+    "magmin": ["bonus_action:ignited-illumination"],  # Death Burst executes (#39)
 }
 
 
