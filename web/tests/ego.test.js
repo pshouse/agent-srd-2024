@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { duplicateNodeIds, validateGraph } from "../lib/bundle.js";
+import { duplicateNodeIds, KNOWN_EDGE_KINDS, validateGraph } from "../lib/bundle.js";
 import { GRAPH_NODE_CAP, indexAdjacency, layoutEgo, selectEgo } from "../lib/ego.js";
 import { buildCatalog } from "../lib/resolve.js";
 import { renderGraph } from "../lib/graph-view.js";
@@ -22,6 +22,13 @@ const adj = indexAdjacency(graph.edges);
 
 test("the shipped graph passes the stricter checks", () => {
   assert.deepEqual(validateGraph(graph, manifest), []);
+});
+
+test("the 61-kind allow-list matches graph.json", () => {
+  const kinds = new Set(graph.edges.map((edge) => edge[2]));
+  assert.equal(kinds.size, 61);
+  assert.equal(KNOWN_EDGE_KINDS.size, 61);
+  assert.deepEqual([...kinds].sort(), [...KNOWN_EDGE_KINDS].sort());
 });
 
 test("validation rejects a missing endpoint, an unknown kind, and a duplicate node", () => {
@@ -65,6 +72,34 @@ test("the cap keeps the root and reports how many neighbours were left out", () 
   const sword = selectEgo(adj, catalog.byId, "equipment:longsword", { hops: 1, direction: "both" });
   assert.equal(sword.hidden, 0);
   assert.ok(sword.neighbors.some((item) => item.id === "weapon-mastery-properties:sap"));
+});
+
+test("two-hop edges follow the path through the first hop", () => {
+  const edges = [
+    ["root:a", "hop:one", "class", null],
+    ["hop:one", "hop:two", "feature", null],
+  ];
+  const byId = new Map([
+    ["root:a", { id: "root:a", name: "Root", type: "classes", tier: 2 }],
+    ["hop:one", { id: "hop:one", name: "One", type: "features", tier: 2 }],
+    ["hop:two", { id: "hop:two", name: "Two", type: "features", tier: 2 }],
+  ]);
+  const selection = selectEgo(indexAdjacency(edges), byId, "root:a", { hops: 2, direction: "out" });
+  const layout = layoutEgo(selection);
+  const byTarget = new Map(layout.edges.map((edge) => [edge.target, edge.source]));
+  assert.equal(byTarget.get("hop:one"), "root:a");
+  assert.equal(byTarget.get("hop:two"), "hop:one");
+  assert.equal(layout.edges.some((edge) => edge.source === "root:a" && edge.target === "hop:two"), false);
+
+  const sword = selectEgo(adj, catalog.byId, "equipment:longsword", { hops: 2, direction: "out" });
+  const drawn = layoutEgo(sword);
+  const shown = new Set([sword.root.id, ...sword.neighbors.map((item) => item.id)]);
+  for (const edge of drawn.edges) {
+    const neighbor = sword.neighbors.find((item) => item.id === edge.target);
+    assert.equal(edge.source, neighbor.hop > 1 ? neighbor.via : sword.root.id);
+    assert.equal(shown.has(edge.source), true);
+    if (neighbor.hop > 1) assert.notEqual(edge.source, sword.root.id);
+  }
 });
 
 test("the same id lays out the same coordinates twice", () => {

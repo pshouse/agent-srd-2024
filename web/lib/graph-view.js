@@ -119,12 +119,22 @@ function draw(entity, selection, layout) {
     text.setAttribute("y", String(node.y + (node.side === "root" ? 28 : 20)));
     text.setAttribute("text-anchor", "middle");
     text.setAttribute("class", "g-label");
-    text.textContent = neighbor ? neighbor.name : entity.name;
+    const fullName = neighbor ? neighbor.name : entity.name;
+    text.textContent = selection.neighbors.length > 24 ? shortLabel(fullName) : fullName;
+    const tip = document.createElementNS(SVG_NS, "title");
+    tip.textContent = fullName;
+    link.append(tip);
     link.append(dot, text);
     svg.append(link);
   }
   wrap.append(svg);
   return wrap;
+}
+
+function shortLabel(name) {
+  const text = String(name || "");
+  if (text.length <= 18) return text;
+  return `${text.slice(0, 17)}\u2026`;
 }
 
 function list(selection) {

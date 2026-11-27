@@ -69,16 +69,43 @@ test("hostile graph and card ids are not routes", () => {
     assert.equal(card.name, "explorer");
     assert.equal(card.unknown, true);
   }
-  const slashed = parseRoute("#/graph/spells%2Ffireball");
-  assert.equal(slashed.name, "explorer");
-  assert.equal(slashed.unknown, true);
-  assert.equal(JSON.stringify(slashed).includes("spells/fireball"), false);
+  const split = parseRoute("#/graph/spells/fireball");
+  assert.equal(split.name, "explorer");
+  assert.equal(split.unknown, true);
+  for (const enc of ["%00", "%0a", "%1f", "%7f"]) {
+    const route = parseRoute(`#/bundle/chain${enc}mail`);
+    assert.equal(route.name, "explorer");
+    assert.equal(route.unknown, true);
+  }
   const longId = `spells:${"a".repeat(500)}`;
   const longRoute = parseRoute(`#/graph/${longId}`);
   assert.equal(longRoute.name, "explorer");
   assert.equal(longRoute.unknown, true);
   assert.equal(parseRoute("#/graph/spells:fireball").id, "spells:fireball");
   assert.equal(parseRoute("#/graph/").id, "");
+});
+
+test("every catalog id and name round-trips through the router", () => {
+  const index = JSON.parse(readFileSync(new URL("../../dist/web/index.json", import.meta.url), "utf8"));
+  assert.equal(index.entities.length, 2029);
+  for (const entity of index.entities) {
+    for (const view of ["bundle", "graph"]) {
+      const byId = parseRoute(`#/${view}/${encodeURIComponent(entity.id)}`);
+      assert.equal(byId.name, "later", entity.id);
+      assert.equal(byId.view, view);
+      assert.equal(byId.id, entity.id);
+      const byName = parseRoute(`#/${view}/${encodeURIComponent(entity.name)}`);
+      assert.equal(byName.name, "later", entity.name);
+      assert.equal(byName.view, view);
+      assert.equal(byName.id, entity.name.toLowerCase());
+    }
+    const card = parseRoute(`#/e/${encodeURIComponent(entity.id)}`);
+    assert.equal(card.name, "card", entity.id);
+    assert.equal(card.id, entity.id);
+  }
+  assert.equal(parseRoute("#/bundle/chain%20mail").id, "chain mail");
+  assert.equal(parseRoute("#/bundle/wand%20of%20wonder").id, "wand of wonder");
+  assert.equal(parseRoute("#/bundle/Dragon%27s%20Breath").id, "dragon's breath");
 });
 
 test("asset URLs stay relative to the app under both base paths", () => {

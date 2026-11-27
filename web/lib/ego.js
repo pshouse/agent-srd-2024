@@ -48,8 +48,8 @@ export function selectEgo(adj, byId, rootId, options = {}) {
   const directIn = collect(adj.incoming, rootId);
   const discovered = new Map();
 
-  if (direction !== "in") addSide(discovered, directOut, 1, "out", byId, adj.degree);
-  if (direction !== "out") addSide(discovered, directIn, 1, "in", byId, adj.degree);
+  if (direction !== "in") addSide(discovered, directOut, 1, "out", byId, adj.degree, rootId, rootId);
+  if (direction !== "out") addSide(discovered, directIn, 1, "in", byId, adj.degree, rootId, rootId);
   for (const item of discovered.values()) {
     if (item.out && item.in) item.side = "mutual";
   }
@@ -57,8 +57,8 @@ export function selectEgo(adj, byId, rootId, options = {}) {
   if (hops === 2) {
     const hop1 = [...discovered.values()];
     for (const item of hop1) {
-      if (item.side !== "in") addSide(discovered, collect(adj.outgoing, item.id), 2, "out", byId, adj.degree, rootId);
-      if (item.side !== "out") addSide(discovered, collect(adj.incoming, item.id), 2, "in", byId, adj.degree, rootId);
+      if (item.side !== "in") addSide(discovered, collect(adj.outgoing, item.id), 2, "out", byId, adj.degree, item.id, rootId);
+      if (item.side !== "out") addSide(discovered, collect(adj.incoming, item.id), 2, "in", byId, adj.degree, item.id, rootId);
     }
     for (const item of discovered.values()) {
       if (item.out && item.in) item.side = "mutual";
@@ -73,13 +73,17 @@ export function selectEgo(adj, byId, rootId, options = {}) {
   if (picked.length < GRAPH_NODE_CAP - 1) {
     picked.push(...roundRobin(inbound, GRAPH_NODE_CAP - 1 - picked.length));
   }
-  const pickedIds = new Set(picked.map((item) => item.id));
-  const hidden = pool.filter((item) => !pickedIds.has(item.id)).length;
+  const present = new Set([root.id]);
+  for (const item of [...picked].sort((a, b) => a.hop - b.hop)) {
+    if (present.has(item.via || root.id)) present.add(item.id);
+  }
+  const connected = picked.filter((item) => present.has(item.id));
+  const hidden = pool.length - connected.length;
   return {
     root: { id: root.id, name: root.name || root.id, type: root.type || "", tier: root.tier || 3 },
-    neighbors: picked,
+    neighbors: connected,
     total: pool.length,
-    shown: picked.length,
+    shown: connected.length,
     hidden,
     cap: GRAPH_NODE_CAP,
   };
@@ -104,9 +108,9 @@ function collect(map, id) {
   return rows;
 }
 
-function addSide(discovered, rows, hop, side, byId, degree, rootId) {
+function addSide(discovered, rows, hop, side, byId, degree, parentId, skipId) {
   for (const row of rows) {
-    if (row.id === rootId) continue;
+    if (row.id === skipId) continue;
     let item = discovered.get(row.id);
     if (!item) {
       const entity = byId.get(row.id);
@@ -117,6 +121,7 @@ function addSide(discovered, rows, hop, side, byId, degree, rootId) {
         tier: entity && entity.tier ? entity.tier : 3,
         hop,
         rel: row.rel,
+        via: parentId,
         degree: degree.get(row.id) || 0,
         side,
         out: side !== "in",
@@ -127,6 +132,7 @@ function addSide(discovered, rows, hop, side, byId, degree, rootId) {
       item.hop = hop;
       item.rel = row.rel;
       item.side = side;
+      item.via = parentId;
     }
     if (side === "in") item.in = true;
     else item.out = true;
@@ -186,10 +192,24 @@ export function layoutEgo(selection) {
   const left = selection.neighbors.filter((item) => item.side === "in");
   nodes.push(...placeArc(right, cx, cy, 0));
   nodes.push(...placeArc(left, cx, cy, Math.PI));
-  const edges = selection.neighbors.map((item) => {
-    const placed = nodes.find((node) => node.id === item.id);
-    return { source: selection.root.id, target: item.id, rel: item.rel, side: item.side, x1: cx, y1: cy, x2: placed.x, y2: placed.y };
-  });
+  const placed = new Map(nodes.map((node) => [node.id, node]));
+  const edges = [];
+  for (const item of selection.neighbors) {
+    const sourceId = item.hop > 1 && item.via ? item.via : selection.root.id;
+    const source = placed.get(sourceId);
+    const target = placed.get(item.id);
+    if (!source || !target) continue;
+    edges.push({
+      source: sourceId,
+      target: item.id,
+      rel: item.rel,
+      side: item.side,
+      x1: source.x,
+      y1: source.y,
+      x2: target.x,
+      y2: target.y,
+    });
+  }
   return { width: 940, height: 600, nodes, edges };
 }
 
