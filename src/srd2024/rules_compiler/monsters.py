@@ -331,6 +331,27 @@ def _parse_monster_action(act: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Traits with no effect in the engine's model: a 2D combat grid with no water, vertical terrain, vision rules,
+# objects or social interaction. Everything else in `special_abilities` is graded as unmodeled (#39). Keep this
+# list conservative: when in doubt, leave a trait out so it's reported.
+_DESCRIPTIVE_TRAITS = frozenset({
+    "amphibious", "limited amphibiousness", "water breathing", "hold breath",
+    "spider climb", "web walker", "ice walk", "earth glide", "tunneler",
+    "standing leap", "running leap", "jumper", "beast of burden",
+    "illumination", "sense magic", "treasure sense", "iron scent", "ethereal sight", "divine awareness",
+    "inscrutable", "mimicry", "speak with beasts and plants", "shark telepathy", "telepathic bond", "probing telepathy",
+})
+
+
+def _trait_key(name: str) -> str:
+    """'Legendary Resistance (3/Day, or 4/Day in Lair)' -> 'legendary resistance'."""
+    return name.split(" (")[0].strip().lower()
+
+
+def _clause_slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", _trait_key(name)).strip("-")
+
+
 def _compile_monster(rec: dict[str, Any]) -> dict[str, Any]:
     slug = rec["index"]
     eid = f"monsters:{slug}"
@@ -408,6 +429,16 @@ def _compile_monster(rec: dict[str, Any]) -> dict[str, Any]:
         unmodeled.append("legendary_actions")
     if special_damage_traits:
         unmodeled.append("conditional_damage_traits")
+    # #39: the engine never executes stat-block traits, bonus actions or reactions (no reaction system yet: #33/#38).
+    # Each one is listed by name so agents can see exactly what isn't automated. The exception is a short set of
+    # traits that can't affect this engine's 2D, combat-only model (water, climbing, senses, communication, lore).
+    for sa in special_abilities:
+        if _trait_key(sa["name"]) not in _DESCRIPTIVE_TRAITS:
+            unmodeled.append(f"special_ability:{_clause_slug(sa['name'])}")
+    for b in bonus_actions:
+        unmodeled.append(f"bonus_action:{_clause_slug(b['name'])}")
+    for r in reactions:
+        unmodeled.append(f"reaction:{_clause_slug(r['name'])}")
 
     coverage = "full" if not unmodeled else "partial"
 
