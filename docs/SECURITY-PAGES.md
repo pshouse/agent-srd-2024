@@ -7,9 +7,25 @@ Pages is **not enabled**. The workflow in `.github/workflows/pages.yml` is `work
 The site is static. There is no application server, no account system, and no browser call to a third party.
 
 - **Untrusted data is our own generated bundles.** `dist/` is produced by this repository's compiler. The browser still treats card Markdown and JSON fields as data that must not become HTML. The page renders Markdown with `html: false` and puts search hits in `textContent`. A bad card must not run a script.
-- **Supply chain via Actions.** The workflows pin every action to a full commit SHA. They add no repository secrets. The Pages job's token can write Pages and nothing else; CI can only read the repo.
-- **Accidental publication.** The upload is an allowlist (`scripts/site_files.py`), not a copy of the repository. The SQLite database, `src/`, tests, `.git`, design mocks, and `mock-fonts.css` are not on that list. The job refuses the upload if `_site` contains anything else, a file over 5 MB, a `.env` / key / pem-like file, or a manifest whose `dataset_id` or counts do not match the published index and graph.
+- **Supply chain via Actions.** The workflows pin every action to a full commit SHA. They add no repository secrets. The build job can only read the repo. The deploy job can write Pages and request an OIDC token. CI can only read the repo.
+- **Accidental publication.** The upload is an allowlist (`scripts/site_files.py`), not a copy of the repository. The SQLite database, `src/`, tests, `.git`, design mocks, and `mock-fonts.css` are not on that list. The build job refuses the upload if `_site` contains anything else, a file over 5 MB, a `.env` / key / pem-like file, or a manifest whose `dataset_id` or counts do not match the published index and graph.
 - **Trademark and attribution.** The published footer keeps the official SRD 5.2 attribution and the "Independent project, not an official product" line. The site does not add a Wizards of the Coast disclaimer beyond that attribution.
+
+## Permissions
+
+The workflow token starts at `permissions: {}`. A job that does not set its own permissions inherits that empty set.
+
+| Job | Permissions | Environment |
+| --- | --- | --- |
+| `main-only` | none (inherits `{}`) | none |
+| `build` | `contents: read` | none |
+| `deploy` | `pages: write`, `id-token: write` | `github-pages` |
+
+`build` checks out the repo, runs the tests, assembles `_site`, runs `scripts/check_site.sh`, and uploads one artifact named `github-pages`. It does not get `pages` or `id-token`.
+
+`deploy` is the only job with the `github-pages` environment, so the required reviewer gates that job and not the build. It has `needs: build`. `actions/configure-pages` runs there because it calls the Pages API. `actions/deploy-pages` runs there because publishing needs `pages: write` and the OIDC token from `id-token: write`.
+
+`actions: read` is not granted. `actions/deploy-pages` v4.0.1 stopped listing artifacts with `GET /repos/{owner}/{repo}/actions/runs/{run_id}/artifacts`, which is the call that needed `actions: read`. v5.0.1 calls `@actions/artifact` `listArtifacts()` with no `findBy` option, so the client uses the Actions results service (`POST {ACTIONS_RESULTS_URL}/twirp/github.actions.results.api.v1.ArtifactService/ListArtifacts`) and the runtime token. The upload in run 45932195143 finalized artifact `github-pages` (id 15169096132, 1,152,392 bytes) at 03:08:28.722Z. At 03:08:29.160Z the deploy step, still in that job, logged `Found 0 artifact(s)` and threw `No artifacts named "github-pages"` from `getArtifactMetadata`. It did not log `Listing artifact metadata failed`. The list call succeeded and returned an empty set. That is the same-job race in [actions/deploy-pages#451](https://github.com/actions/deploy-pages/issues/451), with the same pins (`upload-pages-artifact` v5.0.0, `deploy-pages` v5.0.1). A missing `actions: read` grant would not turn a successful empty list into a hit. The upload name and `artifact_name` are both `github-pages`, which is also the default for both pinned actions.
 
 ## Kill switch
 
@@ -76,6 +92,20 @@ gh workflow run pages.yml --ref v1.2.3
 
 Do not dispatch until Pages is supposed to be on. Dispatching does not by itself enable Pages.
 
+## Drill notes
+
+The reviewer approves the `deploy` job. `build` does not use the `github-pages` environment, so the artifact can already be uploaded when the review request appears.
+
+Kill-switch drill, once Pages is allowed to be on:
+
+1. Dispatch from `main` (`gh workflow run pages.yml --ref main`).
+2. Approve the `github-pages` environment on the `deploy` job.
+3. Confirm `/`, `/web/`, and `/dist/manifest.json` return 200.
+4. Run the kill switch above.
+5. Confirm those three URLs return 404.
+
+If `Deploy Pages` fails after `build` has uploaded `github-pages`, re-run the `deploy` job only. Re-running the whole workflow runs `build` again and uploads a second artifact of that name into the same run. `actions/deploy-pages` then fails with `Multiple artifacts named "github-pages" were unexpectedly found`, and that run cannot be deployed.
+
 ## Pre-enable checklist
 
 Pages stays off until every line below is done.
@@ -88,7 +118,7 @@ Pages stays off until every line below is done.
 
 ### CTO
 
-- [ ] Kill-switch drill: enable Pages, dispatch from `main`, confirm `/`, `/web/`, and `/dist/manifest.json` return 200, run the kill switch, confirm those three URLs return 404.
+- [ ] Kill-switch drill, as written in Drill notes: enable Pages, dispatch from `main`, approve `deploy`, confirm `/`, `/web/`, and `/dist/manifest.json` return 200, run the kill switch, confirm those three URLs return 404.
 - [ ] Sign off, together with Patrick, before the site is left published.
 
 ## Who can dispatch
