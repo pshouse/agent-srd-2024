@@ -1010,5 +1010,290 @@ class TestCombatEngineMutantKills(unittest.TestCase):
         self.assertIsNone(clr_par["concentration"], "Paralyzed (implies Incapacitated) MUST break concentration")
 
 
+class TestHeroicInspirationAndSpellHooks(unittest.TestCase):
+    """Verify 5e 2024 Heroic Inspiration (Resourceful), `reroll` intent, and rich spell narrative hooks."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.rules = RulesStore()
+        cls.human_fighter = _make_fighter(
+            cls.rules,
+            name="Bram",
+            level=5,
+            weapons=["longsword", "greatsword", "battleaxe"],
+            mastery_weapons=["longsword", "greatsword", "battleaxe"],
+        )
+        # Non-Human (Elf) Wizard with ray-of-frost, magic-missile, shield, fireball.
+        wiz_spec: dict[str, Any] = {
+            "name": "Talia",
+            "species": "elf",
+            "subspecies": "elven-lineage-high-elf",
+            "background": "sage",
+            "background_asi": {"int": 2, "con": 1},
+            "origin_feat": "magic-initiate",
+            "class": "wizard",
+            "subclass": "evoker",
+            "level": 5,
+            "ability_method": "standard_array",
+            "base_abilities": {"str": 8, "dex": 13, "con": 14, "int": 15, "wis": 12, "cha": 10},
+            "asi_choices": [{"level": 4, "type": "asi", "increases": {"int": 2}}],
+            "equipment": {"armor": None, "shield": False, "weapons": ["quarterstaff"]},
+            "cantrips": ["ray-of-frost", "fire-bolt", "prestidigitation"],
+            "prepared_spells": ["fireball", "shield", "magic-missile", "misty-step", "hold-person", "false-life"],
+            "hp_method": "fixed",
+        }
+        w_res = compile_character(wiz_spec, cls.rules)
+        assert w_res["valid"], f"Wizard fixture invalid: {w_res['errors']}"
+        cls.elf_wizard = w_res["statblock"]
+        cls.human_cleric = _make_cleric(cls.rules, name="Dorian", level=5)
+
+    def test_resourceful_initializes_heroic_inspiration_for_human_only_and_honors_override(self) -> None:
+        st = _start(
+            self.rules,
+            [
+                {"id": "pc-human", "side": "party", "statblock": self.human_fighter, "position": {"x": 0, "y": 0}},
+                {"id": "pc-elf", "side": "party", "statblock": self.elf_wizard, "position": {"x": 0, "y": 5}},
+                {"id": "pc-elf-ovr", "side": "party", "statblock": self.elf_wizard, "position": {"x": 0, "y": 10}, "heroic_inspiration": True},
+                {"id": "pc-human-ovr", "side": "party", "statblock": self.human_fighter, "position": {"x": 0, "y": 15}, "heroic_inspiration": False},
+                {"id": "gob-1", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 10, "y": 0}},
+            ],
+        )
+        self.assertIs(st["combatants"]["pc-human"]["heroic_inspiration"], True)
+        self.assertIs(st["combatants"]["pc-elf"]["heroic_inspiration"], False)
+        self.assertIs(st["combatants"]["pc-elf-ovr"]["heroic_inspiration"], True)
+        self.assertIs(st["combatants"]["pc-human-ovr"]["heroic_inspiration"], False)
+        self.assertIs(st["combatants"]["gob-1"]["heroic_inspiration"], False)
+        self.assertIsNone(st["pending_reroll"])
+        self.assertEqual(check_state_invariants(st), [])
+
+        # Invariant checker catches non-bool heroic_inspiration.
+        bad = copy.deepcopy(st)
+        bad["combatants"]["pc-human"]["heroic_inspiration"] = "yes"
+        violations = check_state_invariants(bad)
+        self.assertTrue(any("invalid_heroic_inspiration" in v for v in violations), violations)
+
+    def test_missed_attack_populates_pending_reroll_and_reroll_turns_miss_into_hit_with_mastery(self) -> None:
+        st = _start(
+            self.rules,
+            [
+                {"id": "pc-1", "side": "party", "statblock": self.human_fighter, "position": {"x": 0, "y": 0}},
+                {"id": "gob-1", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 5, "y": 0}},
+            ],
+        )
+        st["combatants"]["gob-1"]["hp"] = 30
+        st["combatants"]["gob-1"]["hp_max"] = 30
+        max_slots = capture_initial_max_slots(st)
+
+        # Missed Greatsword attack (Graze mastery applies 4 damage on miss, leaving goblin at 26 HP!).
+        r_miss = step(
+            st,
+            {"type": "attack", "actor_id": "pc-1", "target_id": "gob-1", "weapon": "greatsword", "use_mastery": True},
+            self.rules,
+            roll_overrides=[2],  # 2 + 7 = 9 vs AC 15 -> MISS + Graze 4 dmg
+        )
+        self.assertEqual(r_miss["status"], "ok")
+        self.assertEqual(r_miss["state"]["combatants"]["gob-1"]["hp"], 26)
+        self.assertTrue(r_miss["state"]["combatants"]["pc-1"]["heroic_inspiration"])
+        pending = r_miss["state"]["pending_reroll"]
+        self.assertIsInstance(pending, dict)
+        self.assertEqual(pending["actor_id"], "pc-1")
+        self.assertEqual(pending["kind"], "attack")
+        self.assertEqual(pending["previous_d20"], 2)
+        self.assertEqual(pending["previous_total"], 9)
+        self.assertEqual(pending["target_ac"], 15)
+        self.assertEqual(pending["target_id"], "gob-1")
+        self.assertEqual(pending["label"], "Greatsword")
+        self.assertTrue(r_miss["legal_actions"]["can_reroll"])
+        self.assertEqual(r_miss["legal_actions"]["reroll_hint"]["previous_total"], 9)
+        self.assertEqual(r_miss["legal_actions"]["reroll_hint"]["target_ac"], 15)
+
+        # Reroll via Heroic Inspiration rolls back Graze damage cleanly (back to 30 HP) and hits!
+        draw_before_reroll = r_miss["state"]["rng"]["draw_index"]
+        r_hit = step(
+            r_miss["state"],
+            {"type": "reroll", "actor_id": "pc-1"},
+            self.rules,
+            roll_overrides=[16, 5, 4],  # 16 + 7 = 23 HIT, 2d6 (5+4) + 4 = 13 dmg -> 30 - 13 = 17 HP (NOT 26 - 13 = 13!)
+        )
+        self.assertEqual(r_hit["status"], "ok")
+        self.assertFalse(r_hit["state"]["combatants"]["pc-1"]["heroic_inspiration"])
+        self.assertIsNone(r_hit["state"]["pending_reroll"])
+        self.assertFalse(r_hit["legal_actions"]["can_reroll"])
+        self.assertIsNone(r_hit["legal_actions"]["reroll_hint"])
+        self.assertGreaterEqual(r_hit["state"]["rng"]["draw_index"], draw_before_reroll)
+        self.assertEqual(r_hit["state"]["combatants"]["gob-1"]["hp"], 17)
+        self.assertEqual(r_hit["events"][0]["type"], "heroic_inspiration_spent")
+        self.assertEqual(r_hit["events"][0]["previous_d20"], 2)
+        self.assertIn("Heroic Inspiration", r_hit["narrative_hooks"][0])
+        self.assertEqual(check_state_invariants(r_hit["state"], prev_state=r_miss["state"], initial_max_slots=max_slots), [])
+
+        # Also verify live PRNG draw_index strictly increases & mastery triggers (Longsword Sap) on reroll.
+        r_miss_sap = step(
+            st,
+            {"type": "attack", "actor_id": "pc-1", "target_id": "gob-1", "weapon": "longsword", "use_mastery": True},
+            self.rules,
+            roll_overrides=[1],  # Nat 1 miss
+        )
+        self.assertEqual(r_miss_sap["status"], "ok")
+        self.assertTrue(r_miss_sap["legal_actions"]["can_reroll"])
+        idx_before = r_miss_sap["state"]["rng"]["draw_index"]
+        # Live PRNG reroll (no overrides) MUST advance draw_index monotonically!
+        r_live = step(r_miss_sap["state"], {"type": "reroll", "actor_id": "pc-1"}, self.rules)
+        self.assertEqual(r_live["status"], "ok")
+        self.assertGreater(r_live["state"]["rng"]["draw_index"], idx_before)
+        self.assertFalse(r_live["state"]["combatants"]["pc-1"]["heroic_inspiration"])
+        self.assertIsNone(r_live["state"]["pending_reroll"])
+
+        # Deterministic hit reroll with Longsword triggers Sap mastery!
+        r_sap_hit = step(
+            r_miss_sap["state"],
+            {"type": "reroll", "actor_id": "pc-1"},
+            self.rules,
+            roll_overrides=[15, 6],
+        )
+        self.assertEqual(r_sap_hit["status"], "ok")
+        self.assertTrue(any(e.get("type") == "mastery_triggered" and e.get("mastery") == "sap" for e in r_sap_hit["events"]))
+        self.assertTrue(any(e.get("kind") == "sap" for e in r_sap_hit["state"]["combatants"]["gob-1"]["active_effects"]))
+
+    def test_reroll_rejected_on_second_use_or_after_move_or_end_turn(self) -> None:
+        st = _start(
+            self.rules,
+            [
+                {"id": "pc-1", "side": "party", "statblock": self.human_fighter, "position": {"x": 0, "y": 0}},
+                {"id": "gob-1", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 5, "y": 0}},
+            ],
+        )
+        # Before any miss: reroll is rejected with untouched state.
+        before_0 = copy.deepcopy(st)
+        r_none = step(st, {"type": "reroll", "actor_id": "pc-1"}, self.rules)
+        self.assertEqual(r_none["status"], "invalid_intent")
+        self.assertEqual(r_none["state"], before_0)
+        self.assertEqual(st, before_0)
+
+        # Miss -> populates pending_reroll.
+        r_miss = step(
+            st,
+            {"type": "attack", "actor_id": "pc-1", "target_id": "gob-1", "weapon": "longsword", "use_mastery": True},
+            self.rules,
+            roll_overrides=[2],
+        )
+        self.assertTrue(r_miss["legal_actions"]["can_reroll"])
+
+        # 1. Spending reroll once works; a SECOND reroll immediately after MUST return invalid_intent.
+        r_first = step(r_miss["state"], {"type": "reroll", "actor_id": "pc-1"}, self.rules, roll_overrides=[2])
+        self.assertEqual(r_first["status"], "ok")
+        self.assertFalse(r_first["state"]["combatants"]["pc-1"]["heroic_inspiration"])
+        self.assertIsNone(r_first["state"]["pending_reroll"])
+        before_second = copy.deepcopy(r_first["state"])
+        r_second = step(r_first["state"], {"type": "reroll", "actor_id": "pc-1"}, self.rules)
+        self.assertEqual(r_second["status"], "invalid_intent")
+        self.assertEqual(r_second["state"], before_second)
+
+        # 2. Moving after a miss clears pending_reroll -> subsequent reroll returns invalid_intent.
+        r_moved = step(r_miss["state"], {"type": "move", "actor_id": "pc-1", "to": {"x": 0, "y": 5}}, self.rules)
+        self.assertEqual(r_moved["status"], "ok")
+        self.assertIsNone(r_moved["state"]["pending_reroll"])
+        self.assertFalse(r_moved["legal_actions"]["can_reroll"])
+        before_after_move = copy.deepcopy(r_moved["state"])
+        r_bad_move = step(r_moved["state"], {"type": "reroll", "actor_id": "pc-1"}, self.rules)
+        self.assertEqual(r_bad_move["status"], "invalid_intent")
+        self.assertEqual(r_bad_move["state"], before_after_move)
+
+        # 3. Ending turn after a miss clears pending_reroll -> subsequent reroll returns invalid_intent.
+        r_ended = step(r_miss["state"], {"type": "end_turn", "actor_id": "pc-1"}, self.rules)
+        self.assertEqual(r_ended["status"], "ok")
+        self.assertIsNone(r_ended["state"]["pending_reroll"])
+        before_after_end = copy.deepcopy(r_ended["state"])
+        r_bad_end = step(r_ended["state"], {"type": "reroll", "actor_id": "pc-1"}, self.rules)
+        self.assertEqual(r_bad_end["status"], "invalid_intent")
+        self.assertEqual(r_bad_end["state"], before_after_end)
+
+    def test_spell_attack_reroll_and_rich_spell_narrative_hooks(self) -> None:
+        st = _start(
+            self.rules,
+            [
+                {
+                    "id": "wiz-1",
+                    "side": "party",
+                    "statblock": self.elf_wizard,
+                    "position": {"x": 0, "y": 0},
+                    "heroic_inspiration": True,
+                },
+                {"id": "clr-1", "side": "party", "statblock": self.human_cleric, "position": {"x": 0, "y": 5}},
+                {"id": "gob-1", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 20, "y": 0}},
+                {"id": "gob-2", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 25, "y": 0}},
+            ],
+        )
+        st["combatants"]["gob-1"]["hp"] = 50
+        st["combatants"]["gob-1"]["hp_max"] = 50
+        st["combatants"]["gob-2"]["hp"] = 50
+        st["combatants"]["gob-2"]["hp_max"] = 50
+        st["combatants"]["wiz-1"]["hp"] = 10
+
+        # 1. Ray of Frost MISS -> emits miss hook & sets pending_reroll (spell_attack).
+        r_rof_miss = step(
+            st,
+            {"type": "cast_spell", "actor_id": "wiz-1", "spell": "ray-of-frost", "target_ids": ["gob-1"]},
+            self.rules,
+            roll_overrides=[2],  # 2 + 6 = 8 vs AC 15 -> MISS
+        )
+        self.assertEqual(r_rof_miss["status"], "ok")
+        self.assertTrue(any("misses" in h and "Ray of Frost" in h for h in r_rof_miss["narrative_hooks"]), r_rof_miss["narrative_hooks"])
+        self.assertTrue(r_rof_miss["legal_actions"]["can_reroll"])
+        self.assertEqual(r_rof_miss["state"]["pending_reroll"]["kind"], "spell_attack")
+
+        # Reroll Ray of Frost -> HIT with cold damage & speed reduction hook!
+        r_rof_hit = step(
+            r_rof_miss["state"],
+            {"type": "reroll", "actor_id": "wiz-1"},
+            self.rules,
+            roll_overrides=[16, 6, 5],  # 16 + 6 = 22 vs AC 15 HIT, 2d8 (cantrip L5) = 11 cold
+        )
+        self.assertEqual(r_rof_hit["status"], "ok")
+        self.assertTrue(any("Heroic Inspiration" in h for h in r_rof_hit["narrative_hooks"]))
+        self.assertTrue(any("hits" in h and "Ray of Frost" in h and "cold damage" in h for h in r_rof_hit["narrative_hooks"]), r_rof_hit["narrative_hooks"])
+
+        # 2. Magic Missile -> emits force damage hook (and Shield block hook when shielded).
+        r_mm = step(
+            st,
+            {"type": "cast_spell", "actor_id": "wiz-1", "spell": "magic-missile", "slot_level": 1, "target_ids": ["gob-1"]},
+            self.rules,
+            roll_overrides=[3, 2, 4],
+        )
+        self.assertEqual(r_mm["status"], "ok")
+        self.assertTrue(any("Magic Missile" in h and "force damage" in h for h in r_mm["narrative_hooks"]), r_mm["narrative_hooks"])
+
+        # 3. Shield -> emits +5 AC hook, and blocks Magic Missile with block hook.
+        r_sh = step(
+            st,
+            {"type": "cast_spell", "actor_id": "wiz-1", "spell": "shield", "as_reaction": True, "slot_level": 1},
+            self.rules,
+        )
+        self.assertEqual(r_sh["status"], "ok")
+        self.assertTrue(any("Shield" in h and "+5 AC" in h for h in r_sh["narrative_hooks"]), r_sh["narrative_hooks"])
+
+        # 4. Fireball -> emits cast/save/fire damage hooks for both targets.
+        r_fb = step(
+            st,
+            {"type": "cast_spell", "actor_id": "wiz-1", "spell": "fireball", "slot_level": 3, "target_ids": ["gob-1", "gob-2"]},
+            self.rules,
+            roll_overrides=[3, 3, 3, 3, 3, 3, 3, 3, 2, 19],
+        )
+        self.assertEqual(r_fb["status"], "ok")
+        self.assertTrue(any("Fireball" in h and "fails" in h and "fire damage" in h for h in r_fb["narrative_hooks"]), r_fb["narrative_hooks"])
+        self.assertTrue(any("Fireball" in h and "succeeds" in h and "fire damage" in h for h in r_fb["narrative_hooks"]), r_fb["narrative_hooks"])
+
+        # 5. Healing Word (Cleric's turn) -> emits restoring HP hook.
+        r_end = step(st, {"type": "end_turn", "actor_id": "wiz-1"}, self.rules)
+        r_hw = step(
+            r_end["state"],
+            {"type": "cast_spell", "actor_id": "clr-1", "spell": "healing-word", "slot_level": 1, "target_ids": ["wiz-1"]},
+            self.rules,
+            roll_overrides=[4, 3],
+        )
+        self.assertEqual(r_hw["status"], "ok")
+        self.assertTrue(any("Healing Word" in h and "restoring" in h and "HP" in h for h in r_hw["narrative_hooks"]), r_hw["narrative_hooks"])
+
+
 if __name__ == "__main__":
     unittest.main()

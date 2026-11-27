@@ -220,6 +220,7 @@ def build_observation(
         "conditions": self_conds,
         "concentration": copy.deepcopy(actor.get("concentration")),
         "active_effects": _effect_kinds(actor, visible_only=False),
+        "heroic_inspiration": bool(actor.get("heroic_inspiration", False)),
         "turn_resources": copy.deepcopy(actor.get("turn_resources", {})),
         "weapons": copy.deepcopy(actor.get("weapons", [])),
         "monster_actions": copy.deepcopy(actor.get("monster_actions", [])),
@@ -810,6 +811,7 @@ def _combatant_to_start_entry(comb: dict[str, Any]) -> dict[str, Any]:
             "temp_hp": int(comb.get("temp_hp", 0)),
             "exhaustion_level": int(comb.get("exhaustion_level", 0)),
             "conditions": copy.deepcopy(comb.get("conditions", [])),
+            "heroic_inspiration": bool(comb.get("heroic_inspiration", False)),
         }
 
     ac_breakdown = "Armored" if comb.get("wearing_armor") else "Unarmored"
@@ -846,6 +848,7 @@ def _combatant_to_start_entry(comb: dict[str, Any]) -> dict[str, Any]:
         "temp_hp": int(comb.get("temp_hp", 0)),
         "exhaustion_level": int(comb.get("exhaustion_level", 0)),
         "conditions": copy.deepcopy(comb.get("conditions", [])),
+        "heroic_inspiration": bool(comb.get("heroic_inspiration", False)),
     }
 
 

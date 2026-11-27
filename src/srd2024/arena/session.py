@@ -235,6 +235,7 @@ def _build_checkpoint_payload(
     recent_hooks: list[str],
     actions: list[dict[str, Any]],
     violations: list[dict[str, Any]],
+    rejected_inputs: list[dict[str, Any]] | None = None,
     turn_counter: int,
     action_seq: int,
     turn_action_index: int,
@@ -255,6 +256,7 @@ def _build_checkpoint_payload(
         "recent_hooks": list(recent_hooks),
         "actions": copy.deepcopy(actions),
         "violations": copy.deepcopy(violations),
+        "rejected_inputs": copy.deepcopy(list(rejected_inputs or [])),
         "turn_counter": int(turn_counter),
         "action_seq": int(action_seq),
         "turn_action_index": int(turn_action_index),
@@ -323,6 +325,7 @@ def run_interactive_session(
         recent_hooks: list[str] = list(ckpt.get("recent_hooks") or [])
         actions: list[dict[str, Any]] = copy.deepcopy(ckpt.get("actions") or [])
         violations: list[dict[str, Any]] = copy.deepcopy(ckpt.get("violations") or [])
+        rejected_inputs: list[dict[str, Any]] = copy.deepcopy(ckpt.get("rejected_inputs") or [])
         turn_counter = int(ckpt.get("turn_counter", 0))
         action_seq = int(ckpt.get("action_seq", len(actions)))
         resume_action_index = int(ckpt.get("turn_action_index", 0))
@@ -365,6 +368,7 @@ def run_interactive_session(
         blackboard = {"party": [], "enemy": []}
         actions = []
         violations = []
+        rejected_inputs = []
         turn_counter = 0
         action_seq = 0
         resume_action_index = 0
@@ -566,8 +570,16 @@ def run_interactive_session(
                     rules,
                     retry_feedback=retry_feedback,
                 )
+                observation["self"]["heroic_inspiration"] = bool(
+                    state["combatants"][active_id].get("heroic_inspiration", False)
+                )
                 try:
-                    decision = driver.decide(observation)
+                    try:
+                        decision = driver.decide(observation)
+                    finally:
+                        drain_fn = getattr(driver, "drain_rejected_inputs", None)
+                        if callable(drain_fn):
+                            rejected_inputs.extend(drain_fn())
                     raw_intent = getattr(decision, "intent", None)
                     if not isinstance(raw_intent, dict) or not raw_intent.get("type"):
                         raise ValueError("Driver decision intent must be a dict with a non-empty 'type'.")
@@ -585,6 +597,7 @@ def run_interactive_session(
                         recent_hooks=recent_hooks,
                         actions=actions,
                         violations=violations,
+                        rejected_inputs=rejected_inputs,
                         turn_counter=turn_counter,
                         action_seq=action_seq,
                         turn_action_index=action_index,
@@ -640,6 +653,7 @@ def run_interactive_session(
                     "help",
                     "end_turn",
                     "cast_spell",
+                    "reroll",
                 ):
                     intent["actor_id"] = active_id
 
@@ -731,6 +745,8 @@ def run_interactive_session(
                     break
 
                 err_msg = str(res.get("error") or "Invalid intent.")
+                if is_human_turn:
+                    output_fn(f"  ! Rejected: {err_msg}")
                 violations.append(
                     {
                         "round": cur_round,
@@ -856,6 +872,7 @@ def run_interactive_session(
         "final_state": copy.deepcopy(state),
         "actions": actions,
         "violations": violations,
+        "rejected_inputs": rejected_inputs,
         "recharge_events": recharge_events,
         "blackboard": blackboard,
     }

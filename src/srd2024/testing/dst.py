@@ -237,6 +237,12 @@ def check_state_invariants(
                 f"negative_movement:{cid}: movement_remaining_ft={mov!r} must be int >= 0"
             )
 
+        hi = comb.get("heroic_inspiration")
+        if not isinstance(hi, bool):
+            violations.append(
+                f"invalid_heroic_inspiration:{cid}: heroic_inspiration={hi!r} must be bool"
+            )
+
         # Spell slot bounds.
         sc = comb.get("spellcasting")
         if isinstance(sc, dict) and isinstance(sc.get("slots"), dict):
@@ -624,6 +630,9 @@ def generate_random_legal_intent(
         return {"type": "end_turn", "actor_id": active_id}
 
     legal = compute_legal_actions(state, rules)
+    if legal.get("can_reroll") and rng.random() < 0.75:
+        return {"type": "reroll", "actor_id": active_id}
+
     res = actor.get("turn_resources") or {}
     my_side = str(actor.get("side") or "party")
     enemies = [
@@ -889,7 +898,18 @@ def generate_adversarial_intent(
         {"type": "cast_spell", "actor_id": active_id, "spell": "misty-step", "destination": {"x": "bad"}},
         {"type": "attack", "actor_id": active_id, "weapon": ["not", "a", "str"], "target_id": 123},
         {"type": "cast_spell", "actor_id": active_id, "spell": 999, "target_id": active_id},
+        # Invalid / ineligible Heroic Inspiration reroll intents.
+        {"type": "reroll", "actor_id": "nonexistent-actor-999"},
     ]
+
+    active_comb = state["combatants"].get(active_id) or {}
+    pending_reroll = state.get("pending_reroll")
+    if (
+        active_comb.get("heroic_inspiration") is not True
+        or not isinstance(pending_reroll, dict)
+        or pending_reroll.get("actor_id") != active_id
+    ):
+        payloads.append({"type": "reroll", "actor_id": active_id})
 
     if other_ids:
         wrong_id = rng.choice(other_ids)
@@ -900,6 +920,7 @@ def generate_adversarial_intent(
                 {"type": "dash", "actor_id": wrong_id},
                 {"type": "disengage", "actor_id": wrong_id},
                 {"type": "end_turn", "actor_id": wrong_id},
+                {"type": "reroll", "actor_id": wrong_id},
                 {"type": "attack", "actor_id": wrong_id, "target_id": active_id, "weapon": "longsword"},
                 {"type": "cast_spell", "actor_id": wrong_id, "spell": "fire-bolt", "target_id": active_id},
             ]
@@ -912,6 +933,7 @@ def generate_adversarial_intent(
                 {"type": "move", "actor_id": did, "to": {"x": 0, "y": 0}},
                 {"type": "attack", "actor_id": did, "target_id": active_id, "weapon": "longsword"},
                 {"type": "cast_spell", "actor_id": did, "spell": "shield", "as_reaction": True},
+                {"type": "reroll", "actor_id": did},
             ]
         )
 

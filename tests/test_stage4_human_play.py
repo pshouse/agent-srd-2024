@@ -45,6 +45,7 @@ from srd2024.arena import (
     create_driver,
     load_scenario,
     load_session_checkpoint,
+    render_match_markdown,
     render_tactical_hud,
     replay_match,
     resolve_seat_drivers,
@@ -186,6 +187,63 @@ class TestHumanMenuAndHud(unittest.TestCase):
             with self.assertRaises(HumanSessionPause) as ctx:
                 p_drv.decide(obs)
             self.assertEqual(ctx.exception.reason, expected_reason)
+
+    def test_heroic_inspiration_hud_menu_and_reroll_shortcuts(self) -> None:
+        compiled, state = self._start_scenario_state("goblin-ambush", seed=42)
+        obs = build_observation(state, "pc-bram", compiled, {"party": [], "enemy": []}, [], {}, self.rules)
+        obs["self"]["heroic_inspiration"] = True
+        obs["legal_actions"]["can_reroll"] = True
+        obs["legal_actions"]["reroll_hint"] = {
+            "label": "Javelin",
+            "target_id": "goblin-1",
+            "target_name": "Goblin Scout A",
+            "previous_d20": 9,
+            "previous_total": 14,
+            "target_ac": 15,
+        }
+
+        menu = build_human_action_menu(obs, self.rules)
+        self.assertEqual(menu[0]["index"], 1)
+        self.assertEqual(menu[0]["intent"], {"type": "reroll", "actor_id": "pc-bram"})
+        self.assertEqual(
+            menu[0]["label"],
+            "Spend Heroic Inspiration — reroll Javelin vs Goblin Scout A (was 14 vs AC 15)",
+        )
+
+        hud = render_tactical_hud(obs, menu)
+        self.assertIn("Heroic Inspiration: Ready", hud)
+        self.assertIn("Spend Heroic Inspiration — reroll Javelin vs Goblin Scout A (was 14 vs AC 15)", hud)
+
+        # Verify all reroll shortcuts emit {"type": "reroll", "actor_id": "pc-bram"}
+        for shortcut in ("r", "reroll", "inspiration", "heroic inspiration"):
+            in_fn, out_fn, outs = _make_scripted_io(["help", shortcut])
+            drv = HumanDriver(rules=self.rules, input_fn=in_fn, output_fn=out_fn, show_hud=False)
+            dec = drv.decide(obs)
+            self.assertEqual(dec.intent, {"type": "reroll", "actor_id": "pc-bram"})
+            self.assertIn("r | reroll   Spend Heroic Inspiration to reroll your last missed d20", "\n".join(outs))
+
+    def test_render_match_markdown_formats_per_seat_driver_dicts_cleanly(self) -> None:
+        in_fn, out_fn, _ = _make_scripted_io(["1", "e"] * 25, fallback="e")
+        transcript = run_interactive_session(
+            "goblin-ambush",
+            rules=self.rules,
+            play_as="pc-bram",
+            seed=42,
+            input_fn=in_fn,
+            output_fn=out_fn,
+        )
+        md = render_match_markdown(transcript)
+        self.assertIn("| Party Driver | `pc-bram: human, pc-talia: heuristic-tactical` |", md)
+        self.assertIn("| Enemy Driver | `goblin-1: heuristic-tactical, goblin-2: heuristic-tactical` |", md)
+        self.assertNotIn("{'", md)
+
+        # String drivers remain unchanged
+        str_transcript = copy.deepcopy(transcript)
+        str_transcript["config"]["party_driver"] = "heuristic-tactical"
+        str_transcript["config"]["enemy_driver"] = "random"
+        md_str = render_match_markdown(str_transcript)
+        self.assertIn("| Party Driver | `heuristic-tactical` |", md_str)
+        self.assertIn("| Enemy Driver | `random` |", md_str)
 
 
 class TestInteractiveSessionsAndSeats(unittest.TestCase):
@@ -441,6 +499,105 @@ class TestInteractiveSessionsAndSeats(unittest.TestCase):
         self.assertIn("RETRY FEEDBACK:", joined)
         self.assertGreaterEqual(len(transcript["violations"]), 1)
         self.assertIn(transcript["winner"], ("party", "enemy", "draw"))
+
+    def test_rejected_human_inputs_captured_in_transcript_audit_trail(self) -> None:
+        script = ["do a backflip", "999", "1", "e"] + ["1", "e"] * 25
+        in_fn, out_fn, _ = _make_scripted_io(script, fallback="e")
+
+        transcript = run_interactive_session(
+            "goblin-ambush",
+            rules=self.rules,
+            play_as="pc-bram",
+            seed=42,
+            input_fn=in_fn,
+            output_fn=out_fn,
+        )
+        self.assertIn("rejected_inputs", transcript)
+        self.assertIsInstance(transcript["rejected_inputs"], list)
+        inputs_seen = [entry["input"] for entry in transcript["rejected_inputs"]]
+        self.assertIn("do a backflip", inputs_seen)
+        self.assertIn("999", inputs_seen)
+        for entry in transcript["rejected_inputs"]:
+            self.assertEqual(entry["actor_id"], "pc-bram")
+            self.assertIn("round", entry)
+            self.assertTrue(entry.get("reason"))
+
+        rep = replay_match(transcript, self.rules)
+        self.assertTrue(rep["deterministic_match"], f"Replay diverged: {rep['diffs']}")
+        self.assertEqual(rep["diffs"], [])
+
+    def test_heroic_inspiration_reroll_on_round2_javelin_miss_talia_hooks_and_replay(self) -> None:
+        # R1: Bram closes to (15,0) [5], Longsword hits Goblin Scout A [1], end [e].
+        # Talia casts Shield & Magic Missile (defeating Scout A).
+        # R2: Bram throws Javelin at Goblin Scout B [2] -> misses (14 vs AC 15),
+        #     sees Heroic Inspiration option #1 in HUD/menu, types 'r' to reroll -> hits!
+        #     Talia casts Ray of Frost in R2.
+        script = ["5", "1", "e", "2", "r", "e"] + ["1", "e"] * 15
+        in_fn, out_fn, outputs = _make_scripted_io(script, fallback="e")
+
+        transcript = run_interactive_session(
+            "goblin-ambush",
+            rules=self.rules,
+            play_as="pc-bram",
+            seed=42,
+            input_fn=in_fn,
+            output_fn=out_fn,
+        )
+
+        joined_out = "\n".join(outputs)
+        self.assertIn("Heroic Inspiration: Ready", joined_out)
+        self.assertIn(
+            "Spend Heroic Inspiration — reroll Javelin vs Goblin Scout B (was 14 vs AC 15)",
+            joined_out,
+        )
+        self.assertIn("Bram Ironhand spends Heroic Inspiration to reroll Javelin", joined_out)
+
+        # Verify reroll action was executed cleanly and Heroic Inspiration was consumed
+        reroll_actions = [
+            a for a in transcript["actions"]
+            if a["actor_id"] == "pc-bram" and a["intent"].get("type") == "reroll"
+        ]
+        self.assertEqual(len(reroll_actions), 1)
+        self.assertEqual(reroll_actions[0]["round"], 2)
+        self.assertFalse(transcript["final_state"]["combatants"]["pc-bram"].get("heroic_inspiration", True))
+
+        # Verify Talia's spell casts emitted readable narrative_hooks in streamed interactive output
+        self.assertIn("Talia Spark casts Shield (+5 AC", joined_out)
+        self.assertIn("Talia Spark casts Magic Missile at Goblin Scout A", joined_out)
+        self.assertIn("Ray of Frost", joined_out)
+
+        # Verify 100% deterministic replay parity!
+        rep = replay_match(transcript, self.rules)
+        self.assertTrue(rep["deterministic_match"], f"Reroll replay diverged: {rep['diffs']}")
+        self.assertEqual(rep["diffs"], [])
+
+    def test_reroll_when_heroic_inspiration_unavailable_or_spent_records_violation(self) -> None:
+        # 1st 'reroll': before any miss -> engine rejects (no eligible roll)
+        # 2nd 'reroll': immediately after spending Heroic Inspiration with 'r' -> engine rejects (already spent)
+        script = ["reroll", "5", "1", "e", "2", "r", "reroll", "e"] + ["1", "e"] * 15
+        in_fn, out_fn, outputs = _make_scripted_io(script, fallback="e")
+
+        transcript = run_interactive_session(
+            "goblin-ambush",
+            rules=self.rules,
+            play_as="pc-bram",
+            seed=42,
+            input_fn=in_fn,
+            output_fn=out_fn,
+        )
+
+        reroll_viols = [
+            v for v in transcript["violations"]
+            if v.get("intent", {}).get("type") == "reroll"
+        ]
+        self.assertGreaterEqual(len(reroll_viols), 2)
+        self.assertTrue(all(v["actor_id"] == "pc-bram" for v in reroll_viols))
+        err_texts = " | ".join(str(v.get("error") or "") for v in reroll_viols)
+        self.assertIn("Heroic Inspiration", err_texts)
+
+        joined_out = "\n".join(outputs)
+        self.assertIn("! Rejected:", joined_out)
+        self.assertIn("Heroic Inspiration", joined_out)
 
 
 class TestStage4PlayCliSubprocess(unittest.TestCase):

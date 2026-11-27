@@ -179,6 +179,39 @@ def build_human_action_menu(
             }
         )
 
+    # 0. Heroic Inspiration Reroll (option #1 whenever eligible)
+    if legal.get("can_reroll"):
+        hint = legal.get("reroll_hint") or {}
+        r_label = str(hint.get("label") or "last d20 roll")
+        r_target = hint.get("target_name") or hint.get("target_id")
+        prev_total = hint.get("previous_total")
+        prev_d20 = hint.get("previous_d20")
+        target_ac = hint.get("target_ac")
+        if r_target and prev_total is not None and target_ac is not None:
+            menu_label = (
+                f"Spend Heroic Inspiration — reroll {r_label} vs {r_target} "
+                f"(was {prev_total} vs AC {target_ac})"
+            )
+        elif r_target and prev_total is not None:
+            menu_label = f"Spend Heroic Inspiration — reroll {r_label} vs {r_target} (was {prev_total})"
+        elif prev_total is not None:
+            menu_label = f"Spend Heroic Inspiration — reroll {r_label} (was {prev_total})"
+        else:
+            menu_label = f"Spend Heroic Inspiration — reroll {r_label}"
+        summary_bits = ["Free (consumes Heroic Inspiration)"]
+        if prev_d20 is not None:
+            summary_bits.append(f"previous d20: {prev_d20}")
+        _add(
+            "tactical",
+            menu_label,
+            "; ".join(summary_bits),
+            {"type": "reroll", "actor_id": actor_id},
+            {
+                "action_kind": "reroll",
+                "reroll_hint": copy.deepcopy(hint) if isinstance(hint, dict) else {},
+            },
+        )
+
     # 1. Stand up from Prone
     can_stand = bool(legal.get("can_stand_up", "prone" in conds and speed > 0 and rem_move >= speed // 2))
     if "prone" in conds and can_stand:
@@ -958,6 +991,9 @@ def render_tactical_hud(
 
     cond_str = ", ".join(str(c) for c in conds) if conds else "none"
     conc_str = f" | Conc: {conc.get('spell')}" if isinstance(conc, dict) and conc.get("spell") else ""
+    legal = observation.get("legal_actions") or {}
+    has_heroic_insp = bool(self_data.get("heroic_inspiration", False) or legal.get("can_reroll", False))
+    insp_str = " | Heroic Inspiration: Ready" if has_heroic_insp else ""
 
     lines: list[str] = [
         "=" * 72,
@@ -974,7 +1010,7 @@ def render_tactical_hud(
         f"YOU: {actor_name} | HP {hp_str} | AC {eff_ac} | Pos {_fmt_pos(pos)} | Move {rem_move}/{speed} ft"
     )
     lines.append(
-        f"     Resources: [{res_str}] | Cond: {cond_str}{conc_str}{slots_str}"
+        f"     Resources: [{res_str}] | Cond: {cond_str}{conc_str}{slots_str}{insp_str}"
     )
 
     # Allies
@@ -1044,7 +1080,7 @@ def render_tactical_hud(
     nl_hint = " | or plain English" if nl_enabled else ""
     lines.append("-" * 72)
     lines.append(
-        f"Commands: <1..{len(menu)}> | e(nd) | move <x> <y> | stand | say <msg> | status | map | help | save | quit{nl_hint}"
+        f"Commands: <1..{len(menu)}> | r(eroll) | e(nd) | move <x> <y> | stand | say <msg> | status | map | help | save | quit{nl_hint}"
     )
     return "\n".join(lines)
 
@@ -1054,7 +1090,7 @@ def _build_nl_system_prompt() -> str:
         "You translate a human player's plain-English tabletop action into ONE strict, legal "
         "5e 2024 (SRD 5.2) combat intent JSON object.\n"
         "You NEVER roll dice or invent results. Match one of the legal menu intents or emit a valid "
-        "Stage 2 intent (`move`, `attack`, `cast_spell`, `dodge`, `dash`, `disengage`, `help`, `end_turn`) "
+        "Stage 2 intent (`move`, `attack`, `cast_spell`, `dodge`, `dash`, `disengage`, `help`, `reroll`, `end_turn`) "
         "with `actor_id` set to `self.id`.\n"
         "Respond with ONLY a single JSON object:\n"
         '{"intent": {...}, "rationale": "<short translation note>", "table_talk": "<optional ally callout or null>"}'
@@ -1124,6 +1160,7 @@ def _help_text(nl_enabled: bool) -> str:
     lines = [
         "Interactive Tabletop Commands:",
         "  <number>     Choose a numbered legal action from the menu (1..N)",
+        "  r | reroll   Spend Heroic Inspiration to reroll your last missed d20",
         "  e | end      End your current turn",
         "  move <x> <y> Move to a specific 5-ft grid coordinate (e.g. 'move 15 0')",
         "  stand        Stand up from Prone (costs half movement)",
@@ -1165,11 +1202,35 @@ class HumanDriver:
         self._show_hud: bool = bool(show_hud)
         self._pause_on_eof: bool = bool(pause_on_eof)
         self._pending_talk: list[str] = []
+        self._rejected_inputs: list[dict[str, Any]] = []
 
     def reset(self, seed: int | None = None) -> None:
         self._pending_talk.clear()
+        self._rejected_inputs.clear()
         if self._nl_driver is not None:
             self._nl_driver.reset(seed=seed)
+
+    def drain_rejected_inputs(self) -> list[dict[str, Any]]:
+        """Return and clear all rejected human CLI inputs recorded since the last drain."""
+        drained = list(self._rejected_inputs)
+        self._rejected_inputs.clear()
+        return drained
+
+    def _record_rejected(
+        self,
+        observation: dict[str, Any],
+        actor_id: str,
+        text: str,
+        reason: str,
+    ) -> None:
+        self._rejected_inputs.append(
+            {
+                "round": observation.get("round"),
+                "actor_id": actor_id,
+                "input": text,
+                "reason": reason,
+            }
+        )
 
     def _consume_talk(self, extra_talk: str | None = None) -> str | None:
         parts = [p for p in self._pending_talk if p]
@@ -1223,10 +1284,24 @@ class HumanDriver:
                         rationale=f"Human chose [{idx}]: {choice['label']}",
                         table_talk=self._consume_talk(),
                     )
+                self._record_rejected(
+                    observation,
+                    actor_id,
+                    text,
+                    f"Out-of-range menu selection '{idx}' (valid: 1..{len(menu)}).",
+                )
                 self._output_fn(f"Invalid selection '{idx}'. Enter a number between 1 and {len(menu)}.")
                 continue
 
-            # 2. End turn shortcut
+            # 2. Heroic Inspiration reroll shortcut
+            if low in ("r", "reroll", "inspiration", "heroic inspiration", "heroic_inspiration"):
+                return AgentDecision(
+                    intent={"type": "reroll", "actor_id": actor_id},
+                    rationale="Human spent Heroic Inspiration to reroll.",
+                    table_talk=self._consume_talk(),
+                )
+
+            # 3. End turn shortcut
             if low in ("e", "end", "end_turn", "end turn", "pass"):
                 return AgentDecision(
                     intent={"type": "end_turn", "actor_id": actor_id},
@@ -1234,7 +1309,7 @@ class HumanDriver:
                     table_talk=self._consume_talk(),
                 )
 
-            # 3. Stand up shortcut
+            # 4. Stand up shortcut
             if low in ("stand", "stand up", "stand_up"):
                 return AgentDecision(
                     intent={
@@ -1247,7 +1322,7 @@ class HumanDriver:
                     table_talk=self._consume_talk(),
                 )
 
-            # 4. Custom coordinate move
+            # 5. Custom coordinate move
             mv_match = _MOVE_CMD_RE.match(text)
             if mv_match:
                 tx, ty = int(mv_match.group(1)), int(mv_match.group(2))
@@ -1257,10 +1332,16 @@ class HumanDriver:
                     table_talk=self._consume_talk(),
                 )
             if low.startswith("move ") or low == "move":
+                self._record_rejected(
+                    observation,
+                    actor_id,
+                    text,
+                    "Invalid move syntax; expected 'move <x> <y>'.",
+                )
                 self._output_fn("Usage: move <x> <y> (integer 5-ft coordinates, e.g. 'move 15 0').")
                 continue
 
-            # 5. Queue party table_talk before acting
+            # 6. Queue party table_talk before acting
             if low.startswith("say ") or low == "say":
                 msg = text[3:].strip()
                 if not msg:
@@ -1270,17 +1351,17 @@ class HumanDriver:
                 self._output_fn(f'[Table Talk queued]: "{msg}" (now choose your action)')
                 continue
 
-            # 6. Status / Map redraw
+            # 7. Status / Map redraw
             if low in ("status", "map", "hud"):
                 self._output_fn(render_tactical_hud(observation, menu, nl_enabled=self._nl_driver is not None))
                 continue
 
-            # 7. Help
+            # 8. Help
             if low in ("help", "?", "h"):
                 self._output_fn(_help_text(self._nl_driver is not None))
                 continue
 
-            # 8. Save / Quit session pause
+            # 9. Save / Quit session pause
             if low in ("save", "quit", "exit", "q"):
                 reason = "save" if low == "save" else "quit"
                 raise HumanSessionPause(
@@ -1289,11 +1370,17 @@ class HumanDriver:
                     message=f"Session paused by player command '{reason}'.",
                 )
 
-            # 9. Natural-Language-to-Intent translation (optional LLM driver)
+            # 10. Natural-Language-to-Intent translation (optional LLM driver)
             if self._nl_driver is not None:
                 try:
                     nl_dec = _translate_nl_to_decision(text, observation, menu, self._nl_driver)
                 except Exception as exc:
+                    self._record_rejected(
+                        observation,
+                        actor_id,
+                        text,
+                        f"Natural-language translation failed: {exc}",
+                    )
                     self._output_fn(
                         f"Natural-language translation failed: {exc}. "
                         f"Try rephrasing or pick a menu option (1-{len(menu)})."
@@ -1310,9 +1397,15 @@ class HumanDriver:
                     usage=nl_dec.usage,
                 )
 
-            # 10. Clean re-prompt on unrecognized input
+            # 11. Clean re-prompt on unrecognized input
+            self._record_rejected(
+                observation,
+                actor_id,
+                text,
+                "Unrecognized CLI command.",
+            )
             self._output_fn(
-                f"Unrecognized input {text!r}. Enter 1-{len(menu)}, 'e', 'move <x> <y>', "
+                f"Unrecognized input {text!r}. Enter 1-{len(menu)}, 'r', 'e', 'move <x> <y>', "
                 "'say <msg>', 'status', 'help', 'save', or 'quit'."
             )
 
