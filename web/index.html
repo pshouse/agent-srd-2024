@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests">
+  <title>5e 2024 SRD Agent Pack</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="in">
+      <a class="brand" href="#/">
+        <svg class="mark" width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
+          <rect class="mark-back" x="7" y="2" width="22" height="22" rx="5"></rect>
+          <rect class="mark-front" x="2" y="8" width="22" height="22" rx="5"></rect>
+          <path class="mark-lines" d="M8 15h10M8 19h7M8 23h9"></path>
+        </svg>
+        <span class="name">5e 2024 SRD Agent Pack</span>
+        <span class="badge-5e">5E compatible</span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <a href="#/" data-view="explorer" aria-current="page"><span class="long">Explorer</span><span class="short">Explorer</span></a>
+        <a href="#/bundle/" data-view="bundle"><span class="long">Bundle Inspector</span><span class="short">Bundle</span></a>
+        <a href="#/graph/" data-view="graph"><span class="long">Graph</span><span class="short">Graph</span></a>
+      </nav>
+      <a class="ext" href="https://github.com/pshouse/agent-srd-2024">Source on GitHub<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2h6v6M10 2 3 9" stroke-width="1.6"></path></svg></a>
+    </div>
+  </header>
+  <main id="main" tabindex="-1">
+    <p class="wrap hero">Loading catalog…</p>
+    <noscript><p class="wrap hard-copy">JavaScript from this origin is required to read the catalog. Nothing was loaded.</p></noscript>
+  </main>
+  <footer class="footer">
+    <div class="in">
+      <section aria-labelledby="f-attr">
+        <h2 id="f-attr">Attribution</h2>
+        <blockquote id="attribution"></blockquote>
+      </section>
+      <section aria-labelledby="f-more">
+        <h2 id="f-more">Credits &amp; local tools</h2>
+        <ul>
+          <li>Structured dataset from <a href="https://github.com/5e-bits/5e-srd-api">5e-bits/5e-srd-api</a> (MIT), 5e-database v7.10.0.</li>
+          <li>Run it locally: <a href="../bin/srd"><code>bin/srd</code></a>, <a href="../bin/srd-mcp"><code>bin/srd-mcp</code></a>, <a href="../skill/SKILL.md"><code>skill/SKILL.md</code></a>. <a href="https://github.com/pshouse/agent-srd-2024#readme">See the README</a>.</li>
+        </ul>
+      </section>
+      <div class="legal">
+        <span>5E compatible. Independent project, not an official product.</span>
+        <span>Mischief Dev LLC</span>
+        <span id="dataset-line"></span>
+        <span>No accounts, cookies, analytics or third-party requests.</span>
+      </div>
+    </div>
+  </footer>
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
