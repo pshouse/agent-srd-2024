@@ -119,15 +119,16 @@ Off-turn reaction spells such as Shield, sent through `srd encounter` or `srd_en
 Both `bin/srd-arena <subcommand>` and `bin/srd arena <subcommand>` expose identical subcommands and 1:1 JSON parity:
 - **Built-in scenarios:** `goblin-ambush` (Tier 1, L1), `crypt-of-ghouls` (Tier 2, L5), `wyrmling-lair` (Tier 2, L5 fire-immune lair) — plus custom scenario JSON files.
 - **Offline deterministic drivers (zero network):** `heuristic-tactical`, `greedy`, `random`, `replay`.
-- **Pure-stdlib live LLM drivers (`urllib.request`, zero external SDKs):** `openai-compat:<model>` (works with OpenAI, xAI, OpenRouter, Ollama, vLLM, LM Studio via `--api-base` / `--api-key-env`), `anthropic:<model>`, and `gemini:<model>`.
+- **Pure-stdlib live LLM drivers (`urllib.request`, zero external SDKs):** `openai-compat:<model>` (works with OpenAI, xAI, OpenRouter, Ollama, vLLM, LM Studio via `--api-base` / `--api-key-env`), `anthropic:<model>`, and `gemini:<model>`. `anthropic:` uses `ANTHROPIC_API_KEY` if set, else `ANTHROPIC_AUTH_TOKEN`, else the Anthropic CLI sign-in (`ant auth login`; the driver asks `ant` for a fresh token per request and sends it only to `https://api.anthropic.com`). Use a current model such as `anthropic:claude-opus-5-5` or `anthropic:claude-haiku-5-5`.
 
 ### 2. Quantitative Evaluation & Deterministic Trace Replay
 - Every match produces a `MatchScorecard` (`0–100`) combining `outcome_score` (35%), `rules_legality_score` (25%), `tactical_score` (25%, including immunity discipline & mastery execution), and `coordination_score` (15%, including zero friendly-fire, party `table_talk`, focus-fire, and ally support) into `composite_score`.
-- Save any match transcript via `--out-trace <path>` and verify 100% deterministic replay parity via `bin/srd-arena replay <trace.json>` (checks `original_digest == replayed_digest`).
+- Save any match transcript via `--out-trace <path>` and verify deterministic replay via `bin/srd-arena replay <trace.json>`. **Judge it by `deterministic_match` (and exit code 0), not by `status` or the digests:** a replay that diverges still reports `"status": "ok"`, and the two digests can match for a tampered trace. Only `deterministic_match: false` (exit 1, plus a `diffs` list naming the action) catches the difference.
 
 ### 3. Stage 3 MCP Discovery Mode (`--arena` / `SRD2024_ARENA=1`)
 - Launch **`bin/srd-mcp --arena`** (or set `SRD2024_ARENA=1`, or `bin/srd-engine-mcp --arena`) to advertise all **11 MCP tools** (5 Stage 1 + 3 Stage 2 + 3 Stage 3: `srd_arena_scenarios`, `srd_arena_run`, `srd_arena_bench`) plus `srd://arena/scenarios`.
-- Default `bin/srd-mcp` keeps the 5-tool Stage 1 lock and `bin/srd-engine-mcp` / `--engine` keeps the 8-tool Stage 1+2 lock, while `tools/call` and `resources/read` dispatch Stage 3 tools/resources on all launcher modes.
+- Default `bin/srd-mcp` keeps the 5-tool Stage 1 lock and `bin/srd-engine-mcp` / `--engine` keeps the 8-tool Stage 1+2 lock. **Stage 3 tools and resources exist only in arena mode:** without `--arena`, `tools/call` on `srd_arena_*` returns `Unknown tool` and `resources/read` on `srd://arena/scenarios` returns `Unknown resource URI`. (Stage 2 tools are still callable from the default launcher.)
+- **Paid LLM drivers are off by default over MCP:** `srd_arena_run` / `srd_arena_bench` with an `openai-compat:`, `anthropic:` or `gemini:` agent fail unless the server was started with `--arena-allow-llm` (or `SRD2024_ARENA_ALLOW_LLM=1`). The CLI (`bin/srd-arena`) has no such gate.
 
 ### Stage 3 Tool & CLI Quick Reference
 
