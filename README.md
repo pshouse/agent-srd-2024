@@ -207,7 +207,7 @@ The static explorer under `web/` loads a different set of those files on each ro
 | `#/` Explorer | `dist/manifest.json` and `dist/web/index.json` | 1,224 and 85,101 |
 | `#/e/<id>` Card | the explorer files, then one `dist/cards/<type>/<slug>.md` | a card is a few KB |
 | `#/bundle/<id>` Inspector | the explorer files, then `dist/web/graph.json` and only the type shards the bundle touches | graph 70,903; Longsword depth 1 adds 105,476 including that graph and five shards |
-| `#/graph/<id>` Graph | the explorer files, then `dist/web/graph.json` plus `web/lib/ego.js` and `web/lib/graph-view.js` | 70,903 + 2,289 + 3,250. No type shards |
+| `#/graph/<id>` Graph | the explorer files, then `dist/web/graph.json` plus `web/lib/ego.js` and `web/lib/graph-view.js` | 70,903 + 2,376 + 3,250. No type shards |
 
 `graph.json` and the type shards are not requested on the explorer route. The graph view draws at most 80 nodes from that file.
 
