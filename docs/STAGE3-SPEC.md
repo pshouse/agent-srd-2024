@@ -727,11 +727,13 @@ def score_match(
     """Compute purely mechanical, deterministic 0–100 eval scores from a MatchTranscript."""
 ```
 
-Every sub-score is clamped to `[0.0, 100.0]` and rounded to 2 decimal places:
+Every sub-score is clamped to `[0.0, 100.0]` and rounded to 2 decimal places.
+
+**Contribution factor (#22).** A `productive_turn` is an active (non-auto-skipped) turn by `side` that contains at least one `attack`, `cast_spell`, or `help`. Let `contribution = productive_turns / active_turns` (`0.0` if there are no active turns). Ratio terms that a tiny sample can max out (legality, immunity discipline, zero friendly-fire, focus fire) are multiplied by `contribution`. Without this, one attack followed by idle, chatty turns scored about 50 points. A do-nothing policy now scores about 1. Count-based terms (damage, features, teamwork) already measure contribution, so they are not scaled.
 
 1. **`outcome_score` (weight `0.35`):**
    - Win component (`0..50`): `50.0` if `winner == side`, `20.0` if `winner == "draw"`, `0.0` otherwise.
-   - Survival component (`0..25`): `25.0 * (sum(1.0 if (alive and hp > 0) else (0.5 if alive else 0.0)) / max(1, total_side_combatants))`.
+   - Survival component (`0..25`): `25.0 * (sum(1.0 if (alive and hp > 0) else (0.5 if (alive and winner == side) else 0.0)) / max(1, total_side_combatants))`. A downed-but-alive ally earns half credit only on a win, so a wiped party earns no survival points.
    - Remaining HP ratio (`0..15`): `15.0 * (sum(final_hp) / max(1, sum(initial_hp_max)))`.
    - Rounds efficiency (`0..10`): if `winner == side`, `10.0 * max(0.0, 1.0 - (rounds - 1) / max(1, max_rounds))`; else `0.0`.
 2. **`rules_legality_score` (weight `0.25`):**
@@ -740,17 +742,18 @@ Every sub-score is clamped to `[0.0, 100.0]` and rounded to 2 decimal places:
    - `first_attempt_rate = first_attempt_legal_count / total_decisions`.
    - `fallback_penalty = 15.0 * (forced_fallbacks / total_decisions)`.
    - `extra_retry_penalty = min(20.0, 2.0 * max(0, side_violations - (total_decisions - first_attempt_legal_count)))`.
-   - `rules_legality_score = clamp(100.0 * first_attempt_rate - fallback_penalty - extra_retry_penalty, 0.0, 100.0)`.
-   - *(0 violations → `100.0`; invalid intents and forced fallbacks strictly lower the score.)*
+   - `raw_legality = clamp(100.0 * first_attempt_rate - fallback_penalty - extra_retry_penalty, 0.0, 100.0)`.
+   - `rules_legality_score = raw_legality * max(0.05, contribution)`.
+   - *(0 violations and full contribution → `100.0`. Invalid intents and forced fallbacks strictly lower the score. A fully legal but idle side keeps a 5% floor, so it still ranks above pure violations.)*
 3. **`tactical_score` (weight `0.25`):**
    - **Damage efficiency (`0..40`):** `40.0 * min(1.0, effective_damage_dealt_to_opponents / max(1, total_opponent_initial_hp))`.
-   - **Immunity discipline (`0..25`):** `max(0.0, 25.0 - 12.5 * wasted_immune_hits)`, where a `wasted_immune_hit` is any `damage_applied` event caused by `side` on an opposing combatant with a breakdown entry where `modifier == "immune"` and `raw > 0`.
-   - **Action economy utilization (`0..20`):** `20.0 * (productive_turns / max(1, active_turns))`, where a `productive_turn` is an active (non-auto-skipped) turn by `side` containing at least one `attack`, `cast_spell`, `help`, `dodge`, `dash`, or `disengage` action.
+   - **Immunity discipline (`0..25`):** `max(0.0, 25.0 - 12.5 * wasted_immune_hits) * contribution`, where a `wasted_immune_hit` is any `damage_applied` event caused by `side` on an opposing combatant with a breakdown entry where `modifier == "immune"` and `raw > 0`.
+   - **Action economy utilization (`0..20`):** `20.0 * contribution`.
    - **Tactical feature execution (`0..15`):** `min(15.0, mastery_triggers * 3.0 + effective_buff_casts * 3.0 + ally_revivals * 5.0 + effective_heals * 2.0)`.
 4. **`coordination_score` (weight `0.15`):**
-   - **Zero friendly-fire (`0..40`):** `max(0.0, 40.0 - 20.0 * friendly_fire_incidents)` (where a friendly-fire incident is any `damage_applied` event caused by `side` with `total_damage > 0` targeting a same-side combatant).
-   - **Party blackboard communication (`0..20`):** `20.0 * min(1.0, table_talk_count / max(1.0, active_turns * 0.5))`.
-   - **Focus-fire coordination (`0..20`):** `20.0 * focus_fire_ratio`, where `focus_fire_ratio` is the fraction of `side`'s offensive attacks/spells that target an already-damaged opponent (or the highest-threat target when all enemies are unharmed), defaulting to `1.0` if `<= 1` opponent is alive or `0` offensive actions were taken with `winner == side`.
+   - **Zero friendly-fire (`0..40`):** `max(0.0, 40.0 - 20.0 * friendly_fire_incidents) * contribution` (where a friendly-fire incident is any `damage_applied` event caused by `side` with `total_damage > 0` targeting a same-side combatant).
+   - **Party blackboard communication (`0..20`):** `20.0 * min(1.0, productive_talk_turns / max(1.0, active_turns * 0.5))`, where `productive_talk_turns` counts productive turns that carry at least one `table_talk` message. Chat on idle turns earns nothing. `metrics.table_talk_messages` still reports the full message count.
+   - **Focus-fire coordination (`0..20`):** `20.0 * focus_fire_ratio * contribution`, where `focus_fire_ratio` is the fraction of `side`'s offensive attacks/spells that target an already-damaged opponent (or the highest-threat target when all enemies are unharmed), defaulting to `1.0` if `<= 1` opponent is alive or `0` offensive actions were taken with `winner == side`.
    - **Teamwork & ally support (`0..20`):** `min(20.0, ally_revivals * 12.0 + ally_heals * 6.0 + ally_buff_targets * 4.0 + help_actions * 8.0 + mastery_setup_triggers * 4.0)` (where `mastery_setup_triggers` counts `sap`, `topple`, `vex`, `slow` triggers supporting the team).
 5. **`composite_score`:**
    ```python

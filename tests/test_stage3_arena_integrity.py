@@ -84,6 +84,43 @@ class _NoOp:
         )
 
 
+class _TalkSpam:
+    """Issue #22 exploit: dodge, make one real attack, then end every turn while chatting.
+
+    Before #22 the single attack unlocked a full legality score and most ratio bonuses,
+    so this near-no-op policy scored ~48-53. It must now score close to the pure no-op.
+    """
+
+    name = "talk-spam"
+
+    def __init__(self, rules: RulesStore) -> None:
+        self.rules = rules
+        self.reset()
+
+    def reset(self, seed: int | None = None) -> None:
+        self.inner = HeuristicTacticalDriver(self.rules)
+        self.turns: dict[str, int] = {}
+        self.last_round: dict[str, int] = {}
+        self.attacked: set[str] = set()
+
+    def decide(self, observation: dict[str, Any]) -> AgentDecision:
+        me = observation["self"]["id"]
+        rnd = int(observation["round"])
+        if self.last_round.get(me) != rnd:
+            self.last_round[me] = rnd
+            self.turns[me] = self.turns.get(me, 0) + 1
+        if self.turns[me] == 1:
+            if observation["self"]["turn_resources"]["action"]:
+                return AgentDecision(intent={"type": "dodge", "actor_id": me}, table_talk="Focus the leader!")
+            return AgentDecision(intent={"type": "end_turn", "actor_id": me}, table_talk="Holding!")
+        if me not in self.attacked:
+            decision = self.inner.decide(observation)
+            if decision.intent.get("type") in ("attack", "cast_spell"):
+                self.attacked.add(me)
+            return decision
+        return AgentDecision(intent={"type": "end_turn", "actor_id": me}, table_talk="Stay together, team!")
+
+
 class _Garbage:
     name = "garbage"
 
@@ -423,13 +460,28 @@ class TestScoreFloorAndOrdering(unittest.TestCase):
         cls.greedy = _mean_composite(GreedyDriver(cls.rules), cls.rules)
         cls.random = _mean_composite(RandomDriver(seed=1, rules=cls.rules), cls.rules)
         cls.noop = _mean_composite(_NoOp(), cls.rules)
+        cls.talk_spam = _mean_composite(_TalkSpam(cls.rules), cls.rules)
         cls.garbage = _mean_composite(_Garbage(), cls.rules)
 
-    def test_noop_below_25_and_ordering(self) -> None:
-        self.assertLess(self.noop, 25.0)
+    def test_noop_baseline_near_zero(self) -> None:
+        # #22: a do-nothing policy must score near zero (was 7.52; ~1.25 is the legality floor).
+        self.assertLess(self.noop, 2.0)
+
+    def test_talk_spam_exploit_scores_near_noop(self) -> None:
+        # #22: one attack plus idle chatter scored ~48-53. It now earns only its real damage and mastery.
+        self.assertLess(self.talk_spam, 20.0)
+        self.assertLess(self.talk_spam, self.random * 0.5)
+
+    def test_reasonable_policies_score_clearly_above_noop(self) -> None:
+        self.assertGreater(self.heuristic, 80.0)
+        self.assertGreater(self.greedy, 80.0)
+        self.assertGreater(self.random, self.noop + 25.0)
+
+    def test_score_ordering(self) -> None:
         self.assertGreater(self.heuristic, self.greedy)
         self.assertGreater(self.greedy, self.random)
-        self.assertGreater(self.random, self.noop)
+        self.assertGreater(self.random, self.talk_spam)
+        self.assertGreater(self.talk_spam, self.noop)
         self.assertGreater(self.noop, self.garbage)
 
     def test_same_seed_replay_is_byte_identical(self) -> None:
