@@ -274,14 +274,14 @@ class TestStage3OfflineDrivers(unittest.TestCase):
         self.assertEqual(dec_bless.intent.get("spell"), "bless")
         self.assertTrue(dec_bless.table_talk)
 
-        # 3. Wizard Shield reaction when enemy is within 15 ft and reaction available
+        # 3. No pre-emptive Shield on her own turn, even with an enemy adjacent: Shield is a Reaction to being hit,
+        #    and the engine casts it when an attack would hit (#33).
         gob_state = self._start_state(self.goblin_scen, seed=5)
         gob_state["combatants"]["goblin-1"]["position"] = {"x": 5, "y": 15}  # 5 ft from Talia (0, 15)
         obs_talia_shield = self._obs_for_actor(gob_state, "pc-talia", self.goblin_scen)
         dec_shield = tactical.decide(obs_talia_shield)
-        self.assertEqual(dec_shield.intent["type"], "cast_spell")
-        self.assertEqual(dec_shield.intent.get("spell"), "shield")
-        self.assertTrue(dec_shield.intent.get("as_reaction"))
+        self.assertNotEqual(dec_shield.intent.get("spell"), "shield")
+        self.assertFalse(dec_shield.intent.get("as_reaction"))
 
         # 4. Wizard Mage Armor when unarmored, reaction spent/no adjacent enemy, no multi-target AoE kill shot
         gob_far = self._start_state(self.goblin_scen, seed=5)

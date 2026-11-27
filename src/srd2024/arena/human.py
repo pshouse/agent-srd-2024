@@ -407,6 +407,9 @@ def build_human_action_menu(
             )
             if not can_cast:
                 continue
+            if action_type == "reaction":
+                # Reaction spells (e.g. Shield) need a trigger; the engine casts them when one happens (#33).
+                continue
 
             sp_name = str(sp_rec.get("name") or sp_slug)
             sp_lvl = int(sp_rec.get("level", 0))

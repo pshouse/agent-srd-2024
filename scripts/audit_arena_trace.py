@@ -9,9 +9,9 @@ Usage:
     bin/srd-arena run crypt-of-ghouls --seed 8 --out-trace /tmp/crypt-8.json
     python3 scripts/audit_arena_trace.py /tmp/crypt-*.json
 
-Exit code 1 if any rule has a violation. Not covered: opportunity attacks (#38), monster traits (#39), reaction
-triggers (#33), positions and ranges, cover, and spells other than Fireball/Healing Word/Mass Healing Word/Bless/
-Shield/Mage Armor.
+Exit code 1 if any rule has a violation. Reactions are checked: Opportunity Attacks (#38) and Shield's trigger (#33,
+#41). Not covered: monster traits (#39), ranges and cover, and spells other than Fireball/Healing Word/Mass Healing
+Word/Bless/Shield/Mage Armor.
 """
 
 from __future__ import annotations
@@ -67,6 +67,25 @@ def audit(path: Path) -> None:
     immune = {i: set(c.get("damage_immunities") or []) for i, c in cs.items()}
     shield_on: dict[str, bool] = {i: False for i in cs}
     base_ac = {i: c["ac"] for i, c in cs.items()}
+    pos = {i: dict(c["position"]) for i, c in cs.items()}
+    reaction = {i: True for i in cs}
+    disengaged: dict[str, bool] = {i: False for i in cs}
+
+    def reach(i: str) -> int:
+        best = 0
+        for w in cs[i].get("weapons") or []:
+            if str(w.get("weapon_range") or "melee") == "melee":
+                best = max(best, int(w.get("reach_ft") or (10 if "reach" in (w.get("properties") or []) else 5)))
+        for act in cs[i].get("monster_actions") or []:
+            if act.get("kind") == "attack" and act.get("attack_kind") == "melee":
+                best = max(best, int(act.get("reach_ft") or 5))
+        return best
+
+    def can_react(i: str) -> bool:
+        return reaction[i] and hp[i] > 0 and not (conds[i] & {"paralyzed", "unconscious", "incapacitated", "stunned", "petrified", "dead"}) \
+            and str(cs[i].get("reaction_policy") or "auto") != "none"
+
+    cheb = lambda a, b: max(abs(a["x"] - b["x"]), abs(a["y"] - b["y"]))
     fireball_raw = None
 
     for a in t["actions"]:
@@ -80,6 +99,8 @@ def audit(path: Path) -> None:
 
             if ty == "turn_started":
                 fireball_raw = None
+                reaction[e["actor_id"]] = True
+                disengaged[e["actor_id"]] = False
                 who = e["actor_id"]
                 if side[who] == "party" and hp[who] == 0 and "dead" not in conds[who] and "stable" not in conds[who]:
                     rest = evs[idx + 1:] + [x for b in t["actions"][t["actions"].index(a) + 1: t["actions"].index(a) + 2] for x in b["events"]]
@@ -244,6 +265,28 @@ def audit(path: Path) -> None:
                     immune_par = "undead" in str(cs[tgt].get("source_id", "")) or tgt.startswith(("ghoul", "ghast", "skeleton"))
                     check("failed Claw save -> paralyzed (success -> not)", par == (not e["success"] and not immune_par), where, f"{tgt} success={e['success']} paralyzed={par}")
 
+            if ty == "action_disengage":
+                disengaged[e["actor_id"]] = True
+            if ty == "opportunity_attack":
+                rid, mid = e["actor_id"], e["target_id"]
+                check("opportunity attack only by a hostile that can react, vs a mover that didn't Disengage",
+                      side[rid] != side[mid] and can_react(rid) and not disengaged[mid], where, f"{rid} -> {mid}")
+                reaction[rid] = False
+            if ty == "moved":
+                mover, frm, to = e["actor_id"], e["from_pos"], e["to_pos"]
+                expected = sorted(r for r in cs if r != mover and side[r] != side[mover] and can_react(r)
+                                  and reach(r) and cheb(pos[r], frm) <= reach(r) < cheb(pos[r], to) and not disengaged[mover])
+                # Reactions already resolved in this step (they come before "moved"); reactors that spent theirs
+                got = sorted({x["actor_id"] for x in evs[:idx] if x["type"] == "opportunity_attack" and x["target_id"] == mover})
+                pending = [r for r in expected if r not in got]
+                check("leaving a hostile's reach without Disengage draws its opportunity attack", not pending, where,
+                      f"{mover} {frm}->{to}: no attack from {pending}")
+                pos[mover] = dict(to)
+            if ty == "teleported":
+                pos[e["actor_id"]] = dict(e["to_pos"])
+            if ty == "mastery_triggered" and e.get("to_pos"):  # Push: forced movement never provokes
+                pos[e["target_id"]] = dict(e["to_pos"])
+
             if ty == "condition_applied":
                 tgt = e["target_id"]
                 conds[tgt].add(e["condition"])
@@ -264,7 +307,19 @@ def audit(path: Path) -> None:
                     if not cs[tid].get("wearing_armor"):
                         base_ac[tid] = max(base_ac[tid], 13 + mod(tid, "dex"))
             if ty == "spell_cast" and e["spell"] == "shield":
-                shield_on[e["actor_id"]] = True
+                caster = e["actor_id"]
+                nxt = next((x for x in evs[idx + 1:] if x["type"] in ("attack_roll", "spell_attack_roll") and x["target_id"] == caster), None)
+                check("Shield is a reaction to being hit (never on the caster's own action)",
+                      bool(e.get("as_reaction")) and e.get("trigger") == "hit_by_attack" and a["actor_id"] != caster and nxt is not None,
+                      where, f"{caster} cast Shield in {a['actor_id']}'s action, trigger={e.get('trigger')}")
+                if nxt is not None:
+                    check("Shield only when +5 AC turns the hit into a miss",
+                          not nxt.get("nat20") and base_ac[caster] <= nxt["total"] < base_ac[caster] + 5 and not nxt["hit"]
+                          and nxt["target_ac"] == base_ac[caster] + 5,
+                          where, f"{caster}: total {nxt['total']} vs base AC {base_ac[caster]}, hit={nxt['hit']}")
+                check("Shield needs a free reaction", reaction[caster], where, caster)
+                reaction[caster] = False
+                shield_on[caster] = True
             if ty == "effect_expired" and e.get("kind") == "shield":
                 shield_on[e["target_id"]] = False
             if ty in ("combatant_died",):

@@ -387,6 +387,9 @@ def score_match(
         # Process events for damage, immune hits, masteries, heals, revivals, and opponent HP state.
         for ev in events:
             etype = str(ev.get("type") or "")
+            # Engine-made reactions (Opportunity Attacks, Shield: #33/#38) aren't the driver's decisions: they still
+            # move opponent HP and the outcome, but earn no damage-dealt or mastery credit.
+            engine_reaction = bool(ev.get("reaction"))
 
             if etype == "damage_applied":
                 src_id = str(ev.get("source_id") or actor_id)
@@ -394,7 +397,7 @@ def score_match(
                 total_dmg = max(0, int(ev.get("total_damage", 0)))
                 caused_by_side = (src_id in side_ids) or (a_side == side and not ev.get("source_id"))
 
-                if caused_by_side:
+                if caused_by_side and not engine_reaction:
                     if tgt_id in opp_ids:
                         effective_damage_dealt += total_dmg
                         breakdown = ev.get("breakdown") or []
@@ -446,7 +449,7 @@ def score_match(
 
             elif etype == "mastery_triggered":
                 m_actor = str(ev.get("actor_id") or actor_id)
-                if m_actor in side_ids or (a_side == side and not ev.get("actor_id")):
+                if not engine_reaction and (m_actor in side_ids or (a_side == side and not ev.get("actor_id"))):
                     mastery_triggers += 1
                     m_slug = strip_prefix(str(ev.get("mastery") or ""))
                     if m_slug in _SETUP_MASTERIES:

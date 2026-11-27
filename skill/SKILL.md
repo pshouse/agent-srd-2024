@@ -89,6 +89,7 @@ Instead of calculating AC, HP, saves, weapon bonuses, or 2024 legality by hand, 
 ### 3. Run Combat Strictly Through `srd_encounter` & Narrate From Output
 Drive encounters with structured intents via `srd_encounter` (or `bin/srd encounter`):
 - **Supported intents:** `start_encounter`, `move`, `attack`, `cast_spell`, `dodge`, `dash`, `disengage`, `help`, `end_turn`.
+- **Reactions are automatic:** the engine makes Opportunity Attacks when a creature leaves a hostile's reach without Disengage (teleporting and forced movement don't provoke), and casts Shield when an attack would hit and +5 AC turns it into a miss. Never send a reaction spell as your own action; it is rejected. Events made inside a reaction carry `"reaction": true`.
 - **Stateless vs. session mode:** Pass `state` round-trip (CLI uses `--state` / `--out-state`) OR pass a `session_id` over MCP so `SRDMCPServer` caches the latest `EncounterState` in memory across turns.
 - **Narrate faithfully:** Base every tactical narration strictly on the returned `events`, `state_diff`, `legal_actions`, and `narrative_hooks`. Never override or fudge engine math.
 
