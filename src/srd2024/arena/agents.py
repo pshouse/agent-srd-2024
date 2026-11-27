@@ -23,6 +23,8 @@ import math
 import os
 import random
 import re
+import shutil
+import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -3081,22 +3083,72 @@ class AnthropicDriver(BaseLLMDriver):
     DEFAULT_API_KEY_ENV = "ANTHROPIC_API_KEY"
     PROVIDER_PREFIX = "anthropic"
     ANTHROPIC_VERSION = "2023-06-01"
+    MIN_MAX_TOKENS = 4096  # headroom for default-on thinking plus the JSON decision
+
+    OAUTH_BETA = "oauth-2025-04-20"
+    AUTH_TOKEN_ENV = "ANTHROPIC_AUTH_TOKEN"
+
+    def _oauth_token(self) -> str:
+        """An OAuth access token from `ANTHROPIC_AUTH_TOKEN`, else from the `ant` CLI's sign-in (`ant auth login`).
+
+        Only ever used for the official API host, so a custom --api-base never receives the user's sign-in.
+        `ant auth print-credentials --access-token` refreshes the token when needed, so asking per request keeps
+        a long play session signed in; an exported token is short-lived and is not refreshed.
+        """
+        if self.api_base != self.DEFAULT_API_BASE:
+            return ""
+        token = os.environ.get(self.AUTH_TOKEN_ENV, "").strip()
+        if token:
+            return token
+        ant = shutil.which("ant")
+        if not ant:
+            return ""
+        try:
+            proc = subprocess.run(
+                [ant, "auth", "print-credentials", "--access-token"],
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+        token = proc.stdout.strip() if proc.returncode == 0 else ""
+        # The bare token is one line; anything else (e.g. the JSON form) must not reach a header.
+        return token if token and "\n" not in token and not token.startswith("{") else ""
 
     def _build_request(
         self, system_prompt: str, user_prompt: str
     ) -> tuple[str, dict[str, str], dict[str, Any]]:
-        key = self._resolve_api_key(allow_empty_local=True)
         url = f"{self.api_base}/v1/messages"
         headers: dict[str, str] = {
             "anthropic-version": self.ANTHROPIC_VERSION,
         }
+        # Credential order, as in the Anthropic SDKs: API key, then ANTHROPIC_AUTH_TOKEN, then the `ant` sign-in.
+        explicit = self._explicit_api_key if self._explicit_api_key is not None else os.environ.get(self.api_key_env, "")
+        oauth = "" if str(explicit or "").strip() else self._oauth_token()
+        if oauth:
+            _reject_control_chars_in_secret(oauth)
+            headers["Authorization"] = f"Bearer {oauth}"
+            headers["anthropic-beta"] = self.OAUTH_BETA
+            key = ""
+        else:
+            try:
+                key = self._resolve_api_key(allow_empty_local=True)
+            except RuntimeError as exc:
+                raise RuntimeError(
+                    f"{exc} Or sign in once with the Anthropic CLI (`ant auth login`), or set {self.AUTH_TOKEN_ENV}."
+                ) from None
         if key:
             _reject_control_chars_in_secret(key)
             headers["x-api-key"] = key
+        # Current Claude models (Opus 5.5, Sonnet 5.5, Haiku 5.5, Fable 5.x) reject sampling parameters:
+        # `temperature` returns a 400 (Haiku 5.5: any non-default value), so it is never sent and --temperature
+        # has no effect on this driver. They also think by default, and thinking tokens count toward max_tokens,
+        # so a small cap can end the turn before any text is written; keep enough headroom for both.
         payload = {
             "model": self.model,
-            "max_tokens": self.max_tokens,
-            "temperature": self.temperature,
+            "max_tokens": max(self.max_tokens, self.MIN_MAX_TOKENS),
             "system": system_prompt,
             "messages": [{"role": "user", "content": user_prompt}],
         }
@@ -3111,6 +3163,10 @@ class AnthropicDriver(BaseLLMDriver):
             for b in blocks
             if isinstance(b, dict) and b.get("type") == "text"
         )
+        stop = response.get("stop_reason")
+        if not raw_text.strip() and stop in ("refusal", "max_tokens"):
+            # Name the cause instead of failing later with an opaque "no JSON found".
+            raise ValueError(f"Anthropic response has no text (stop_reason={stop!r}).")
         u = response.get("usage") or {}
         inp_t = int(u.get("input_tokens", 0) or 0)
         out_t = int(u.get("output_tokens", 0) or 0)
