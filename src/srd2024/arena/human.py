@@ -47,7 +47,7 @@ from .agents import (
     extract_decision_json,
 )
 
-_MOVE_CMD_RE = re.compile(r"^(?:move|mv)\s+(-?\d+)(?:\s*,\s*|\s+)(-?\d+)$", re.IGNORECASE)
+_MOVE_CMD_RE = re.compile(r"^(?:move|mv|m)\s+(-?\d+)(?:\s*,\s*|\s+)(-?\d+)$", re.IGNORECASE)
 _VS_AC_RE = re.compile(r"\((\d+)\s+vs\s+AC\s+\d+\)")
 
 _SELF_ONLY_SPELLS: frozenset[str] = frozenset(
@@ -1331,7 +1331,7 @@ class HumanDriver:
                     rationale=f"Human moved to ({tx}, {ty}).",
                     table_talk=self._consume_talk(),
                 )
-            if low.startswith("move ") or low == "move":
+            if low.startswith(("move ", "mv ", "m ")) or low in ("move", "mv", "m"):
                 self._record_rejected(
                     observation,
                     actor_id,

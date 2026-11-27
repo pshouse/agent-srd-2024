@@ -1499,6 +1499,7 @@ def _resolve_monster_action(
         res = rng.roll_dice_expr(dice_str, crit=crit)
         dmg_to_apply.append({"amount": max(0, int(res["total"])), "type": dtype})
 
+    hit_hook_idx = len(tracker.hooks)
     eff_dmg = _apply_damage_parts(
         state,
         tid,
@@ -1509,8 +1510,9 @@ def _resolve_monster_action(
         source_id=actor_id,
         is_crit=crit,
     )
-    tracker.hook(
-        f"{actor['name']} hits {target['name']} with {act_name} ({total_to_hit} vs AC {target_ac}) for {eff_dmg} damage."
+    tracker.hooks.insert(
+        hit_hook_idx,
+        f"{actor['name']} hits {target['name']} with {act_name} ({total_to_hit} vs AC {target_ac}) for {eff_dmg} damage.",
     )
 
     # Rider saves & conditions (e.g., Ghoul Claw CON DC 10 -> paralyzed, Wolf Bite -> prone).
