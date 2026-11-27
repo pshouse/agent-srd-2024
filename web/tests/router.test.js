@@ -59,6 +59,55 @@ test("boot and hashchange both read the hash through readHashState", () => {
   assert.match(app, /\n {2}render\(\);\n/);
 });
 
+test("hostile graph and card ids are not routes", () => {
+  for (const id of ["__proto__", "constructor", "prototype"]) {
+    const graph = parseRoute(`#/graph/${id}`);
+    assert.equal(graph.name, "explorer");
+    assert.equal(graph.unknown, true);
+    assert.equal(graph.id, undefined);
+    const card = parseRoute(`#/e/${id}:x`);
+    assert.equal(card.name, "explorer");
+    assert.equal(card.unknown, true);
+  }
+  const split = parseRoute("#/graph/spells/fireball");
+  assert.equal(split.name, "explorer");
+  assert.equal(split.unknown, true);
+  for (const enc of ["%00", "%0a", "%1f", "%7f"]) {
+    const route = parseRoute(`#/bundle/chain${enc}mail`);
+    assert.equal(route.name, "explorer");
+    assert.equal(route.unknown, true);
+  }
+  const longId = `spells:${"a".repeat(500)}`;
+  const longRoute = parseRoute(`#/graph/${longId}`);
+  assert.equal(longRoute.name, "explorer");
+  assert.equal(longRoute.unknown, true);
+  assert.equal(parseRoute("#/graph/spells:fireball").id, "spells:fireball");
+  assert.equal(parseRoute("#/graph/").id, "");
+});
+
+test("every catalog id and name round-trips through the router", () => {
+  const index = JSON.parse(readFileSync(new URL("../../dist/web/index.json", import.meta.url), "utf8"));
+  assert.equal(index.entities.length, 2029);
+  for (const entity of index.entities) {
+    for (const view of ["bundle", "graph"]) {
+      const byId = parseRoute(`#/${view}/${encodeURIComponent(entity.id)}`);
+      assert.equal(byId.name, "later", entity.id);
+      assert.equal(byId.view, view);
+      assert.equal(byId.id, entity.id);
+      const byName = parseRoute(`#/${view}/${encodeURIComponent(entity.name)}`);
+      assert.equal(byName.name, "later", entity.name);
+      assert.equal(byName.view, view);
+      assert.equal(byName.id, entity.name.toLowerCase());
+    }
+    const card = parseRoute(`#/e/${encodeURIComponent(entity.id)}`);
+    assert.equal(card.name, "card", entity.id);
+    assert.equal(card.id, entity.id);
+  }
+  assert.equal(parseRoute("#/bundle/chain%20mail").id, "chain mail");
+  assert.equal(parseRoute("#/bundle/wand%20of%20wonder").id, "wand of wonder");
+  assert.equal(parseRoute("#/bundle/Dragon%27s%20Breath").id, "dragon's breath");
+});
+
 test("asset URLs stay relative to the app under both base paths", () => {
   const pages = distAssetUrl(
     "https://example.github.io/agent-srd-2024/web/app.js",

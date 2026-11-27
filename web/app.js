@@ -164,6 +164,25 @@ function mount(manifest, catalog) {
   window.addEventListener("hashchange", render);
   render();
 
+  async function showGraph(state, gen) {
+    const { renderGraph } = await import("./lib/graph-view.js");
+    if (gen !== viewGen) return;
+    try {
+      await renderGraph(resultsCol, {
+        catalog,
+        manifest,
+        routeId: state.route.id,
+        hash: location.hash,
+        setHash(next) {
+          if (location.hash !== next) location.hash = next;
+        },
+      });
+    } catch {
+      if (gen !== viewGen) return;
+      resultsCol.textContent = "This graph cannot be shown.";
+    }
+  }
+
   async function showBundle(state, gen) {
     const { renderInspector } = await import("./lib/inspector-view.js");
     if (gen !== viewGen) return;
@@ -192,11 +211,14 @@ function mount(manifest, catalog) {
     syncNav(state.route);
     syncPlaceholder();
     const bundleRoute = state.route.name === "later" && state.route.view === "bundle";
+    const graphRoute = state.route.name === "later" && state.route.view === "graph";
     mainEl.classList.toggle("mode-card", state.route.name === "card");
     mainEl.classList.toggle("mode-bundle", bundleRoute);
+    mainEl.classList.toggle("mode-graph", graphRoute);
     const openEntity = state.route.id ? catalog.byId.get(state.route.id) : null;
+    const titlePrefix = graphRoute ? "References around " : bundleRoute ? "Bundle for " : "";
     document.title = openEntity
-      ? `${bundleRoute ? "Bundle for " : ""}${openEntity.name} · 5e 2024 SRD Agent Pack`
+      ? `${titlePrefix}${openEntity.name} · 5e 2024 SRD Agent Pack`
       : "5e 2024 SRD Agent Pack";
     if (input.value !== state.q) input.value = state.q;
     const showTypo = /['"\u2018\u2019\u201C\u201D]/.test(state.q);
@@ -211,6 +233,14 @@ function mount(manifest, catalog) {
       cardSlot.hidden = true;
       cardSlot.replaceChildren();
       void showBundle(state, gen);
+      return;
+    }
+    if (graphRoute) {
+      explorer.classList.remove("has-card");
+      side.hidden = true;
+      cardSlot.hidden = true;
+      cardSlot.replaceChildren();
+      void showGraph(state, gen);
       return;
     }
     if (state.route.name === "later") {

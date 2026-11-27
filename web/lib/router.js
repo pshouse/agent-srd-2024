@@ -11,25 +11,65 @@
 export function parseRoute(hash) {
   let raw = String(hash ?? "");
   if (raw.startsWith("#")) raw = raw.slice(1);
-  try {
-    raw = decodeURIComponent(raw);
-  } catch {
-    /* keep the raw hash when it is not valid percent-encoding */
-  }
-  const pathOnly = raw.split("?")[0].replace(/\/+$/, "") || "/";
+  const queryAt = raw.indexOf("?");
+  const pathOnly = (queryAt === -1 ? raw : raw.slice(0, queryAt)).replace(/\/+$/, "") || "/";
   if (pathOnly === "/") return { name: "explorer", unknown: false };
-  const lower = pathOnly.toLowerCase();
-  const later = /^\/(bundle|graph)(?:\/([^/]+))?$/.exec(lower);
-  if (later) return { name: "later", view: later[1], id: later[2] || "", unknown: false };
-  const match = /^\/e\/([a-z0-9-]+):([a-z0-9-]+)$/.exec(lower);
-  if (!match) return { name: "explorer", unknown: true };
-  return {
-    name: "card",
-    type: match[1],
-    slug: match[2],
-    id: `${match[1]}:${match[2]}`,
-    unknown: false,
-  };
+  const parts = pathOnly.split("/");
+  const head = decodePart(parts[1] || "").toLowerCase();
+  if ((head === "bundle" || head === "graph") && parts.length <= 3) {
+    if (parts.length === 2) return { name: "later", view: head, id: "", unknown: false };
+    const id = safeEntityId(decodePart(parts[2]).toLowerCase());
+    if (!id) return { name: "explorer", unknown: true };
+    return { name: "later", view: head, id, unknown: false };
+  }
+  if (head === "e" && parts.length === 3) {
+    const decoded = decodePart(parts[2]).toLowerCase();
+    const match = /^([a-z0-9-]+):([a-z0-9-]+)$/.exec(decoded);
+    if (!match) return { name: "explorer", unknown: true };
+    const id = safeEntityId(decoded);
+    if (!id) return { name: "explorer", unknown: true };
+    return { name: "card", type: match[1], slug: match[2], id, unknown: false };
+  }
+  return { name: "explorer", unknown: true };
+}
+
+const BLOCKED_IDS = new Set(["__proto__", "constructor", "prototype"]);
+
+/**
+ * Accept a canonical id, a bare slug, or a real entry name.
+ * Spaces, apostrophes, dots, hyphens, and the other characters that appear
+ * in the catalog are kept. Prototype keys, control characters, and
+ * overlong strings are rejected.
+ * @param {string} raw
+ * @returns {string}
+ */
+export function safeEntityId(raw) {
+  const id = String(raw || "");
+  if (!id || id.length > 200) return "";
+  for (const ch of id) {
+    const code = ch.codePointAt(0);
+    if (code <= 0x1f || code === 0x7f) return "";
+  }
+  if (id.includes("\\")) return "";
+  if (BLOCKED_IDS.has(id)) return "";
+  for (const part of id.split(":")) {
+    if (BLOCKED_IDS.has(part)) return "";
+  }
+  return id;
+}
+
+/**
+ * Decode one path segment. A `%2F` stays inside that segment, so a name
+ * such as Antipathy/Sympathy is one id rather than an extra path piece.
+ * @param {string} part
+ * @returns {string}
+ */
+function decodePart(part) {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return part;
+  }
 }
 
 /**
