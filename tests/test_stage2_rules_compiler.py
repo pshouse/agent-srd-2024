@@ -445,26 +445,38 @@ class TestRulesCompletenessAndCoverage(unittest.TestCase):
         self.assertEqual(fbolt["scaling"]["cantrip_tiers"]["5"], "2d10")
 
     def test_monster_coverage_is_honest_about_traits_bonus_actions_and_reactions(self) -> None:
-        """#39: a monster is only graded full if every stat-block element it has is executed by the engine."""
+        """#39: a monster is only graded full if every stat-block element it has is executed by the engine.
+
+        A trait or reaction is listed in unmodeled_clauses iff it is neither descriptive nor executable (traits_ir).
+        """
         from srd2024.rules_compiler.monsters import _DESCRIPTIVE_TRAITS, _clause_slug, _trait_key
 
         monsters = self.rules["monsters"]
         for slug, m in monsters.items():
             clauses = m["provenance"]["unmodeled_clauses"]
+            executed = {t["name"] for t in m.get("traits_ir") or []}
             with self.subTest(monster=slug):
                 self.assertEqual(m["coverage"] == "full", not clauses, "full iff no unmodeled clauses")
                 for sa in m.get("special_abilities") or []:
                     listed = f"special_ability:{_clause_slug(sa['name'])}" in clauses
-                    self.assertEqual(listed, _trait_key(sa["name"]) not in _DESCRIPTIVE_TRAITS, sa["name"])
+                    expected = _trait_key(sa["name"]) not in _DESCRIPTIVE_TRAITS and sa["name"] not in executed
+                    self.assertEqual(listed, expected, sa["name"])
                 for b in m.get("bonus_actions") or []:
                     self.assertIn(f"bonus_action:{_clause_slug(b['name'])}", clauses)
                 for r in m.get("reactions") or []:
-                    self.assertIn(f"reaction:{_clause_slug(r['name'])}", clauses)
-        # Spot checks from the Phase 2 audit and the built-in scenarios.
-        self.assertEqual(monsters["ghast"]["provenance"]["unmodeled_clauses"], ["special_ability:stench"])
-        self.assertIn("special_ability:pack-tactics", monsters["hell-hound"]["provenance"]["unmodeled_clauses"])
-        self.assertIn("special_ability:legendary-resistance", monsters["balor"]["provenance"]["unmodeled_clauses"])
-        self.assertIn("reaction:parry", monsters["bandit-captain"]["provenance"]["unmodeled_clauses"])
+                    self.assertEqual(f"reaction:{_clause_slug(r['name'])}" in clauses, r["name"] not in executed, r["name"])
+        # Executed traits (#39) and the ones still out of reach.
+        kinds = lambda slug: {t["kind"] for t in monsters[slug].get("traits_ir") or []}
+        self.assertEqual(kinds("ghast"), {"start_of_turn_aura_save"})
+        self.assertEqual(monsters["ghast"]["provenance"]["unmodeled_clauses"], [])
+        self.assertEqual(kinds("hell-hound"), {"pack_tactics"})
+        self.assertIn("legendary_resistance", kinds("balor"))
+        self.assertEqual(next(t for t in monsters["adult-red-dragon"]["traits_ir"] if t["kind"] == "legendary_resistance")["uses"], 3)
+        self.assertEqual(next(t for t in monsters["bandit-captain"]["traits_ir"] if t["kind"] == "parry")["ac_bonus"], 2)
+        self.assertEqual(next(t for t in monsters["magmin"]["traits_ir"] if t["kind"] == "death_burst"),
+                         {"kind": "death_burst", "name": "Death Burst", "ability": "dex", "dc": 11, "radius_ft": 10,
+                          "dice": "2d6", "damage_type": "fire"})
+        self.assertIn("special_ability:regeneration", monsters["troll"]["provenance"]["unmodeled_clauses"])  # dies-only-if clause
         self.assertEqual(monsters["frog"]["coverage"], "full")  # only descriptive traits (Amphibious, Standing Leap)
 
     def test_monsters_341_coverage_floors_and_iconic_monsters(self) -> None:

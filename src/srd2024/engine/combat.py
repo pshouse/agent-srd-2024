@@ -496,6 +496,7 @@ def _roll_save(
             success=False,
             reason=reason,
         )
+        _maybe_legendary_resistance(target_id, target, ev, tracker)
         return ev
 
     adv_sources: list[str] = []
@@ -503,6 +504,10 @@ def _roll_save(
 
     if ab in _save_disadvantage_abilities(target, rules):
         disadv_sources.append("condition_save_disadvantage")
+
+    # Magic Resistance (#39): Advantage on saves against spells (the save's reason is the spell's slug).
+    if _trait(target, "magic_resistance") and rules.get_spell(str(reason)) is not None:
+        adv_sources.append("magic_resistance")
 
     if ab == "dex":
         has_dodge = any(e.get("kind") == "dodge" for e in target.get("active_effects", []))
@@ -541,7 +546,22 @@ def _roll_save(
         success=success,
         reason=reason,
     )
+    _maybe_legendary_resistance(target_id, target, ev, tracker)
     return ev
+
+
+def _maybe_legendary_resistance(
+    target_id: str, target: dict[str, Any], save_ev: dict[str, Any], tracker: _StepTracker
+) -> None:
+    """Legendary Resistance (#39): a failed save becomes a success while uses remain (auto policy: always use)."""
+    uses = int(target.get("legendary_resistance_uses", 0))
+    if save_ev.get("success") or uses <= 0 or str(target.get("reaction_policy") or "auto") == "none":
+        return
+    target["legendary_resistance_uses"] = uses - 1
+    save_ev["success"] = True
+    save_ev["legendary_resistance"] = True
+    tracker.emit("legendary_resistance_used", target_id=target_id, reason=save_ev.get("reason"), uses_left=uses - 1)
+    tracker.hook(f"{target['name']} uses Legendary Resistance to succeed instead ({uses - 1} left).")
 
 
 def _apply_damage_parts(
@@ -594,6 +614,25 @@ def _apply_damage_parts(
     hp_damage = total_effective - absorbed
     target["hp"] = max(0, hp_before - hp_damage)
 
+    # Undead Fortitude (#39): if this damage would drop it to 0 (not Radiant, not a crit), CON save DC 5 + damage.
+    fortitude = False
+    if (
+        hp_before > 0
+        and target["hp"] == 0
+        and target.get("kind") == "monster"
+        and _trait(target, "undead_fortitude")
+        and not is_crit
+        and not any(b["type"] == "radiant" and b["effective"] > 0 for b in breakdown)
+    ):
+        fort_ev = _roll_save(state, target_id, "con", 5 + total_effective, rules, rng, tracker, reason="Undead Fortitude")
+        if fort_ev["success"]:
+            target["hp"] = 1
+            hp_damage = hp_before - 1
+            fortitude = True
+
+    dmg_fields: dict[str, Any] = {}
+    if fortitude:
+        dmg_fields["undead_fortitude"] = True
     tracker.emit(
         "damage_applied",
         source_id=source_id,
@@ -604,7 +643,10 @@ def _apply_damage_parts(
         hp_damage=hp_damage,
         hp_before=hp_before,
         hp_after=target["hp"],
+        **dmg_fields,
     )
+    if fortitude:
+        tracker.hook(f"{target['name']} refuses to fall (Undead Fortitude) and drops to 1 HP instead.")
 
     # Damage at 0 HP on a PC causes death save failure(s).
     if hp_before == 0 and total_effective > 0 and target.get("kind") == "pc" and target.get("alive"):
@@ -628,6 +670,9 @@ def _apply_damage_parts(
             target["alive"] = False
             tracker.emit("combatant_defeated", combatant_id=target_id)
             tracker.hook(f"{target['name']} drops to 0 HP and is defeated.")
+            burst = _trait(target, "death_burst")
+            if burst:
+                _resolve_death_burst(state, target_id, burst, rules, rng, tracker)
         else:
             _apply_condition(state, target_id, "unconscious", rules, tracker, source_id=source_id)
             _apply_condition(state, target_id, "prone", rules, tracker, source_id=source_id)
@@ -825,7 +870,105 @@ def _build_monster_combatant(entry: dict[str, Any], rules: RulesStore) -> dict[s
         "weapons": [],
         "monster_actions": copy.deepcopy(m_rec.get("actions", [])),
         "spellcasting": copy.deepcopy(m_rec.get("spellcasting")),
+        # Executable stat-block traits and reactions (#39); see rules_compiler/monsters.py::_parse_trait_ir.
+        # Added only when present, so trait-less combatants (and traces recorded before #39) keep the same state.
+        **_trait_state_fields(m_rec),
     }
+
+
+def _trait_state_fields(m_rec: dict[str, Any]) -> dict[str, Any]:
+    traits = m_rec.get("traits_ir") or []
+    if not traits:
+        return {}
+    fields: dict[str, Any] = {"traits_ir": copy.deepcopy(traits)}
+    lr = sum(int(t.get("uses", 0)) for t in traits if t.get("kind") == "legendary_resistance")
+    if lr:
+        fields["legendary_resistance_uses"] = lr
+    return fields
+
+
+def _trait(combatant: dict[str, Any], kind: str) -> dict[str, Any] | None:
+    """The combatant's executable trait/reaction of this kind (#39), if any."""
+    return next((t for t in combatant.get("traits_ir") or [] if t.get("kind") == kind), None)
+
+
+def _resolve_death_burst(
+    state: dict[str, Any],
+    source_id: str,
+    burst: dict[str, Any],
+    rules: RulesStore,
+    rng: DeterministicRNG,
+    tracker: _StepTracker,
+) -> None:
+    """Death Burst (#39): one damage roll; each creature in the emanation saves for half (SRD 5.2 area rules)."""
+    src = state["combatants"][source_id]
+    radius = int(burst.get("radius_ft", 5))
+    victims = [
+        cid for cid in state.get("turn_order") or []
+        if cid != source_id
+        and state["combatants"][cid].get("alive")
+        and distance_ft(state["combatants"][cid]["position"], src["position"]) <= radius
+    ]
+    roll = rng.roll_dice_expr(str(burst["dice"]))
+    full = int(roll["total"])
+    tracker.emit("death_burst", source_id=source_id, radius_ft=radius, dice=burst["dice"], damage=full,
+                 damage_type=burst["damage_type"], targets=victims)
+    tracker.hook(f"{src['name']} explodes in a {radius}-ft burst!")
+    for cid in victims:
+        sv = _roll_save(state, cid, str(burst["ability"]), int(burst["dc"]), rules, rng, tracker, reason="Death Burst")
+        amount = full // 2 if sv["success"] else full
+        if amount > 0:
+            _apply_damage_parts(state, cid, [{"type": burst["damage_type"], "amount": amount}], rules, rng, tracker,
+                                source_id=source_id)
+
+
+def _start_of_turn_traits(
+    state: dict[str, Any],
+    actor_id: str,
+    rules: RulesStore,
+    rng: DeterministicRNG,
+    tracker: _StepTracker,
+) -> None:
+    """Start-of-turn traits for `actor_id` (#39): its own Regeneration, and every aura it starts its turn in (Stench)."""
+    actor = state["combatants"][actor_id]
+    # Conditions that last "until the start of its next turn" end now, before new auras apply.
+    kept = []
+    for c in actor.get("conditions", []):
+        if isinstance(c, dict) and c.get("duration") == "start_of_target_next_turn":
+            tracker.emit("condition_ended", target_id=actor_id, condition=strip_prefix(c.get("condition", "")),
+                         reason="duration_expired")
+            continue
+        kept.append(c)
+    actor["conditions"] = kept
+
+    regen = _trait(actor, "regeneration")
+    if regen and actor.get("alive") and int(actor.get("hp", 0)) >= 1:
+        before = int(actor["hp"])
+        actor["hp"] = min(int(actor["hp_max"]), before + int(regen["hp"]))
+        if actor["hp"] > before:
+            tracker.emit("healing_applied", source_id=actor_id, target_id=actor_id, spell=None, trait="regeneration",
+                         amount=actor["hp"] - before, hp_before=before, hp_after=actor["hp"], revived=False)
+            tracker.hook(f"{actor['name']} regenerates {actor['hp'] - before} HP.")
+
+    if not actor.get("alive") or int(actor.get("hp", 0)) <= 0:
+        return
+    for sid in state.get("turn_order") or []:
+        if sid == actor_id:
+            continue
+        src = state["combatants"][sid]
+        aura = _trait(src, "start_of_turn_aura_save")
+        if not aura or not src.get("alive") or int(src.get("hp", 0)) <= 0:
+            continue
+        if distance_ft(src["position"], actor["position"]) > int(aura["radius_ft"]) or sid in (actor.get("aura_immune_to") or []):
+            continue
+        name = next((t.get("name") for t in src.get("traits_ir") or [] if t is aura), None) or "Aura"
+        sv = _roll_save(state, actor_id, str(aura["ability"]), int(aura["dc"]), rules, rng, tracker, reason=str(name))
+        if sv["success"]:
+            if aura.get("immune_on_success"):
+                actor.setdefault("aura_immune_to", []).append(sid)
+        else:
+            _apply_condition(state, actor_id, str(aura["condition"]), rules, tracker, source_id=sid,
+                             duration="start_of_target_next_turn")
 
 
 # ----------------------------------------------------------------------
@@ -856,6 +999,20 @@ def _gather_attack_roll_mode(
 
     atk_conds = _effective_conditions(attacker, rules)
     tgt_conds = _effective_conditions(target, rules)
+
+    # Pack Tactics (#39): an able ally of the attacker within 5 ft of the target.
+    if _trait(attacker, "pack_tactics"):
+        for ally in state["combatants"].values():
+            if (
+                ally.get("id") != attacker.get("id")
+                and ally.get("side") == attacker.get("side")
+                and ally.get("alive")
+                and int(ally.get("hp", 0)) > 0
+                and not _has_modifier_flag(ally, "cannot_act", rules)
+                and distance_ft(ally["position"], target["position"]) <= 5
+            ):
+                adv.append("pack_tactics")
+                break
 
     # Attacker conditions.
     if "invisible" in atk_conds:
@@ -1023,6 +1180,11 @@ def _resolve_single_weapon_attack(
     else:
         hit = total_to_hit >= target_ac
         crit = False
+    if hit and not is_ranged:  # Parry (Reaction, #39) against a melee hit
+        parried_ac = _maybe_reactive_parry(state, target_id, attacker_id, d20, total_to_hit, target_ac, rules, tracker)
+        if parried_ac is not None:
+            target_ac = parried_ac
+            hit = total_to_hit >= target_ac
     if hit:  # Shield (Reaction) can turn the hit into a miss (#33)
         shielded_ac = _maybe_reactive_shield(state, target_id, attacker_id, d20, total_to_hit, target_ac, rules, tracker)
         if shielded_ac is not None:
@@ -1467,6 +1629,11 @@ def _resolve_monster_action(
     else:
         hit = total_to_hit >= target_ac
         crit = False
+    if hit and not is_ranged:  # Parry (Reaction, #39) against a melee hit
+        parried_ac = _maybe_reactive_parry(state, tid, actor_id, d20, total_to_hit, target_ac, rules, tracker)
+        if parried_ac is not None:
+            target_ac = parried_ac
+            hit = total_to_hit >= target_ac
     if hit:  # Shield (Reaction) can turn the hit into a miss (#33)
         shielded_ac = _maybe_reactive_shield(state, tid, actor_id, d20, total_to_hit, target_ac, rules, tracker)
         if shielded_ac is not None:
@@ -1828,6 +1995,34 @@ def _maybe_reactive_shield(
     return _effective_ac(target)
 
 
+def _maybe_reactive_parry(
+    state: dict[str, Any],
+    target_id: str,
+    attacker_id: str,
+    d20: dict[str, Any],
+    total_to_hit: int,
+    target_ac: int,
+    rules: RulesStore,
+    tracker: _StepTracker,
+) -> int | None:
+    """Parry (#39): a monster hit by a melee attack adds N to its AC against that attack, if that makes it miss.
+
+    The caller only asks for melee attacks. Holding a weapon is assumed for monsters with weapon attack actions,
+    which every Parry monster in SRD 5.2 has. Returns the AC for this attack only.
+    """
+    target = state["combatants"][target_id]
+    parry = _trait(target, "parry")
+    if not parry or d20.get("nat20") or not _can_react(target, rules):
+        return None
+    bonus = int(parry.get("ac_bonus", 2))
+    if total_to_hit >= target_ac + bonus:
+        return None
+    target["turn_resources"]["reaction"] = False
+    tracker.emit("reaction_parry", reaction=True, actor_id=target_id, trigger_source_id=attacker_id, ac_bonus=bonus)
+    tracker.hook(f"{target['name']} parries (+{bonus} AC against this attack).")
+    return target_ac + bonus
+
+
 def _melee_reach_and_attack(combatant: dict[str, Any]) -> tuple[int, dict[str, Any] | None, str]:
     """(reach in ft, attack to use, 'weapon'|'action') for an Opportunity Attack; (0, None, '') if none.
 
@@ -2018,6 +2213,8 @@ def step(
         tracker.emit("encounter_started", encounter_id=encounter_id, turn_order=turn_order, round=1)
         first_actor = combatants[turn_order[0]]["name"]
         tracker.hook(f"Encounter '{encounter_id}' begins! Round 1: {first_actor} acts first.")
+        _start_of_turn_traits(new_state, turn_order[0], rules, rng, tracker)
+        new_state["rng"] = rng.to_dict()
 
         return {
             "status": "ok",
@@ -3397,6 +3594,7 @@ def step(
         new_actor["movement_remaining_ft"] = _effective_speed(new_actor, rules)
         tracker.emit("turn_started", actor_id=new_active_id, round=new_round)
         tracker.hook(f"Round {new_round}: {new_actor['name']}'s turn begins.")
+        _start_of_turn_traits(s, new_active_id, rules, rng, tracker)
 
         # 6. Check exhaustion 6 death or 0-HP PC Death Saving Throw.
         if not _check_exhaustion_death(s, new_active_id, tracker):

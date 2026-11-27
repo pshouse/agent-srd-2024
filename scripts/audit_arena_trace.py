@@ -10,7 +10,8 @@ Usage:
     python3 scripts/audit_arena_trace.py /tmp/crypt-*.json
 
 Exit code 1 if any rule has a violation. Reactions are checked: Opportunity Attacks (#38) and Shield's trigger (#33,
-#41). Not covered: monster traits (#39), ranges and cover, and spells other than Fireball/Healing Word/Mass Healing
+#41). Monster traits (#39): Stench saves, Legendary Resistance, Undead Fortitude and Parry are checked. Not covered:
+ranges and cover, and spells other than Fireball/Healing Word/Mass Healing
 Word/Bless/Shield/Mage Armor.
 """
 
@@ -70,6 +71,10 @@ def audit(path: Path) -> None:
     pos = {i: dict(c["position"]) for i, c in cs.items()}
     reaction = {i: True for i in cs}
     disengaged: dict[str, bool] = {i: False for i in cs}
+    parry_bonus: dict[str, int] = {}
+    # Saves made at encounter start (the first creature's turn) aren't in `actions`; their results are in initial_state.
+    aura_immune: dict[str, set] = {i: set(c.get("aura_immune_to") or []) for i, c in cs.items()}
+    auras = {i: next((t for t in c.get("traits_ir") or [] if t.get("kind") == "start_of_turn_aura_save"), None) for i, c in cs.items()}
 
     def reach(i: str) -> int:
         best = 0
@@ -102,6 +107,16 @@ def audit(path: Path) -> None:
                 reaction[e["actor_id"]] = True
                 disengaged[e["actor_id"]] = False
                 who = e["actor_id"]
+                for src, aura in auras.items():
+                    if aura and src != who and hp[src] > 0 and "dead" not in conds[src] and hp[who] > 0 \
+                            and "dead" not in conds[who] and src not in aura_immune[who] and cheb(pos[src], pos[who]) <= aura["radius_ft"]:
+                        sv = next((x for x in evs[idx + 1:] if x["type"] == "saving_throw" and x["target_id"] == who
+                                   and x.get("reason") == aura.get("name")), None)
+                        check("starting a turn in a Stench-type aura forces its save", sv is not None and sv["dc"] == aura["dc"]
+                              and sv["ability"] == aura["ability"], where, f"{who} starts its turn {cheb(pos[src], pos[who])} ft from {src}")
+                        if sv is not None and sv["success"] and aura.get("immune_on_success"):
+                            aura_immune[who].add(src)
+                who = e["actor_id"]
                 if side[who] == "party" and hp[who] == 0 and "dead" not in conds[who] and "stable" not in conds[who]:
                     rest = evs[idx + 1:] + [x for b in t["actions"][t["actions"].index(a) + 1: t["actions"].index(a) + 2] for x in b["events"]]
                     ds = next((x for x in rest[:6] if x["type"] == "death_save" and x["actor_id"] == who), None)
@@ -132,8 +147,8 @@ def audit(path: Path) -> None:
                 exp_hit = nat20 or (not nat1 and e["total"] >= e["target_ac"])
                 check("hit iff nat20 or (not nat1 and total >= AC)", e["hit"] == exp_hit, where, f"total {e['total']} vs AC {e['target_ac']} chosen {e['chosen']} hit={e['hit']}")
                 # Target AC: base (+5 while Shield is up)
-                base = base_ac[tgt]
-                check("target AC = sheet AC (+5 Shield)", e["target_ac"] in (base, base + 5) and (e["target_ac"] == base + 5) == shield_on[tgt], where,
+                base = base_ac[tgt] + parry_bonus.pop(tgt, 0)
+                check("target AC = sheet AC (+5 Shield, + Parry)", e["target_ac"] in (base, base + 5) and (e["target_ac"] == base + 5) == shield_on[tgt], where,
                       f"{tgt} AC {e['target_ac']} base {base} shield={shield_on[tgt]}")
                 # Attack bonus from the sheet
                 if ty == "attack_roll" and e.get("action") and e["action"] in mactions[e["actor_id"]]:
@@ -204,7 +219,12 @@ def audit(path: Path) -> None:
                         check("concentration DC = max(10, half damage)", sv["dc"] == min(30, max(10, e["total_damage"] // 2)) and sv["ability"] == "con", where,
                               f"dc {sv['dc']} for {e['total_damage']} damage")
                 check("hp_before matches running HP", e["hp_before"] == hp[tgt], where, f"{tgt} {e['hp_before']} vs {hp[tgt]}")
-                check("hp_after = max(0, before - hp_damage)", e["hp_after"] == max(0, e["hp_before"] - e["hp_damage"]), where, str(e))
+                if e.get("undead_fortitude"):
+                    check("Undead Fortitude leaves exactly 1 HP after a passed save", e["hp_after"] == 1 and any(
+                        x["type"] == "saving_throw" and x.get("reason") == "Undead Fortitude" and x["success"] for x in evs[:idx]),
+                        where, str(e))
+                else:
+                    check("hp_after = max(0, before - hp_damage)", e["hp_after"] == max(0, e["hp_before"] - e["hp_damage"]), where, str(e))
                 # Damage at 0 HP: a death-save failure (2 on a crit); massive damage kills outright
                 if side[tgt] == "party" and e["hp_before"] == 0 and e["hp_damage"] > 0:
                     nxt = next((x for x in evs[idx + 1: idx + 4] if x["type"] in ("death_save_damage_failure", "combatant_died") and x.get("target_id", x.get("combatant_id")) == tgt), None)
@@ -226,13 +246,16 @@ def audit(path: Path) -> None:
                 s, f = death[who]
                 if r == 20:
                     exp = "revived"
+                    hp[who] = 1  # natural 20: regains 1 HP (no healing event)
+                    death[who] = [0, 0]
+                    conds[who] -= {"unconscious", "stable"}
                 elif r == 1:
                     f += 2; exp = "failure"
                 elif r >= 10:
                     s += 1; exp = "success"
                 else:
                     f += 1; exp = "failure"
-                check("death save outcome by roll (1 = two failures, 20 = 1 HP)", e["outcome"].startswith(exp[:4]) or (r == 20 and e["outcome"] in ("revived", "regain_hp", "critical_success")), where, f"roll {r} -> {e['outcome']}")
+                check("death save outcome by roll (1 = two failures, 20 = 1 HP)", e["outcome"].startswith(exp[:4]) or (r == 20 and e["outcome"] in ("revived", "regain_hp", "critical_success", "nat20_revive")) or (r == 1 and e["outcome"] == "nat1_two_failures"), where, f"roll {r} -> {e['outcome']}")
                 if r != 20:
                     death[who] = [s, f]
                     check("death save counters", (e["successes"], e["failures"]) == (min(3, s), min(3, f)), where, f"{e} expected {(s, f)}")
@@ -255,7 +278,12 @@ def audit(path: Path) -> None:
                 b = sum(x.get("delta", 0) for x in e.get("bonus_dice") or [])
                 if not e.get("auto_fail"):
                     check("save total = d20 + mod + extra dice - exhaustion", e["total"] == e["chosen"] + e["modifier"] + b - e.get("exhaustion_penalty", 0), where, str(e))
-                    check("save success iff total >= DC", e["success"] == (e["total"] >= e["dc"]), where, str(e))
+                    if e.get("legendary_resistance"):
+                        check("Legendary Resistance only turns a failed save into a success", e["success"] and e["total"] < e["dc"]
+                              and any(x["type"] == "legendary_resistance_used" and x["target_id"] == tgt for x in evs[idx + 1: idx + 3]),
+                              where, str(e))
+                    else:
+                        check("save success iff total >= DC", e["success"] == (e["total"] >= e["dc"]), where, str(e))
                     check("save modifier = sheet save bonus", e["modifier"] == cs[tgt]["saves"][e["ability"]], where, f"{tgt} {e['ability']} {e['modifier']} vs {cs[tgt]['saves'][e['ability']]}")
                 if e["ability"] in ("str", "dex") and conds[tgt] & {"paralyzed", "unconscious"}:
                     check("paralyzed/unconscious auto-fail STR/DEX saves", e.get("auto_fail") and not e["success"], where, f"{tgt} {sorted(conds[tgt])}")
@@ -267,6 +295,10 @@ def audit(path: Path) -> None:
 
             if ty == "action_disengage":
                 disengaged[e["actor_id"]] = True
+            if ty == "reaction_parry":
+                check("Parry needs a free reaction", reaction[e["actor_id"]], where, e["actor_id"])
+                reaction[e["actor_id"]] = False
+                parry_bonus[e["actor_id"]] = int(e["ac_bonus"])
             if ty == "opportunity_attack":
                 rid, mid = e["actor_id"], e["target_id"]
                 check("opportunity attack only by a hostile that can react, vs a mover that didn't Disengage",
