@@ -29,7 +29,7 @@ from srd2024.engine.combat import (
 from srd2024.engine.dice import DeterministicRNG
 from srd2024.engine.store import RulesStore, strip_prefix
 
-from .agents import AgentDriver, ReplayDriver, create_driver
+from .agents import AgentDriver, ReplayDriver, create_driver, scrub_secrets
 from .scenarios import BUILTIN_SCENARIO_IDS, load_scenario
 from .scoring import score_match
 
@@ -220,6 +220,7 @@ def build_observation(
         "conditions": self_conds,
         "concentration": copy.deepcopy(actor.get("concentration")),
         "active_effects": _effect_kinds(actor, visible_only=False),
+        "heroic_inspiration": bool(actor.get("heroic_inspiration", False)),
         "turn_resources": copy.deepcopy(actor.get("turn_resources", {})),
         "weapons": copy.deepcopy(actor.get("weapons", [])),
         "monster_actions": copy.deepcopy(actor.get("monster_actions", [])),
@@ -301,6 +302,11 @@ def build_observation(
             )
 
     legal = compute_legal_actions(state, rules)
+    hint = legal.get("reroll_hint")
+    if isinstance(hint, dict):
+        target = combatants.get(str(hint.get("target_id") or ""))
+        if isinstance(target, dict) and str(target.get("side")) != side:
+            hint.pop("target_ac", None)
     if actor.get("kind") == "monster":
         legal["weapons"] = list(avail_monster_actions) if (actor.get("turn_resources") or {}).get("action") else []
     reaction_spells = _reaction_spells_for(actor, rules)
@@ -318,7 +324,7 @@ def build_observation(
     legal["downed_allies"] = downed_allies
 
     side_board = list(blackboard.get(side) or [])[-12:]
-    hooks_window = list(recent_hooks or [])[-12:]
+    hooks_window = [_observer_event_text(h) for h in list(recent_hooks or [])[-12:]]
 
     return {
         "round": int(state.get("round", 1)),
@@ -379,6 +385,77 @@ def _describe_driver_config(driver_or_map: AgentDriver | dict[str, AgentDriver])
     if isinstance(driver_or_map, dict):
         return {k: str(getattr(v, "name", type(v).__name__)) for k, v in sorted(driver_or_map.items())}
     return str(getattr(driver_or_map, "name", type(driver_or_map).__name__))
+
+
+_ARENA_INTENT_TYPES = frozenset(
+    {
+        "move",
+        "attack",
+        "cast_spell",
+        "dodge",
+        "dash",
+        "disengage",
+        "help",
+        "end_turn",
+        "reroll",
+    }
+)
+_PRIVATE_RESOURCE_RE = re.compile(
+    r"spell slots?|slots remaining|no Reaction|Reaction remaining",
+    re.IGNORECASE,
+)
+_NAMED_RESOURCE_RE = re.compile(r"^(\S+) has no\b")
+# Narration a player sees. The referee log in the transcript keeps the original
+# hooks. These patterns also cover forms Stage 4 adds, such as "(18/32 HP)",
+# "(failed CON DC 13)", and "(AC 17, ...)".
+_HIDDEN_NARRATION_RES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\s*\([^)]*\b(?:AC|DC)\b[^)]*\)", re.IGNORECASE),
+    re.compile(r"\bvs\s+AC\s+\d+\b", re.IGNORECASE),
+    re.compile(r"\bAC\s+\d+\b", re.IGNORECASE),
+    re.compile(r"\bDC\s+\d+\b", re.IGNORECASE),
+    re.compile(r"\s*\(\s*\d+\s*/\s*\d+\s*HP[^)]*\)", re.IGNORECASE),
+    re.compile(r"\b\d+\s*/\s*\d+\s*HP\b", re.IGNORECASE),
+    re.compile(r"\b\d+\s+temp(?:orary)?\s+HP\b", re.IGNORECASE),
+    # Stage 4 writes "(Temp HP: 15)" (any spacing, colon optional).
+    re.compile(r"\(\s*temp(?:orary)?\s+HP\s*:?\s*\d+[^)]*\)", re.IGNORECASE),
+    re.compile(r"\blevel-\d+\s+spell\s+slots?\b", re.IGNORECASE),
+    re.compile(r"\b\d+\s+spell\s+slots?\b", re.IGNORECASE),
+)
+
+
+def _observer_event_text(text: str) -> str:
+    """Drop hidden AC, DC, exact HP, temp HP, and slot counts from player narration."""
+    cleaned = str(text)
+    for pattern in _HIDDEN_NARRATION_RES:
+        cleaned = pattern.sub("", cleaned)
+    return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+
+
+def _arena_intent_rejection(intent: dict[str, Any], active_id: str) -> str | None:
+    """Reject intents the arena must not pass to the engine.
+
+    Allowed types are the turn actions a combatant can choose. `actor_id` must
+    be present and equal the active combatant, so a driver cannot rebuild the
+    encounter or spend another creature's action.
+    """
+    raw_type = intent.get("type")
+    itype = str(raw_type).strip().lower() if isinstance(raw_type, str) else ""
+    if itype not in _ARENA_INTENT_TYPES:
+        shown = itype[:64]
+        return f"Intent type {shown!r} is not allowed."
+    actor = intent.get("actor_id")
+    if not isinstance(actor, str) or actor != active_id:
+        return "Intent rejected: actor_id must be the active combatant."
+    return None
+
+
+def _driver_visible_error(message: str, active_id: str) -> str:
+    """Hide another combatant's slots and reaction from driver-facing text."""
+    text = str(message or "Invalid intent.")
+    named = _NAMED_RESOURCE_RE.match(text)
+    if _PRIVATE_RESOURCE_RE.search(text) and (named is None or named.group(1) != active_id):
+        return "Intent rejected."
+    return text
 
 
 def _cannot_act(actor: dict[str, Any], rules: RulesStore) -> bool:
@@ -553,19 +630,20 @@ def run_match(
                         raise ValueError("Driver decision intent must be a dict with a non-empty 'type'.")
                     intent = copy.deepcopy(raw_intent)
                 except Exception as exc:
-                    err_msg = str(exc) or type(exc).__name__
+                    err_msg = scrub_secrets(str(exc) or type(exc).__name__)
                     violations.append(
                         {
                             "round": cur_round,
                             "turn_index": turn_counter,
                             "actor_id": active_id,
                             "side": side,
+                            "action_index": action_index,
                             "attempt": attempt,
                             "intent": {},
                             "error": err_msg,
                         }
                     )
-                    retry_feedback = (
+                    retry_feedback = scrub_secrets(
                         f"Attempt {attempt} decision error: {err_msg}. "
                         "Emit a single valid JSON object with a legal 'intent'."
                     )
@@ -573,17 +651,24 @@ def run_match(
 
                 itype = str(intent["type"]).strip().lower()
                 intent["type"] = itype
-                if not intent.get("actor_id") and itype in (
-                    "move",
-                    "attack",
-                    "dodge",
-                    "dash",
-                    "disengage",
-                    "help",
-                    "end_turn",
-                    "cast_spell",
-                ):
-                    intent["actor_id"] = active_id
+                rejection = _arena_intent_rejection(intent, active_id)
+                if rejection is not None:
+                    violations.append(
+                        {
+                            "round": cur_round,
+                            "turn_index": turn_counter,
+                            "actor_id": active_id,
+                            "side": side,
+                            "action_index": action_index,
+                            "attempt": attempt,
+                            "intent": intent,
+                            "error": rejection,
+                        }
+                    )
+                    retry_feedback = (
+                        f"{rejection} Emit one allowed intent for the active combatant."
+                    )
+                    continue
 
                 # Recharge sidecar validation before calling combat.step().
                 recharging_action_name: str | None = None
@@ -603,6 +688,7 @@ def run_match(
                                     "turn_index": turn_counter,
                                     "actor_id": active_id,
                                     "side": side,
+                                    "action_index": action_index,
                                     "attempt": attempt,
                                     "intent": intent,
                                     "error": err_msg,
@@ -623,6 +709,8 @@ def run_match(
 
                     talk_raw = getattr(decision, "table_talk", None)
                     talk_clean = talk_raw.strip() if isinstance(talk_raw, str) and talk_raw.strip() else None
+                    if talk_clean is not None:
+                        talk_clean = scrub_secrets(talk_clean) or None
                     if talk_clean is not None:
                         blackboard.setdefault(side, []).append(
                             {
@@ -653,7 +741,7 @@ def run_match(
                             "auto_end_turn": False,
                             "forced_fallback": False,
                             "intent": intent,
-                            "rationale": str(getattr(decision, "rationale", "") or ""),
+                            "rationale": scrub_secrets(str(getattr(decision, "rationale", "") or "")),
                             "table_talk": talk_clean,
                             "events": res.get("events") or [],
                             "state_diff": res.get("state_diff") or {},
@@ -668,19 +756,22 @@ def run_match(
                         turn_ended = True
                     break
 
-                err_msg = str(res.get("error") or "Invalid intent.")
+                err_msg = scrub_secrets(
+                    _driver_visible_error(str(res.get("error") or "Invalid intent."), active_id)
+                )
                 violations.append(
                     {
                         "round": cur_round,
                         "turn_index": turn_counter,
                         "actor_id": active_id,
                         "side": side,
+                        "action_index": action_index,
                         "attempt": attempt,
                         "intent": intent,
                         "error": err_msg,
                     }
                 )
-                retry_feedback = (
+                retry_feedback = scrub_secrets(
                     f"Previous intent {json.dumps(intent, sort_keys=True)} was rejected: {err_msg}. "
                     "Choose a legal action from legal_actions."
                 )
@@ -761,7 +852,7 @@ def run_match(
     rounds_played = max((int(a["round"]) for a in actions), default=min(int(state["round"]), effective_max_rounds))
 
     transcript: dict[str, Any] = {
-        "schema_version": "3",
+        "schema_version": "4",
         "dataset_id": rules.dataset_id,
         "scenario": {
             "id": compiled["id"],
@@ -810,6 +901,7 @@ def _combatant_to_start_entry(comb: dict[str, Any]) -> dict[str, Any]:
             "temp_hp": int(comb.get("temp_hp", 0)),
             "exhaustion_level": int(comb.get("exhaustion_level", 0)),
             "conditions": copy.deepcopy(comb.get("conditions", [])),
+            "heroic_inspiration": bool(comb.get("heroic_inspiration", False)),
         }
 
     ac_breakdown = "Armored" if comb.get("wearing_armor") else "Unarmored"
@@ -846,6 +938,7 @@ def _combatant_to_start_entry(comb: dict[str, Any]) -> dict[str, Any]:
         "temp_hp": int(comb.get("temp_hp", 0)),
         "exhaustion_level": int(comb.get("exhaustion_level", 0)),
         "conditions": copy.deepcopy(comb.get("conditions", [])),
+        "heroic_inspiration": bool(comb.get("heroic_inspiration", False)),
     }
 
 
@@ -890,6 +983,35 @@ def replay_match(
     scenario_override: str | Path | dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Replay a recorded MatchTranscript through `ReplayDriver` + `srd2024.engine.combat.step()`."""
+    schema = str(transcript.get("schema_version") or "")
+    if schema == "3":
+        message = (
+            "unsupported schema_version '3'. v0.3 traces cannot be replayed; expected schema_version 4."
+        )
+        return {
+            "status": "error",
+            "error": message,
+            "scenario_id": str((transcript.get("scenario") or {}).get("id") or ""),
+            "seed": int((transcript.get("config") or {}).get("seed", 0) or 0),
+            "deterministic_match": False,
+            "original_digest": str(transcript.get("digest") or ""),
+            "replayed_digest": "",
+            "diffs": [message],
+            "replayed_transcript": None,
+        }
+    if schema not in ("4", ""):
+        message = f"unsupported schema_version {schema!r}. Expected schema_version 4."
+        return {
+            "status": "error",
+            "error": message,
+            "scenario_id": str((transcript.get("scenario") or {}).get("id") or ""),
+            "seed": int((transcript.get("config") or {}).get("seed", 0) or 0),
+            "deterministic_match": False,
+            "original_digest": str(transcript.get("digest") or ""),
+            "replayed_digest": "",
+            "diffs": [message],
+            "replayed_transcript": None,
+        }
     sc_meta = transcript.get("scenario") or {}
     cfg = transcript.get("config") or {}
     scenario_id = str(sc_meta.get("id") or (transcript.get("initial_state") or {}).get("encounter_id") or "")
@@ -897,6 +1019,12 @@ def replay_match(
     max_rounds = int(cfg.get("max_rounds") or sc_meta.get("max_rounds") or 10)
     max_actions = int(cfg.get("max_actions_per_turn", 6))
     max_retries = int(cfg.get("max_retries_per_action", 2))
+    peak_attempt = 1
+    for entry in list(transcript.get("violations") or []) + list(transcript.get("actions") or []):
+        if not isinstance(entry, dict):
+            continue
+        peak_attempt = max(peak_attempt, int(entry.get("attempt") or entry.get("attempts") or 1))
+    max_retries = max(max_retries, peak_attempt - 1)
 
     if scenario_override is not None:
         scenario_input: str | Path | dict[str, Any] = scenario_override
@@ -1127,7 +1255,7 @@ def run_benchmark(
         row["rank"] = rank_idx
 
     return {
-        "schema_version": "3",
+        "schema_version": "4",
         "status": "ok",
         "scenarios": scenario_ids,
         "seeds": seed_list,

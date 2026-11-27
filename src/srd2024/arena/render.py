@@ -9,6 +9,17 @@ from __future__ import annotations
 from typing import Any
 
 
+def _fmt_driver(driver_cfg: Any) -> str:
+    """Format a driver config (string or per-seat dict) cleanly for Markdown tables."""
+    if isinstance(driver_cfg, dict):
+        if not driver_cfg:
+            return "unknown"
+        return ", ".join(f"{k}: {v}" for k, v in sorted(driver_cfg.items()))
+    if driver_cfg is None or str(driver_cfg).strip() == "":
+        return "unknown"
+    return str(driver_cfg)
+
+
 def _fmt_pos(pos: dict[str, Any] | None) -> str:
     if not isinstance(pos, dict):
         return "(?, ?)"
@@ -129,8 +140,8 @@ def render_match_markdown(transcript: dict[str, Any]) -> str:
     sc_name = str(scenario.get("name") or scenario.get("id") or "Arena Match")
     sc_id = str(scenario.get("id") or "")
     seed = config.get("seed", "")
-    party_drv = config.get("party_driver", "unknown")
-    enemy_drv = config.get("enemy_driver", "unknown")
+    party_drv = _fmt_driver(config.get("party_driver", "unknown"))
+    enemy_drv = _fmt_driver(config.get("enemy_driver", "unknown"))
     winner = str(transcript.get("winner") or "draw")
     rounds = transcript.get("rounds", 0)
     digest = str(transcript.get("digest") or "")

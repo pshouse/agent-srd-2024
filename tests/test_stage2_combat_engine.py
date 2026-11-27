@@ -925,7 +925,8 @@ class TestSpellsConcentrationAndRevival(unittest.TestCase):
                 {"id": "wiz-e", "side": "enemy", "statblock": self.wizard, "position": {"x": 20, "y": 0}},
             ],
         )
-        # Wizard base AC is 11. Cast Shield as off-turn reaction -> AC becomes 16!
+        # Wizard base AC is 11. A hit window is open; Shield is a reaction spell.
+        st["reaction_window"] = {"actor_id": "wiz-1", "trigger": "hit"}
         r_sh = step(
             st,
             {"type": "cast_spell", "actor_id": "wiz-1", "spell": "shield", "target_ids": ["wiz-1"], "as_reaction": True},

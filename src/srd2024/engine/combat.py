@@ -2,7 +2,7 @@
 
 Pure, non-mutating JSON state machine driven by structured intents:
 `start_encounter`, `move`, `attack`, `cast_spell`, `dodge`, `dash`,
-`disengage`, `help`, `end_turn`.
+`disengage`, `help`, `end_turn`, `reroll`.
 
 Implements:
 - All 8 2024 Weapon Masteries: cleave, graze, nick, push, sap, slow, topple, vex
@@ -57,6 +57,34 @@ def _slugify(text: str) -> str:
 
 def _ability_mod(score: int) -> int:
     return (int(score) - 10) // 2
+
+
+def _parse_int(value: Any, *, allow_str: bool = False) -> int | None:
+    """Safely parse an integer, strictly rejecting booleans (and floats)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if allow_str and isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_point(raw: Any) -> dict[str, int] | None:
+    """Safely parse a grid coordinate dict `{x, y}` with int-convertible coords (rejecting bools)."""
+    if not isinstance(raw, dict) or "x" not in raw or "y" not in raw:
+        return None
+    x = _parse_int(raw["x"], allow_str=True)
+    y = _parse_int(raw["y"], allow_str=True)
+    if x is None or y is None:
+        return None
+    return {"x": x, "y": y}
 
 
 # ----------------------------------------------------------------------
@@ -638,6 +666,8 @@ def _build_pc_combatant(entry: dict[str, Any]) -> dict[str, Any]:
 
     ac_breakdown = str(sb.get("ac_breakdown") or "")
     wearing_armor = bool(ac_breakdown) and not ac_breakdown.startswith("Unarmored") and "Unarmored Defense" not in ac_breakdown
+    traits = {strip_prefix(t) for t in (sb.get("traits") or [])}
+    heroic_inspiration = bool(entry.get("heroic_inspiration", "resourceful" in traits))
 
     return {
         "id": cid,
@@ -668,6 +698,7 @@ def _build_pc_combatant(entry: dict[str, Any]) -> dict[str, Any]:
         "exhaustion_level": int(entry.get("exhaustion_level", 0)),
         "concentration": None,
         "active_effects": [],
+        "heroic_inspiration": heroic_inspiration,
         "extra_attacks": int(sb.get("extra_attacks", 1)),
         "feats": list(sb.get("feats", [])),
         "turn_resources": {
@@ -736,6 +767,12 @@ def _build_monster_combatant(entry: dict[str, Any], rules: RulesStore) -> dict[s
     if init_bonus is None:
         init_bonus = mods["dex"]
 
+    m_traits = {
+        strip_prefix(t.get("name") if isinstance(t, dict) else str(t))
+        for t in (m_rec.get("traits") or [])
+    }
+    heroic_inspiration = bool(entry.get("heroic_inspiration", "resourceful" in m_traits))
+
     return {
         "id": cid,
         "name": str(entry.get("name") or m_rec.get("name") or cid),
@@ -765,6 +802,7 @@ def _build_monster_combatant(entry: dict[str, Any], rules: RulesStore) -> dict[s
         "exhaustion_level": int(entry.get("exhaustion_level", 0)),
         "concentration": None,
         "active_effects": [],
+        "heroic_inspiration": heroic_inspiration,
         "extra_attacks": 1,
         "feats": [],
         "turn_resources": {
@@ -1036,7 +1074,14 @@ def _resolve_single_weapon_attack(
                 source_id=attacker_id,
             )
             tracker.hook(f"Graze mastery still deals {eff_dmg} {dmg_type} damage to {target['name']}.")
-        return {"hit": False, "crit": False, "damage": 0}
+        return {
+            "hit": False,
+            "crit": False,
+            "damage": 0,
+            "chosen": int(d20["chosen"]),
+            "total": int(total_to_hit),
+            "target_ac": int(target_ac),
+        }
 
     # Hit -> Roll damage.
     dice_str = (
@@ -1224,7 +1269,14 @@ def _resolve_single_weapon_attack(
                     reason="target_out_of_cleave_range",
                 )
 
-    return {"hit": True, "crit": crit, "damage": eff_dmg}
+    return {
+        "hit": True,
+        "crit": crit,
+        "damage": eff_dmg,
+        "chosen": int(d20["chosen"]),
+        "total": int(total_to_hit),
+        "target_ac": int(target_ac),
+    }
 
 
 def _find_monster_action(actor: dict[str, Any], action_name: str) -> dict[str, Any] | None:
@@ -1447,6 +1499,7 @@ def _resolve_monster_action(
         res = rng.roll_dice_expr(dice_str, crit=crit)
         dmg_to_apply.append({"amount": max(0, int(res["total"])), "type": dtype})
 
+    hit_hook_idx = len(tracker.hooks)
     eff_dmg = _apply_damage_parts(
         state,
         tid,
@@ -1457,8 +1510,9 @@ def _resolve_monster_action(
         source_id=actor_id,
         is_crit=crit,
     )
-    tracker.hook(
-        f"{actor['name']} hits {target['name']} with {act_name} ({total_to_hit} vs AC {target_ac}) for {eff_dmg} damage."
+    tracker.hooks.insert(
+        hit_hook_idx,
+        f"{actor['name']} hits {target['name']} with {act_name} ({total_to_hit} vs AC {target_ac}) for {eff_dmg} damage.",
     )
 
     # Rider saves & conditions (e.g., Ghoul Claw CON DC 10 -> paralyzed, Wolf Bite -> prone).
@@ -1507,6 +1561,8 @@ def compute_legal_actions(state: dict[str, Any], rules: RulesStore) -> dict[str,
             "weapons": [],
             "spells": [],
             "can_end_turn": False,
+            "can_reroll": False,
+            "reroll_hint": None,
         }
 
     active_idx = int(state.get("active_index", 0)) % len(turn_order)
@@ -1554,6 +1610,26 @@ def compute_legal_actions(state: dict[str, Any], rules: RulesStore) -> dict[str,
             if "offhand_attack" not in bonus_actions:
                 bonus_actions.append("offhand_attack")
 
+    pending = state.get("pending_reroll")
+    can_reroll = bool(
+        not incap
+        and actor.get("heroic_inspiration") is True
+        and isinstance(pending, dict)
+        and pending.get("actor_id") == active_id
+        and isinstance(pending.get("intent"), dict)
+        and isinstance(pending.get("rollback_combatants"), dict)
+    )
+    reroll_hint: dict[str, Any] | None = None
+    if can_reroll and isinstance(pending, dict):
+        reroll_hint = {
+            "label": str(pending.get("label") or "Attack"),
+            "target_id": str(pending.get("target_id") or ""),
+            "target_name": str(pending.get("target_name") or ""),
+            "previous_d20": int(pending.get("previous_d20", 0)),
+            "previous_total": int(pending.get("previous_total", 0)),
+            "target_ac": int(pending.get("target_ac", 0)),
+        }
+
     return {
         "active_actor_id": active_id,
         "movement_remaining_ft": int(actor.get("movement_remaining_ft", 0)),
@@ -1562,6 +1638,8 @@ def compute_legal_actions(state: dict[str, Any], rules: RulesStore) -> dict[str,
         "weapons": weapons,
         "spells": spells,
         "can_end_turn": True,
+        "can_reroll": can_reroll,
+        "reroll_hint": reroll_hint,
     }
 
 
@@ -1634,6 +1712,31 @@ def _has_active_shield(target: dict[str, Any], spell_slug: str) -> bool:
 # ----------------------------------------------------------------------
 
 
+def _reaction_trigger_applies(
+    state: dict[str, Any],
+    actor_id: str,
+    spell: dict[str, Any],
+) -> bool:
+    """True only for a reaction spell with a real trigger.
+
+    A trigger is an engine `reaction_window` naming this caster, or the caster
+    spending their own reaction on their own turn. `as_reaction` on any other
+    spell does not qualify.
+    """
+    if str(spell.get("action_type") or "").lower() != "reaction":
+        return False
+    if not spell.get("reaction_trigger"):
+        return False
+    window = state.get("reaction_window")
+    if isinstance(window, dict) and str(window.get("actor_id") or "") == str(actor_id):
+        return True
+    turn_order = state.get("turn_order") or []
+    if not turn_order:
+        return False
+    active_id = turn_order[int(state.get("active_index", 0)) % len(turn_order)]
+    return str(active_id) == str(actor_id)
+
+
 def step(
     state: dict[str, Any] | None,
     intent: dict[str, Any],
@@ -1651,7 +1754,10 @@ def step(
     # 1. `start_encounter`
     # ------------------------------------------------------------------
     if intent_type == "start_encounter":
-        seed = int(intent.get("seed", 1))
+        safe_start = copy.deepcopy(state) if isinstance(state, dict) else {}
+        seed = _parse_int(intent.get("seed", 1), allow_str=False)
+        if seed is None:
+            return _invalid(safe_start, "start_encounter 'seed' must be an integer.", rules)
         encounter_id = str(intent.get("encounter_id") or "enc-1")
         raw_combatants = intent.get("combatants")
         if not isinstance(raw_combatants, list) or not raw_combatants:
@@ -1727,6 +1833,7 @@ def step(
             "turn_order": turn_order,
             "active_index": 0,
             "rng": rng.to_dict(),
+            "pending_reroll": None,
             "combatants": combatants,
         }
 
@@ -1768,6 +1875,7 @@ def step(
 
     # Enforce exhaustion 6 death check if externally mutated/initialized.
     if _exhaustion_level(actor) >= 6 and actor.get("alive"):
+        s["pending_reroll"] = None
         _check_exhaustion_death(s, actor_id, tracker)
         s["rng"] = rng.to_dict()
         _update_encounter_status(s)
@@ -1785,6 +1893,7 @@ def step(
     # 2. `move`
     # ------------------------------------------------------------------
     if intent_type == "move":
+        s["pending_reroll"] = None
         if actor_id != active_id:
             return _invalid(copy.deepcopy(state), f"It is {active_id}'s turn, not {actor_id}'s.", rules)
         if not actor.get("alive"):
@@ -1802,7 +1911,14 @@ def step(
         if to_pos is None:
             to_pos = copy.deepcopy(actor["position"])
         else:
-            to_pos = {"x": int(to_pos["x"]), "y": int(to_pos["y"])}
+            parsed_to = _parse_point(to_pos)
+            if parsed_to is None:
+                return _invalid(
+                    copy.deepcopy(state),
+                    "move 'to' must be a dict with integer 'x' and 'y' coordinates.",
+                    rules,
+                )
+            to_pos = parsed_to
 
         if stand_up:
             if "prone" in _effective_conditions(actor, rules):
@@ -1874,6 +1990,8 @@ def step(
     # 3. `attack`
     # ------------------------------------------------------------------
     if intent_type == "attack":
+        pre_action_combatants = copy.deepcopy(s["combatants"])
+        s["pending_reroll"] = None
         if actor_id != active_id:
             return _invalid(copy.deepcopy(state), f"It is {active_id}'s turn, not {actor_id}'s.", rules)
         if not actor.get("alive"):
@@ -1932,6 +2050,28 @@ def step(
                 return _invalid(copy.deepcopy(state), err_msg or "Monster action failed.", rules)
             s["rng"] = rng.to_dict()
             _update_encounter_status(s)
+            atk_events = [e for e in tracker.events if e.get("type") == "attack_roll"]
+            if (
+                atk_events
+                and not any(e.get("hit") for e in atk_events)
+                and actor_id == active_id
+                and actor.get("heroic_inspiration") is True
+                and s.get("status") != "ended"
+            ):
+                last_ev = atk_events[-1]
+                ev_tid = str(last_ev["target_id"])
+                s["pending_reroll"] = {
+                    "actor_id": actor_id,
+                    "kind": "attack",
+                    "intent": copy.deepcopy(intent),
+                    "previous_d20": int(last_ev["chosen"]),
+                    "previous_total": int(last_ev["total"]),
+                    "target_ac": int(last_ev["target_ac"]),
+                    "target_id": ev_tid,
+                    "target_name": str(s["combatants"][ev_tid]["name"]),
+                    "label": str(m_action.get("name") or act_name or "Attack"),
+                    "rollback_combatants": pre_action_combatants,
+                }
             return {
                 "status": "ok",
                 "error": None,
@@ -2008,7 +2148,7 @@ def step(
             if "light" in props:
                 res["light_attack_made"] = True
 
-        _resolve_single_weapon_attack(
+        atk_res = _resolve_single_weapon_attack(
             s,
             actor_id,
             tid,
@@ -2027,6 +2167,24 @@ def step(
 
         s["rng"] = rng.to_dict()
         _update_encounter_status(s)
+        if (
+            not atk_res["hit"]
+            and actor_id == active_id
+            and actor.get("heroic_inspiration") is True
+            and s.get("status") != "ended"
+        ):
+            s["pending_reroll"] = {
+                "actor_id": actor_id,
+                "kind": "attack",
+                "intent": copy.deepcopy(intent),
+                "previous_d20": int(atk_res["chosen"]),
+                "previous_total": int(atk_res["total"]),
+                "target_ac": int(atk_res["target_ac"]),
+                "target_id": tid,
+                "target_name": str(s["combatants"][tid]["name"]),
+                "label": str(weapon.get("name") or weapon.get("slug") or "Attack"),
+                "rollback_combatants": pre_action_combatants,
+            }
         return {
             "status": "ok",
             "error": None,
@@ -2041,6 +2199,8 @@ def step(
     # 4. `cast_spell`
     # ------------------------------------------------------------------
     if intent_type == "cast_spell":
+        pre_action_combatants = copy.deepcopy(s["combatants"])
+        s["pending_reroll"] = None
         if not actor.get("alive"):
             return _invalid(copy.deepcopy(state), f"{actor_id} is not alive.", rules)
         if _has_modifier_flag(actor, "cannot_act", rules):
@@ -2059,13 +2219,23 @@ def step(
             return _invalid(copy.deepcopy(state), f"{actor_id} does not have spellcasting.", rules)
 
         action_type = str(spell.get("action_type") or "action").lower()
-        as_reaction = bool(intent.get("as_reaction", False)) or action_type == "reaction"
+        wants_reaction = bool(intent.get("as_reaction", False)) or action_type == "reaction"
+        if action_type == "reaction" and wants_reaction and not _reaction_trigger_applies(s, actor_id, spell):
+            return _invalid(
+                copy.deepcopy(state),
+                f"No valid reaction trigger for '{spell_slug}'.",
+                rules,
+            )
+        as_reaction = action_type == "reaction" and wants_reaction
         res = actor["turn_resources"]
 
         if as_reaction:
             if not res.get("reaction"):
                 return _invalid(copy.deepcopy(state), f"{actor_id} has no Reaction remaining.", rules)
             res["reaction"] = False
+            window = s.get("reaction_window")
+            if isinstance(window, dict) and str(window.get("actor_id") or "") == actor_id:
+                s.pop("reaction_window", None)
         else:
             if actor_id != active_id:
                 return _invalid(copy.deepcopy(state), f"It is {active_id}'s turn, not {actor_id}'s.", rules)
@@ -2079,7 +2249,14 @@ def step(
                 res["action"] = False
 
         spell_level = int(spell.get("level", 0))
-        slot_level = int(intent.get("slot_level") if intent.get("slot_level") is not None else spell_level)
+        raw_slot_level = intent.get("slot_level")
+        if raw_slot_level is None:
+            slot_level = spell_level
+        else:
+            parsed_slot = _parse_int(raw_slot_level, allow_str=False)
+            if parsed_slot is None:
+                return _invalid(copy.deepcopy(state), "cast_spell 'slot_level' must be an integer.", rules)
+            slot_level = parsed_slot
         if spell_level >= 1:
             if slot_level < spell_level:
                 return _invalid(
@@ -2105,7 +2282,16 @@ def step(
         raw_targets = intent.get("target_ids")
         if raw_targets is None and intent.get("target_id"):
             raw_targets = [intent["target_id"]]
-        target_ids = [str(t) for t in (raw_targets or [])]
+        if raw_targets is None:
+            target_ids: list[str] = []
+        elif isinstance(raw_targets, (list, tuple)):
+            target_ids = [str(t) for t in raw_targets]
+        else:
+            return _invalid(
+                copy.deepcopy(state),
+                "cast_spell 'target_ids' must be a list of combatant IDs.",
+                rules,
+            )
         for tid in target_ids:
             if tid not in s["combatants"]:
                 return _invalid(copy.deepcopy(state), f"Unknown spell target '{tid}'.", rules)
@@ -2188,15 +2374,21 @@ def step(
             unmodeled_clauses=unmodeled,
         )
 
+        spell_name = str(spell.get("name") or spell_slug)
+
         # 1. Teleport (Misty Step).
         buffs = list(spell.get("buffs") or [])
         for buff in buffs:
             if buff.get("kind") == "teleport":
                 dest = intent.get("destination")
-                if not isinstance(dest, dict):
-                    return _invalid(copy.deepcopy(state), f"Spell '{spell_slug}' requires 'destination': {{x, y}}.", rules)
+                to_pos = _parse_point(dest)
+                if to_pos is None:
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"Spell '{spell_slug}' requires 'destination': {{x, y}} with integer coordinates.",
+                        rules,
+                    )
                 max_d = int(buff.get("max_distance_ft", 30))
-                to_pos = {"x": int(dest["x"]), "y": int(dest["y"])}
                 if distance_ft(actor["position"], to_pos) > max_d:
                     return _invalid(
                         copy.deepcopy(state),
@@ -2206,7 +2398,7 @@ def step(
                 old_pos = copy.deepcopy(actor["position"])
                 actor["position"] = to_pos
                 tracker.emit("teleported", actor_id=actor_id, spell=spell_slug, from_pos=old_pos, to_pos=to_pos)
-                tracker.hook(f"{actor['name']} teleports via {spell.get('name', spell_slug)} to ({to_pos['x']}, {to_pos['y']}).")
+                tracker.hook(f"{actor['name']} teleports via {spell_name} to ({to_pos['x']}, {to_pos['y']}).")
 
         # 2. Healing spells (cure-wounds, healing-word, heal).
         healing_ir = spell.get("healing")
@@ -2225,12 +2417,27 @@ def step(
             for tid in (target_ids or [actor_id]):
                 t = s["combatants"][tid]
                 hp_before = int(t["hp"])
+                if not t.get("alive"):
+                    tracker.emit(
+                        "healing_applied",
+                        source_id=actor_id,
+                        target_id=tid,
+                        spell=spell_slug,
+                        amount=0,
+                        hp_before=hp_before,
+                        hp_after=hp_before,
+                        revived=False,
+                        reason="target_dead",
+                    )
+                    tracker.hook(
+                        f"{actor['name']} casts {spell_name}, but it has no effect on {t['name']} (dead)."
+                    )
+                    continue
                 revived = False
                 if hp_before == 0 and t.get("kind") == "pc" and heal_amt > 0:
-                    # 2024 RAW: healing revives 0-HP PC, removes unconscious, LEAVES prone!
+                    # 2024 RAW: healing revives 0-HP living (unconscious) PC, removes unconscious, LEAVES prone!
                     _remove_condition(t, "unconscious")
                     t["death_saves"] = {"successes": 0, "failures": 0}
-                    t["alive"] = True
                     revived = True
                 t["hp"] = min(int(t["hp_max"]), hp_before + heal_amt)
                 tracker.emit(
@@ -2243,9 +2450,9 @@ def step(
                     hp_after=t["hp"],
                     revived=revived,
                 )
+                revive_note = " (regains consciousness, remains Prone)" if revived else ""
                 tracker.hook(
-                    f"{actor['name']} heals {t['name']} with {spell.get('name', spell_slug)} for {heal_amt} HP"
-                    + (" (regains consciousness, remains Prone)." if revived else ".")
+                    f"{actor['name']} casts {spell_name}, restoring {heal_amt} HP to {t['name']}{revive_note}."
                 )
 
         # 3. Temp HP spells (false-life).
@@ -2259,7 +2466,9 @@ def step(
                 t = s["combatants"][tid]
                 t["temp_hp"] = max(int(t.get("temp_hp", 0)), t_amt)
                 tracker.emit("temp_hp_applied", target_id=tid, spell=spell_slug, amount=t_amt, temp_hp_after=t["temp_hp"])
-                tracker.hook(f"{t['name']} gains {t_amt} Temporary HP from {spell.get('name', spell_slug)}.")
+                tracker.hook(
+                    f"{actor['name']} casts {spell_name}, granting Temporary HP to {t['name']}."
+                )
 
         # 4. Auto-hit multi-projectile spells (`magic-missile`).
         special = spell.get("special_effect") or {}
@@ -2274,19 +2483,40 @@ def step(
             if not target_ids:
                 return _invalid(copy.deepcopy(state), f"Spell '{spell_slug}' requires at least one target.", rules)
 
+            pre_auto_hooks = len(tracker.hooks)
+            dmg_by_target: dict[str, int] = {}
+            dtype_by_target: dict[str, str] = {}
+            blocked_targets: list[str] = []
+
             for p_idx in range(num_proj):
                 tid = target_ids[p_idx % len(target_ids)]
                 t = s["combatants"][tid]
                 if _has_active_shield(t, spell_slug):
                     tracker.emit("spell_blocked", actor_id=actor_id, target_id=tid, spell=spell_slug, reason="shield")
-                    tracker.hook(f"{t['name']}'s Shield completely blocks {spell.get('name', spell_slug)}!")
+                    if tid not in blocked_targets:
+                        blocked_targets.append(tid)
                     continue
                 parts_to_apply: list[dict[str, Any]] = []
                 for d in dmg_list:
                     res_d = rng.roll_dice_expr(str(d["dice"]), crit=False)
                     amt = max(0, int(res_d["total"]) + (spell_mod if d.get("add_spell_mod") else 0))
                     parts_to_apply.append({"amount": amt, "type": strip_prefix(d["type"])})
-                _apply_damage_parts(s, tid, parts_to_apply, rules, rng, tracker, source_id=actor_id)
+                eff_proj = _apply_damage_parts(s, tid, parts_to_apply, rules, rng, tracker, source_id=actor_id)
+                dmg_by_target[tid] = dmg_by_target.get(tid, 0) + eff_proj
+                if tid not in dtype_by_target and parts_to_apply:
+                    dtype_by_target[tid] = "/".join(dict.fromkeys(p["type"] for p in parts_to_apply))
+
+            auto_hooks: list[str] = []
+            for tid in blocked_targets:
+                t_name = s["combatants"][tid]["name"]
+                auto_hooks.append(f"{t_name}'s Shield blocks {spell_name}!")
+            for tid, total_eff in dmg_by_target.items():
+                t_name = s["combatants"][tid]["name"]
+                dtype_txt = dtype_by_target.get(tid, "force")
+                auto_hooks.append(
+                    f"{actor['name']} casts {spell_name} at {t_name} for {total_eff} {dtype_txt} damage."
+                )
+            tracker.hooks[pre_auto_hooks:pre_auto_hooks] = auto_hooks
 
         # 5. Spell attack resolution (`fire-bolt`, `scorching-ray`, `eldritch-blast`, `guiding-bolt`, `ray-of-frost`, etc.).
         elif resolution == "attack":
@@ -2354,6 +2584,12 @@ def step(
                     crit=crit,
                 )
 
+                if not hit:
+                    tracker.hook(
+                        f"{actor['name']} misses {t['name']} with {spell_name} ({total_to_hit} vs AC {t_ac})."
+                    )
+                    continue
+
                 if hit:
                     parts_to_apply = []
                     for d_idx, d in enumerate(dmg_list):
@@ -2367,10 +2603,26 @@ def step(
                         res_d = rng.roll_dice_expr(eff_d, crit=crit)
                         amt = max(0, int(res_d["total"]) + (spell_mod if d.get("add_spell_mod") else 0))
                         parts_to_apply.append({"amount": amt, "type": strip_prefix(d["type"])})
+                    crit_txt = " (Critical Hit!)" if crit else ""
                     if parts_to_apply:
-                        _apply_damage_parts(s, tid, parts_to_apply, rules, rng, tracker, source_id=actor_id, is_crit=crit)
+                        pre_hit_hooks = len(tracker.hooks)
+                        eff_dmg = _apply_damage_parts(
+                            s, tid, parts_to_apply, rules, rng, tracker, source_id=actor_id, is_crit=crit
+                        )
+                        dtype_txt = "/".join(dict.fromkeys(p["type"] for p in parts_to_apply))
+                        tracker.hooks.insert(
+                            pre_hit_hooks,
+                            f"{actor['name']} hits {t['name']} with {spell_name} "
+                            f"({total_to_hit} vs AC {t_ac}){crit_txt} for {eff_dmg} {dtype_txt} damage.",
+                        )
+                    else:
+                        tracker.hook(
+                            f"{actor['name']} hits {t['name']} with {spell_name} "
+                            f"({total_to_hit} vs AC {t_ac}){crit_txt}."
+                        )
 
                     # On-hit buffs/effects (e.g., guiding-bolt next_attack_advantage, ray-of-frost slow).
+                    slow_applied_ft: int | None = None
                     for buff in buffs:
                         bkind = buff.get("kind")
                         if bkind == "next_attack_advantage":
@@ -2386,20 +2638,23 @@ def step(
                                     "concentration_spell": spell_slug if is_conc else None,
                                 }
                             )
+                            tracker.hook(f"Next attack roll against {t['name']} has Advantage.")
                         elif bkind == "speed_penalty_ft":
+                            pen_ft = int(buff.get("value", 10))
                             t["active_effects"].append(
                                 {
                                     "id": _next_effect_id(s, "slow"),
                                     "kind": "slow",
                                     "source_id": actor_id,
                                     "target_id": tid,
-                                    "value": int(buff.get("value", 10)),
+                                    "value": pen_ft,
                                     "expires": "start_of_source_next_turn",
                                     "created_round": s["round"],
                                     "concentration_spell": None,
                                 }
                             )
-                    if spell_slug == "ray-of-frost" and not any(b.get("kind") == "speed_penalty_ft" for b in buffs):
+                            slow_applied_ft = pen_ft
+                    if spell_slug == "ray-of-frost" and slow_applied_ft is None:
                         t["active_effects"].append(
                             {
                                 "id": _next_effect_id(s, "slow"),
@@ -2411,6 +2666,11 @@ def step(
                                 "created_round": s["round"],
                                 "concentration_spell": None,
                             }
+                        )
+                        slow_applied_ft = 10
+                    if slow_applied_ft is not None:
+                        tracker.hook(
+                            f"{t['name']}'s speed is reduced by {slow_applied_ft} ft until start of {actor['name']}'s next turn."
                         )
                     for cond in spell.get("conditions_applied") or []:
                         if isinstance(cond, dict) and cond.get("trigger") in ("on_hit", "auto", None):
@@ -2448,7 +2708,9 @@ def step(
                 rolled_parts.append({"amount": amt, "type": strip_prefix(d["type"]), "dice": eff_d, "rolls": res_d["rolls"]})
 
             for tid in target_ids:
+                t_name = s["combatants"][tid]["name"]
                 save_ev = _roll_save(s, tid, save_ab, spell_dc, rules, rng, tracker, reason=spell_slug)
+                save_dmg_hook_emitted = False
                 if rolled_parts:
                     if not save_ev["success"]:
                         adj = [{"amount": p["amount"], "type": p["type"]} for p in rolled_parts]
@@ -2457,17 +2719,29 @@ def step(
                     else:
                         adj = []
                     if adj:
+                        pre_save_hooks = len(tracker.hooks)
                         eff = _apply_damage_parts(s, tid, adj, rules, rng, tracker, source_id=actor_id)
-                        tracker.hook(
-                            f"{s['combatants'][tid]['name']} {'succeeds' if save_ev['success'] else 'fails'} "
-                            f"against {spell.get('name', spell_slug)} (DC {spell_dc}) and takes {eff} damage."
+                        dtype_txt = "/".join(dict.fromkeys(p["type"] for p in adj))
+                        tracker.hooks.insert(
+                            pre_save_hooks,
+                            f"{actor['name']} casts {spell_name} (DC {spell_dc} {save_ab.upper()}): "
+                            f"{t_name} {'succeeds' if save_ev['success'] else 'fails'} and takes {eff} {dtype_txt} damage.",
                         )
+                        save_dmg_hook_emitted = True
+                    else:
+                        tracker.hook(
+                            f"{actor['name']} casts {spell_name} (DC {spell_dc} {save_ab.upper()}): "
+                            f"{t_name} succeeds and takes no damage."
+                        )
+                        save_dmg_hook_emitted = True
+
+                applied_notes: list[str] = []
                 if not save_ev["success"]:
                     for cond in spell.get("conditions_applied") or []:
                         c_slug = strip_prefix(cond.get("condition") if isinstance(cond, dict) else str(cond))
                         dur = str(cond.get("duration", "save_ends")) if isinstance(cond, dict) else "save_ends"
                         rep_ab = cond.get("repeat_save_ability", save_ab) if isinstance(cond, dict) else save_ab
-                        _apply_condition(
+                        if _apply_condition(
                             s,
                             tid,
                             c_slug,
@@ -2478,22 +2752,25 @@ def step(
                             save_ability=strip_prefix(rep_ab) if rep_ab else None,
                             save_dc=spell_dc,
                             concentration_spell=spell_slug if is_conc else None,
-                        )
+                        ):
+                            applied_notes.append(c_slug)
                     for buff in buffs:
                         if buff.get("kind") == "roll_bonus_dice" and int(buff.get("sign", 1)) < 0:
+                            dice_v = str(buff.get("dice", "1d4"))
                             s["combatants"][tid]["active_effects"].append(
                                 {
                                     "id": _next_effect_id(s, "bane"),
                                     "kind": "bane",
                                     "source_id": actor_id,
                                     "target_id": tid,
-                                    "value": str(buff.get("dice", "1d4")),
+                                    "value": dice_v,
                                     "applies_to": list(buff.get("applies_to") or ["attack", "save"]),
                                     "expires": "concentration" if is_conc else "spell_duration",
                                     "created_round": s["round"],
                                     "concentration_spell": spell_slug if is_conc else None,
                                 }
                             )
+                            applied_notes.append(f"-{dice_v} to attacks/saves")
                     if spell_slug == "vicious-mockery":
                         s["combatants"][tid]["active_effects"].append(
                             {
@@ -2507,128 +2784,178 @@ def step(
                                 "concentration_spell": None,
                             }
                         )
+                        applied_notes.append("Disadvantage on next attack")
+
+                if not save_dmg_hook_emitted:
+                    if not save_ev["success"]:
+                        eff_txt = f" ({', '.join(applied_notes)})" if applied_notes else ""
+                        tracker.hook(
+                            f"{actor['name']} casts {spell_name} (DC {spell_dc} {save_ab.upper()}): "
+                            f"{t_name} fails{eff_txt}."
+                        )
+                    else:
+                        tracker.hook(
+                            f"{actor['name']} casts {spell_name} (DC {spell_dc} {save_ab.upper()}): "
+                            f"{t_name} succeeds and resists."
+                        )
+                elif applied_notes:
+                    tracker.hook(f"{t_name} is affected by {spell_name}: {', '.join(applied_notes)}.")
 
         # 7. Auto-apply / Buff spells (`shield`, `mage-armor`, `shield-of-faith`, `barkskin`, `bless`, `longstrider`, `haste`).
         else:
             apply_targets = target_ids or [actor_id]
+            bless_targets: list[str] = []
+            bless_dice = "1d4"
+            bless_sign = 1
             for tid in apply_targets:
                 t = s["combatants"][tid]
                 for buff in buffs:
                     bkind = buff.get("kind")
                     if bkind == "ac_bonus":
                         if spell_slug == "shield" or buff.get("blocks_spell"):
+                            val = int(buff.get("value", 5))
                             t["active_effects"].append(
                                 {
                                     "id": _next_effect_id(s, "shield"),
                                     "kind": "shield",
                                     "source_id": actor_id,
                                     "target_id": tid,
-                                    "value": int(buff.get("value", 5)),
+                                    "value": val,
                                     "blocks_spell": buff.get("blocks_spell", "magic-missile"),
                                     "expires": "start_of_source_next_turn",
                                     "created_round": s["round"],
                                     "concentration_spell": None,
                                 }
                             )
+                            tracker.hook(
+                                f"{actor['name']} casts {spell_name} (+{val} AC until start of next turn)."
+                            )
                         elif spell_slug == "haste":
+                            ac_b = int(buff.get("value", 2))
                             t["active_effects"].append(
                                 {
                                     "id": _next_effect_id(s, "haste"),
                                     "kind": "haste",
                                     "source_id": actor_id,
                                     "target_id": tid,
-                                    "value": {"ac_bonus": int(buff.get("value", 2)), "speed_multiplier": 2},
+                                    "value": {"ac_bonus": ac_b, "speed_multiplier": 2},
                                     "expires": "concentration" if is_conc else "spell_duration",
                                     "created_round": s["round"],
                                     "concentration_spell": spell_slug if is_conc else None,
                                 }
                             )
+                            tracker.hook(
+                                f"{actor['name']} casts {spell_name} on {t['name']} (+{ac_b} AC, doubled speed)."
+                            )
                         else:
+                            val = int(buff.get("value", 2))
                             t["active_effects"].append(
                                 {
                                     "id": _next_effect_id(s, "shield_of_faith"),
                                     "kind": "shield_of_faith",
                                     "source_id": actor_id,
                                     "target_id": tid,
-                                    "value": int(buff.get("value", 2)),
+                                    "value": val,
                                     "expires": "concentration" if is_conc else str(buff.get("duration", "spell_duration")),
                                     "created_round": s["round"],
                                     "concentration_spell": spell_slug if is_conc else None,
                                 }
                             )
+                            tracker.hook(f"{actor['name']} casts {spell_name} on {t['name']} (+{val} AC).")
                     elif bkind == "ac_formula":
+                        base_ac = int(buff.get("base", 13))
                         t["active_effects"].append(
                             {
                                 "id": _next_effect_id(s, "mage_armor"),
                                 "kind": "mage_armor",
                                 "source_id": actor_id,
                                 "target_id": tid,
-                                "value": int(buff.get("base", 13)),
+                                "value": base_ac,
                                 "expires": "spell_duration",
                                 "created_round": s["round"],
                                 "concentration_spell": None,
                             }
                         )
+                        tracker.hook(
+                            f"{actor['name']} casts {spell_name} on {t['name']} (AC {base_ac} + DEX)."
+                        )
                     elif bkind == "ac_min":
+                        val = int(buff.get("value", 17))
                         t["active_effects"].append(
                             {
                                 "id": _next_effect_id(s, "barkskin"),
                                 "kind": "barkskin",
                                 "source_id": actor_id,
                                 "target_id": tid,
-                                "value": int(buff.get("value", 17)),
+                                "value": val,
                                 "expires": "spell_duration",
                                 "created_round": s["round"],
                                 "concentration_spell": spell_slug if is_conc else None,
                             }
                         )
+                        tracker.hook(
+                            f"{actor['name']} casts {spell_name} on {t['name']} (minimum AC {val})."
+                        )
                     elif bkind == "roll_bonus_dice":
-                        ekind = "bless" if int(buff.get("sign", 1)) >= 0 else "bane"
+                        sign_val = int(buff.get("sign", 1))
+                        ekind = "bless" if sign_val >= 0 else "bane"
+                        dice_v = str(buff.get("dice", "1d4"))
                         t["active_effects"].append(
                             {
                                 "id": _next_effect_id(s, ekind),
                                 "kind": ekind,
                                 "source_id": actor_id,
                                 "target_id": tid,
-                                "value": str(buff.get("dice", "1d4")),
+                                "value": dice_v,
                                 "applies_to": list(buff.get("applies_to") or ["attack", "save"]),
                                 "expires": "concentration" if is_conc else "spell_duration",
                                 "created_round": s["round"],
                                 "concentration_spell": spell_slug if is_conc else None,
                             }
                         )
+                        bless_targets.append(t["name"])
+                        bless_dice = dice_v
+                        bless_sign = 1 if sign_val >= 0 else -1
                     elif bkind == "speed_bonus_ft":
+                        val = int(buff.get("value", 10))
                         t["active_effects"].append(
                             {
                                 "id": _next_effect_id(s, "longstrider"),
                                 "kind": "longstrider",
                                 "source_id": actor_id,
                                 "target_id": tid,
-                                "value": int(buff.get("value", 10)),
+                                "value": val,
                                 "expires": "spell_duration",
                                 "created_round": s["round"],
                                 "concentration_spell": None,
                             }
                         )
+                        tracker.hook(
+                            f"{actor['name']} casts {spell_name} on {t['name']} (+{val} ft speed)."
+                        )
                     elif bkind == "speed_multiplier" and not any(
                         e.get("kind") == "haste" and e.get("source_id") == actor_id
                         for e in t.get("active_effects", [])
                     ):
+                        mult_v = int(buff.get("value", 2))
                         t["active_effects"].append(
                             {
                                 "id": _next_effect_id(s, "haste"),
                                 "kind": "haste",
                                 "source_id": actor_id,
                                 "target_id": tid,
-                                "value": {"ac_bonus": 0, "speed_multiplier": int(buff.get("value", 2))},
+                                "value": {"ac_bonus": 0, "speed_multiplier": mult_v},
                                 "expires": "concentration" if is_conc else "spell_duration",
                                 "created_round": s["round"],
                                 "concentration_spell": spell_slug if is_conc else None,
                             }
                         )
+                        tracker.hook(
+                            f"{actor['name']} casts {spell_name} on {t['name']} (speed x{mult_v})."
+                        )
                 for cond in spell.get("conditions_applied") or []:
                     c_slug = strip_prefix(cond.get("condition") if isinstance(cond, dict) else str(cond))
-                    _apply_condition(
+                    if _apply_condition(
                         s,
                         tid,
                         c_slug,
@@ -2637,10 +2964,42 @@ def step(
                         source_id=actor_id,
                         duration=str(cond.get("duration", "concentration")) if isinstance(cond, dict) else "indefinite",
                         concentration_spell=spell_slug if is_conc else None,
-                    )
+                    ):
+                        tracker.hook(f"{actor['name']} casts {spell_name} on {t['name']} ({c_slug}).")
+            if bless_targets:
+                sign_sym = "+" if bless_sign >= 0 else "-"
+                tracker.hook(
+                    f"{actor['name']} casts {spell_name} on {', '.join(bless_targets)} "
+                    f"({sign_sym}{bless_dice} to attacks and saves)."
+                )
+            if not tracker.hooks:
+                tracker.hook(f"{actor['name']} casts {spell_name}.")
 
         s["rng"] = rng.to_dict()
         _update_encounter_status(s)
+        if resolution == "attack":
+            spell_atk_events = [e for e in tracker.events if e.get("type") == "spell_attack_roll"]
+            if (
+                spell_atk_events
+                and not any(e.get("hit") for e in spell_atk_events)
+                and actor_id == active_id
+                and actor.get("heroic_inspiration") is True
+                and s.get("status") != "ended"
+            ):
+                last_ev = spell_atk_events[-1]
+                ev_tid = str(last_ev["target_id"])
+                s["pending_reroll"] = {
+                    "actor_id": actor_id,
+                    "kind": "spell_attack",
+                    "intent": copy.deepcopy(intent),
+                    "previous_d20": int(last_ev["chosen"]),
+                    "previous_total": int(last_ev["total"]),
+                    "target_ac": int(last_ev["target_ac"]),
+                    "target_id": ev_tid,
+                    "target_name": str(s["combatants"][ev_tid]["name"]),
+                    "label": spell_name,
+                    "rollback_combatants": pre_action_combatants,
+                }
         return {
             "status": "ok",
             "error": None,
@@ -2655,6 +3014,7 @@ def step(
     # 5. `dodge`, `dash`, `disengage`, `help`
     # ------------------------------------------------------------------
     if intent_type in ("dodge", "dash", "disengage", "help"):
+        s["pending_reroll"] = None
         if actor_id != active_id:
             return _invalid(copy.deepcopy(state), f"It is {active_id}'s turn, not {actor_id}'s.", rules)
         if not actor.get("alive"):
@@ -2730,6 +3090,7 @@ def step(
     # 6. `end_turn`
     # ------------------------------------------------------------------
     if intent_type == "end_turn":
+        s["pending_reroll"] = None
         if intent.get("actor_id") and str(intent["actor_id"]) != active_id:
             return _invalid(copy.deepcopy(state), f"It is {active_id}'s turn, not {intent['actor_id']}'s.", rules)
 
@@ -2918,6 +3279,97 @@ def step(
             "state": s,
             "legal_actions": compute_legal_actions(s, rules),
             "narrative_hooks": tracker.hooks,
+        }
+
+    # ------------------------------------------------------------------
+    # 7. `reroll` (5e 2024 Heroic Inspiration post-roll reroll)
+    # ------------------------------------------------------------------
+    if intent_type == "reroll":
+        if actor_id != active_id:
+            return _invalid(copy.deepcopy(state), f"It is {active_id}'s turn, not {actor_id}'s.", rules)
+        if not actor.get("alive"):
+            return _invalid(copy.deepcopy(state), f"{actor_id} is not alive.", rules)
+        if _has_modifier_flag(actor, "cannot_act", rules):
+            return _invalid(
+                copy.deepcopy(state),
+                f"{actor_id} is Incapacitated and cannot spend Heroic Inspiration.",
+                rules,
+            )
+        if actor.get("heroic_inspiration") is not True:
+            return _invalid(
+                copy.deepcopy(state),
+                f"{actor['name']} does not have Heroic Inspiration available.",
+                rules,
+            )
+        pending = s.get("pending_reroll")
+        if (
+            not isinstance(pending, dict)
+            or pending.get("actor_id") != actor_id
+            or not isinstance(pending.get("intent"), dict)
+            or not isinstance(pending.get("rollback_combatants"), dict)
+        ):
+            return _invalid(
+                copy.deepcopy(state),
+                f"No recent missed roll is eligible for Heroic Inspiration reroll for {actor['name']}.",
+                rules,
+            )
+
+        prev_d20 = int(pending.get("previous_d20", 0))
+        prev_total = int(pending.get("previous_total", 0))
+        target_ac = int(pending.get("target_ac", 0))
+        label = str(pending.get("label") or "Attack")
+        orig_intent = copy.deepcopy(pending["intent"])
+        actor_name = str(actor["name"])
+
+        # Restore pre-miss combatants while preserving monotonic RNG state.
+        s["combatants"] = copy.deepcopy(pending["rollback_combatants"])
+        if actor_id not in s["combatants"]:
+            return _invalid(copy.deepcopy(state), f"Invalid reroll rollback state for '{actor_id}'.", rules)
+        s["combatants"][actor_id]["heroic_inspiration"] = False
+        s["pending_reroll"] = None
+        if s.get("status") == "ended":
+            s["status"] = "active"
+
+        re_res = step(s, orig_intent, rules, roll_overrides=roll_overrides)
+        if re_res.get("status") != "ok":
+            return _invalid(
+                copy.deepcopy(state),
+                str(re_res.get("error") or "Heroic Inspiration reroll failed."),
+                rules,
+            )
+
+        final_state = re_res["state"]
+        final_state["pending_reroll"] = None
+
+        spent_event: dict[str, Any] = {
+            "seq": 1,
+            "type": "heroic_inspiration_spent",
+            "actor_id": actor_id,
+            "previous_d20": prev_d20,
+            "previous_total": prev_total,
+            "target_ac": target_ac,
+            "label": label,
+        }
+        merged_events: list[dict[str, Any]] = [spent_event]
+        for ev in re_res.get("events") or []:
+            ev_copy = copy.deepcopy(ev)
+            ev_copy["seq"] = len(merged_events) + 1
+            merged_events.append(ev_copy)
+
+        spent_hook = (
+            f"{actor_name} spends Heroic Inspiration to reroll {label} "
+            f"(previous total {prev_total})."
+        )
+        merged_hooks = [spent_hook, *(re_res.get("narrative_hooks") or [])]
+
+        return {
+            "status": "ok",
+            "error": None,
+            "events": merged_events,
+            "state_diff": tracker.build_diff(final_state),
+            "state": final_state,
+            "legal_actions": compute_legal_actions(final_state, rules),
+            "narrative_hooks": merged_hooks,
         }
 
     return _invalid(copy.deepcopy(state), f"Unsupported intent type '{intent_type}'.", rules)

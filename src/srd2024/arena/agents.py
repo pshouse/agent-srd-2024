@@ -822,12 +822,25 @@ def _validate_decision_payload(obj: Any) -> dict[str, Any]:
     return obj
 
 
+_MAX_DECISION_TEXT = 64 * 1024
+_MAX_JSON_DEPTH = 32
+_MAX_JSON_CANDIDATES = 16
+
+
 def _scan_balanced_json_objects(text: str) -> list[str]:
-    """Scan `text` for top-level balanced `{...}` substrings respecting JSON strings."""
+    """Scan `text` for top-level balanced `{...}` substrings respecting JSON strings.
+
+    The scan is linear: each character is visited once, and an unbalanced `{`
+    stops the scan instead of restarting inside it. Input is capped at 64 KB
+    and nesting deeper than 32 is rejected so a hostile payload cannot hang
+    or recurse inside `json.loads`.
+    """
+    if len(text) > _MAX_DECISION_TEXT:
+        text = text[:_MAX_DECISION_TEXT]
     candidates: list[str] = []
     n = len(text)
     i = 0
-    while i < n:
+    while i < n and len(candidates) < _MAX_JSON_CANDIDATES:
         if text[i] != "{":
             i += 1
             continue
@@ -836,6 +849,8 @@ def _scan_balanced_json_objects(text: str) -> list[str]:
         escape = False
         start = i
         j = i
+        closed = False
+        too_deep = False
         while j < n:
             ch = text[j]
             if in_string:
@@ -850,13 +865,19 @@ def _scan_balanced_json_objects(text: str) -> list[str]:
                     in_string = True
                 elif ch == "{":
                     depth += 1
+                    if depth > _MAX_JSON_DEPTH:
+                        too_deep = True
+                        break
                 elif ch == "}":
                     depth -= 1
                     if depth == 0:
                         candidates.append(text[start : j + 1])
+                        closed = True
                         break
             j += 1
-        i += 1
+        if too_deep or not closed:
+            break
+        i = j + 1
     return candidates
 
 
@@ -872,8 +893,12 @@ def extract_decision_json(raw_text: str) -> dict[str, Any]:
     """
     if not isinstance(raw_text, str) or not raw_text.strip():
         raise ValueError("Empty model response; expected JSON decision object.")
+    if len(raw_text) > _MAX_DECISION_TEXT:
+        raw_text = raw_text[:_MAX_DECISION_TEXT]
 
     stripped = raw_text.strip()
+    if _json_nesting_exceeds(stripped):
+        raise ValueError("JSON nesting exceeds the limit.")
 
     # 1. Direct JSON parse.
     try:
@@ -2634,7 +2659,7 @@ class HeuristicTacticalDriver:
 
 
 class ReplayDriver:
-    """Replays recorded decisions verbatim from a `MatchTranscript['actions']` list."""
+    """Replays recorded decisions, including rejected attempts, from a MatchTranscript."""
 
     name: str = "replay"
 
@@ -2642,7 +2667,31 @@ class ReplayDriver:
         if not isinstance(transcript, dict) or not isinstance(transcript.get("actions"), list):
             raise ValueError("ReplayDriver requires a MatchTranscript dict with an 'actions' list.")
         self._side: str | None = side
-        self._queue: list[dict[str, Any]] = []
+        queued: list[tuple[tuple[int, int, int, int, int], dict[str, Any]]] = []
+        for entry in transcript.get("violations") or []:
+            if not isinstance(entry, dict):
+                continue
+            if side is not None and entry.get("side") != side:
+                continue
+            intent = entry.get("intent") if isinstance(entry.get("intent"), dict) else {"type": ""}
+            queued.append(
+                (
+                    (
+                        int(entry.get("round") or 0),
+                        int(entry.get("turn_index") or 0),
+                        int(entry.get("action_index") or 0),
+                        int(entry.get("attempt") or 1),
+                        0,
+                    ),
+                    {
+                        "actor_id": entry.get("actor_id"),
+                        "intent": copy.deepcopy(intent),
+                        "rationale": "",
+                        "table_talk": None,
+                        "usage": {},
+                    },
+                )
+            )
         for entry in transcript["actions"]:
             if not isinstance(entry, dict):
                 continue
@@ -2652,7 +2701,20 @@ class ReplayDriver:
                 continue
             if not isinstance(entry.get("intent"), dict):
                 continue
-            self._queue.append(copy.deepcopy(entry))
+            queued.append(
+                (
+                    (
+                        int(entry.get("round") or 0),
+                        int(entry.get("turn_index") or 0),
+                        int(entry.get("action_index") or 0),
+                        int(entry.get("attempts") or 1),
+                        1,
+                    ),
+                    copy.deepcopy(entry),
+                )
+            )
+        queued.sort(key=lambda item: item[0])
+        self._queue: list[dict[str, Any]] = [item[1] for item in queued]
         self._index: int = 0
 
     @property
@@ -2695,9 +2757,137 @@ class ReplayDriver:
 # ---------------------------------------------------------------------------
 
 
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_MAX_HTTP_BODY = 1024 * 1024
+_SECRET_QUERY_KEYS = frozenset({"key", "api_key", "apikey", "token", "access_token", "secret"})
+_SECRET_TEXT_RE = re.compile(
+    r"(?i)("
+    r"(?:api[_-]?key|x-goog-api-key|x-api-key|token|secret|password|authorization)"
+    r"(?:\s+header)?\s*[=:]\s*\S+"
+    r"|bearer\s+\S+"
+    r"|\bsk-[A-Za-z0-9_\-]{8,}"
+    r"|\bAIza[0-9A-Za-z_\-]{10,}"
+    r"|[?&](?:key|api_key|apikey|token|access_token|secret)=[^&\s]+"
+    r")"
+)
+
+
+def _secret_forms(secret: str) -> list[str]:
+    """Raw value plus the escaped form header errors use (`repr` without quotes)."""
+    forms = [secret]
+    forms.extend(line for line in secret.splitlines() if line and line != secret)
+    rendered = repr(secret)
+    if len(rendered) >= 2 and rendered[0] == rendered[-1] and rendered[0] in "'\"":
+        forms.append(rendered[1:-1])
+    forms.append(rendered)
+    return forms
+
+
+def scrub_secrets(text: str, secrets: list[str] | None = None) -> str:
+    """Redact secret-looking substrings and any explicit secret values from `text`.
+
+    Header validation quotes CR/LF keys with backslash escapes, so those forms
+    are removed as well as the raw value.
+    """
+    if not text:
+        return text
+    out = str(text)
+    for secret in secrets or []:
+        raw = str(secret or "")
+        if len(raw) < 4:
+            continue
+        forms = [form for form in _secret_forms(raw) if len(form) >= 4]
+        for form in sorted(forms, key=len, reverse=True):
+            if form in out:
+                out = out.replace(form, "[REDACTED]")
+    return _SECRET_TEXT_RE.sub("[REDACTED]", out)
+
+
+def _json_nesting_exceeds(text: str, limit: int = _MAX_JSON_DEPTH) -> bool:
+    """Return whether `{` / `[` nesting outside strings is deeper than `limit`.
+
+    This runs before `json.loads` so a hostile document cannot raise RecursionError.
+    """
+    depth = 0
+    in_string = False
+    escape = False
+    for ch in text:
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            depth += 1
+            if depth > limit:
+                return True
+        elif ch in "}]" and depth:
+            depth -= 1
+    return False
+
+
+def _reject_control_chars_in_secret(value: str) -> None:
+    """Refuse CR/LF and other controls before they are placed in an HTTP header."""
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        raise RuntimeError("LLM API key was rejected.")
+
+
 def _is_local_url(url: str) -> bool:
     host = (urllib.parse.urlparse(url).hostname or "").strip().lower()
-    return host in ("localhost", "127.0.0.1", "::1")
+    return host in _LOOPBACK_HOSTS
+
+
+def _assert_safe_llm_url(url: str) -> None:
+    """Require https for LLM endpoints. Plain http is allowed only on loopback.
+
+    Credentials in the userinfo or query string are refused. Redirects are
+    refused separately by the opener, so this check only covers the URL the
+    caller asked to contact.
+    """
+    parsed = urllib.parse.urlsplit(url)
+    scheme = (parsed.scheme or "").lower()
+    host = (parsed.hostname or "").strip().lower()
+    if parsed.username or parsed.password:
+        raise RuntimeError("LLM endpoint URL must not include userinfo credentials.")
+    if parsed.query:
+        pairs = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+        if any(name.lower() in _SECRET_QUERY_KEYS for name, _ in pairs):
+            raise RuntimeError("LLM endpoint URL must not carry credentials in the query string.")
+    if scheme == "https" and host:
+        return
+    if scheme == "http" and host in _LOOPBACK_HOSTS:
+        return
+    raise RuntimeError("LLM endpoint must use https (http is allowed only on loopback).")
+
+
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    """Refuse every redirect so Authorization and API-key headers cannot follow."""
+
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
+        raise urllib.error.HTTPError(req.full_url, code, "redirect refused", headers, fp)
+
+
+# Env proxies are not installed: a proxy would receive the API key.
+_LLM_OPENER = urllib.request.build_opener(_RefuseRedirects(), urllib.request.ProxyHandler({}))
+
+
+def _read_bounded(resp: Any, limit: int = _MAX_HTTP_BODY) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        block = resp.read(65536)
+        if not block:
+            break
+        total += len(block)
+        if total > limit:
+            raise RuntimeError("LLM HTTP response exceeded 1MB.")
+        chunks.append(block)
+    return b"".join(chunks)
 
 
 def _default_http_transport(
@@ -2706,7 +2896,12 @@ def _default_http_transport(
     payload: dict[str, Any],
     timeout_s: float,
 ) -> dict[str, Any]:
-    """Send an HTTP POST JSON request strictly via Python stdlib `urllib.request`."""
+    """Send an HTTP POST JSON request strictly via Python stdlib `urllib.request`.
+
+    Failure text never includes the URL, headers, or response body. Redirects
+    are refused. The body is capped at 1 MB.
+    """
+    _assert_safe_llm_url(url)
     req_headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -2715,24 +2910,30 @@ def _default_http_transport(
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers=req_headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=float(timeout_s)) as resp:
-            raw_body = resp.read().decode("utf-8", errors="replace")
+        with _LLM_OPENER.open(req, timeout=float(timeout_s)) as resp:
+            raw_bytes = _read_bounded(resp)
     except urllib.error.HTTPError as exc:
-        err_snippet = ""
         try:
-            err_snippet = exc.read().decode("utf-8", errors="replace")[:500]
+            exc.read(8192)
         except Exception:
-            err_snippet = str(exc.reason)
-        raise RuntimeError(f"HTTP {exc.code} error from {url}: {err_snippet}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"HTTP connection error for {url}: {exc.reason}") from exc
+            pass
+        if exc.code in (301, 302, 303, 307, 308):
+            raise RuntimeError("LLM redirect refused.") from None
+        raise RuntimeError(f"LLM HTTP {exc.code}") from None
+    except urllib.error.URLError:
+        raise RuntimeError("LLM connection failed.") from None
+    except RuntimeError:
+        raise
 
+    raw_body = raw_bytes.decode("utf-8", errors="replace")
+    if _json_nesting_exceeds(raw_body):
+        raise RuntimeError("LLM response JSON nesting exceeds the limit.")
     try:
         parsed = json.loads(raw_body)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Invalid JSON response from {url}: {raw_body[:300]}") from exc
+    except json.JSONDecodeError:
+        raise RuntimeError("LLM response was not valid JSON.") from None
     if not isinstance(parsed, dict):
-        raise RuntimeError(f"Expected JSON object response from {url}, got {type(parsed).__name__}.")
+        raise RuntimeError("LLM response was not a JSON object.")
     return parsed
 
 
@@ -2796,7 +2997,13 @@ class BaseLLMDriver:
         system_prompt = build_system_prompt()
         user_prompt = build_user_prompt(observation)
         url, headers, payload = self._build_request(system_prompt, user_prompt)
-        resp_json = self._transport(url, headers, payload, self.timeout_s)
+        _assert_safe_llm_url(url)
+        secret_values = [self._explicit_api_key or "", os.environ.get(self.api_key_env, "")]
+        try:
+            resp_json = self._transport(url, headers, payload, self.timeout_s)
+        except Exception as exc:
+            cleaned = scrub_secrets(str(exc) or "LLM request failed.", secret_values)
+            raise RuntimeError(cleaned or "LLM request failed.") from None
         raw_text, usage = self._parse_response(resp_json)
         parsed = extract_decision_json(raw_text)
 
@@ -2828,6 +3035,7 @@ class OpenAICompatDriver(BaseLLMDriver):
         url = f"{self.api_base}/chat/completions"
         headers: dict[str, str] = {}
         if key:
+            _reject_control_chars_in_secret(key)
             headers["Authorization"] = f"Bearer {key}"
         payload = {
             "model": self.model,
@@ -2883,6 +3091,7 @@ class AnthropicDriver(BaseLLMDriver):
             "anthropic-version": self.ANTHROPIC_VERSION,
         }
         if key:
+            _reject_control_chars_in_secret(key)
             headers["x-api-key"] = key
         payload = {
             "model": self.model,
@@ -2925,9 +3134,10 @@ class GeminiDriver(BaseLLMDriver):
         key = self._resolve_api_key(allow_empty_local=True)
         encoded_model = urllib.parse.quote(self.model, safe="")
         url = f"{self.api_base}/v1beta/models/{encoded_model}:generateContent"
-        if key:
-            url = f"{url}?key={urllib.parse.quote(key, safe='')}"
         headers: dict[str, str] = {}
+        if key:
+            _reject_control_chars_in_secret(key)
+            headers["x-goog-api-key"] = key
         payload = {
             "system_instruction": {"parts": [{"text": system_prompt}]},
             "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
@@ -2979,13 +3189,18 @@ def create_driver(
     http_transport: HttpTransport | None = None,
     replay_transcript: dict[str, Any] | None = None,
     replay_side: str | None = None,
+    allow_human: bool = False,
+    input_fn: Callable[[str], str] | None = None,
+    output_fn: Callable[[str], Any] | None = None,
+    nl_driver: BaseLLMDriver | None = None,
 ) -> AgentDriver:
-    """Instantiate any supported offline or live LLM Arena driver from a spec.
+    """Instantiate any supported offline, human, or live LLM Arena driver from a spec.
 
     Accepted string specs:
     - `"random"`
     - `"greedy"`
     - `"heuristic-tactical"`
+    - `"human"`
     - `"replay"` (requires `replay_transcript`)
     - `"openai-compat:<model>"`
     - `"anthropic:<model>"`
@@ -3014,6 +3229,10 @@ def create_driver(
             http_transport=cfg.get("http_transport", http_transport),
             replay_transcript=cfg.get("replay_transcript", replay_transcript),
             replay_side=cfg.get("replay_side", replay_side),
+            allow_human=bool(cfg.get("allow_human", allow_human)),
+            input_fn=cfg.get("input_fn", input_fn),
+            output_fn=cfg.get("output_fn", output_fn),
+            nl_driver=cfg.get("nl_driver", nl_driver),
         )
 
     if not isinstance(spec, str) or not spec.strip():
@@ -3028,6 +3247,20 @@ def create_driver(
         return GreedyDriver(rules=rules)
     if lower == "heuristic-tactical":
         return HeuristicTacticalDriver(rules=rules)
+    if lower == "human":
+        if not allow_human:
+            raise ValueError(
+                "Driver spec 'human' is only available in interactive play "
+                "(`srd arena play` / `srd-arena play`)."
+            )
+        from .human import HumanDriver
+
+        return HumanDriver(
+            rules=rules,
+            input_fn=input_fn or input,
+            output_fn=output_fn or print,
+            nl_driver=nl_driver,
+        )
     if lower == "replay":
         if replay_transcript is None:
             raise ValueError("Driver spec 'replay' requires 'replay_transcript'.")
@@ -3075,7 +3308,7 @@ def create_driver(
 
     raise ValueError(
         f"Unknown driver spec {spec!r}. Expected one of: 'random', 'greedy', "
-        "'heuristic-tactical', 'replay', 'openai-compat:<model>', "
+        "'heuristic-tactical', 'human', 'replay', 'openai-compat:<model>', "
         "'anthropic:<model>', 'gemini:<model>'."
     )
 

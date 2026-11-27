@@ -13,6 +13,12 @@ from .agents import (
     create_driver,
     extract_decision_json,
 )
+from .human import (
+    HumanDriver,
+    HumanSessionPause,
+    build_human_action_menu,
+    render_tactical_hud,
+)
 from .render import (
     render_benchmark_markdown,
     render_match_markdown,
@@ -28,6 +34,12 @@ from .runner import (
 )
 from .scenarios import BUILTIN_SCENARIO_IDS, list_scenarios, load_scenario
 from .scoring import score_match
+from .session import (
+    load_session_checkpoint,
+    resolve_seat_drivers,
+    run_interactive_session,
+    save_session_checkpoint,
+)
 
 __all__ = [
     "BUILTIN_SCENARIO_IDS",
@@ -39,6 +51,10 @@ __all__ = [
     "GreedyDriver",
     "HeuristicTacticalDriver",
     "ReplayDriver",
+    "HumanDriver",
+    "HumanSessionPause",
+    "build_human_action_menu",
+    "render_tactical_hud",
     "OpenAICompatDriver",
     "AnthropicDriver",
     "GeminiDriver",
@@ -50,6 +66,10 @@ __all__ = [
     "run_benchmark",
     "compute_transcript_digest",
     "score_match",
+    "resolve_seat_drivers",
+    "run_interactive_session",
+    "save_session_checkpoint",
+    "load_session_checkpoint",
     "render_scenarios_markdown",
     "render_match_markdown",
     "render_benchmark_markdown",
