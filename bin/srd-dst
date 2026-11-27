@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Zero-install executable wrapper for the 5e 2024 (SRD 5.2) Deterministic Simulation Testing CLI."""
+
+from pathlib import Path
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = str(REPO_ROOT / "src")
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
+
+from srd2024.testing.dst import main_dst
+
+if __name__ == "__main__":
+    raise SystemExit(main_dst())

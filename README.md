@@ -197,6 +197,46 @@ GEMINI_API_KEY=... ./bin/srd-arena run wyrmling-lair \
 
 ---
 
+## Stage 4 Quickstart: Human-in-the-Loop Play, DST Fuzzing & Mutation Testing
+
+Stage 4 adds **interactive human-in-the-loop tabletop play** on top of the Stage 3 arena plus two pure-stdlib **adversarial engine assurance** harnesses (`bin/srd-dst` and `bin/srd-mutate`).
+
+### 1. Interactive Tabletop Play (`bin/srd-arena play` / `bin/srd arena play`)
+
+Play any 5e 2024 (SRD 5.2) scenario directly in the terminal with an ASCII 5-ft tactical HUD, strict partial observability (enemy HP bands only — never leaking hidden enemy exact HP/AC), numbered legal actions, party `table_talk` (`say <msg>`), save/resume checkpoints, optional natural-language intent translation (`--nl-driver`), and 100% deterministic `replay`-verifiable traces:
+
+```bash
+# Play 1 adventurer alongside AI companions (with live party table_talk)
+./bin/srd-arena play goblin-ambush --as pc-bram --seed 42 --out-trace /tmp/bram-session.json
+
+# Play as the entire party or run the monsters as DM against an AI party
+./bin/srd-arena play crypt-of-ghouls --as party --seed 7
+./bin/srd-arena play goblin-ambush --as dm --seed 42
+
+# Mix arbitrary human + AI/LLM seats at one table
+./bin/srd arena play crypt-of-ghouls \
+  --seat pc-aldric=human \
+  --seat pc-lyra=heuristic-tactical \
+  --seat pc-dorian=greedy
+
+# Pause with 'save' or 'quit' and resume seamlessly later
+./bin/srd-arena play goblin-ambush --as pc-bram --save /tmp/ckpt.json
+./bin/srd-arena play --resume /tmp/ckpt.json --out-trace /tmp/resumed-trace.json
+./bin/srd-arena replay /tmp/resumed-trace.json
+```
+
+### 2. Deterministic Simulation Testing (`bin/srd-dst`) & AST Mutation Testing (`bin/srd-mutate`)
+
+```bash
+# Run seeded deterministic simulation testing & universal 5e 2024 invariant checks
+./bin/srd-dst --seeds 50 --max-steps 50 --format markdown
+
+# Run isolated, non-destructive AST mutation testing against the Stage 2 rules engine
+./bin/srd-mutate --target dice --limit 15 --format markdown
+```
+
+---
+
 ## Stdio MCP Server (`bin/srd-mcp`)
 
 `bin/srd-mcp` implements a pure-stdlib JSON-RPC 2.0 MCP server over newline-delimited JSON on `stdin`/`stdout` (with errors strictly on `stderr`).

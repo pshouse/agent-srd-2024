@@ -241,11 +241,85 @@ def execute_arena_replay(rules: Any, transcript: dict[str, Any]) -> dict[str, An
     return replay_match(transcript, rules)
 
 
+def execute_arena_play(
+    rules: Any,
+    *,
+    scenario: str | Path | dict[str, Any] | None = None,
+    play_as: str | None = None,
+    seat_overrides: dict[str, Any] | list[str] | None = None,
+    party_agent: str | dict[str, Any] = "heuristic-tactical",
+    enemy_agent: str | dict[str, Any] = "heuristic-tactical",
+    nl_driver_spec: str | dict[str, Any] | None = None,
+    api_base: str | None = None,
+    api_key_env: str | None = None,
+    temperature: float = 0.0,
+    seed: int = 42,
+    max_rounds: int | None = None,
+    max_actions_per_turn: int = 6,
+    max_retries_per_action: int = 2,
+    save_path: str | Path | None = None,
+    resume_path: str | Path | None = None,
+    out_trace: str | Path | None = None,
+    input_fn: Any = input,
+    output_fn: Any = print,
+) -> dict[str, Any]:
+    """Run an interactive human-in-the-loop 5e 2024 (SRD 5.2) play session."""
+    from srd2024.arena import create_driver, run_interactive_session
+    from srd2024.arena.agents import BaseLLMDriver
+
+    if scenario is None and resume_path is None:
+        raise ValueError("Provide a scenario ID/path or --resume <checkpoint.json>.")
+    if max_rounds is not None and max_rounds < 1:
+        raise ValueError("max_rounds must be >= 1.")
+    if max_actions_per_turn < 1:
+        raise ValueError("max_actions_per_turn must be >= 1.")
+    if max_retries_per_action < 0:
+        raise ValueError("max_retries_per_action must be >= 0.")
+
+    nl_driver_obj: BaseLLMDriver | None = None
+    if nl_driver_spec is not None:
+        drv = create_driver(
+            nl_driver_spec,
+            rules=rules,
+            seed=seed,
+            api_base=api_base,
+            api_key_env=api_key_env,
+            temperature=temperature,
+        )
+        if not isinstance(drv, BaseLLMDriver):
+            raise ValueError(
+                f"--nl-driver must be a live LLM driver spec (openai-compat:/anthropic:/gemini:), got {nl_driver_spec!r}."
+            )
+        nl_driver_obj = drv
+
+    return run_interactive_session(
+        scenario,
+        rules=rules,
+        play_as=play_as,
+        seat_overrides=seat_overrides,
+        party_agent=party_agent,
+        enemy_agent=enemy_agent,
+        nl_driver=nl_driver_obj,
+        input_fn=input_fn,
+        output_fn=output_fn,
+        seed=seed,
+        max_rounds=max_rounds,
+        max_actions_per_turn=max_actions_per_turn,
+        max_retries_per_action=max_retries_per_action,
+        save_path=save_path,
+        resume_path=resume_path,
+        out_trace=out_trace,
+        api_base=api_base,
+        api_key_env=api_key_env,
+        temperature=temperature,
+    )
+
+
 def add_arena_subcommands(
     subparsers: Any,
     parent_parser: argparse.ArgumentParser,
 ) -> None:
-    """Attach the 4 Stage 3 arena subcommands (`scenarios`, `run`, `bench`, `replay`)."""
+    """Attach the arena subcommands (`scenarios`, `run`, `bench`, `replay`, `play`)."""
     # 1. scenarios
     subparsers.add_parser(
         "scenarios",
@@ -406,6 +480,113 @@ def add_arena_subcommands(
         help="Path to saved MatchTranscript JSON file (or '-' for stdin).",
     )
 
+    # 5. play (Stage 4: Human-in-the-Loop Interactive Tabletop Play)
+    p_play = subparsers.add_parser(
+        "play",
+        parents=[parent_parser],
+        help="Play an interactive 5e 2024 (SRD 5.2) tabletop match alongside or against AI agents.",
+    )
+    p_play.add_argument(
+        "scenario",
+        nargs="?",
+        default=None,
+        help="Built-in scenario ID or path to custom scenario JSON (optional when --resume is used).",
+    )
+    p_play.add_argument(
+        "--as",
+        dest="play_as",
+        default=None,
+        help="Seat role to play: a combatant ID (e.g. pc-bram), 'party', or 'dm'.",
+    )
+    p_play.add_argument(
+        "--seat",
+        dest="seats",
+        action="append",
+        default=None,
+        help="Per-seat driver override '<combatant_id>=<driver_spec>' (repeatable).",
+    )
+    p_play.add_argument(
+        "--party-agent",
+        dest="party_agent",
+        default="heuristic-tactical",
+        help="Default AI driver for non-human party seats (default: heuristic-tactical).",
+    )
+    p_play.add_argument(
+        "--enemy-agent",
+        dest="enemy_agent",
+        default="heuristic-tactical",
+        help="Default AI driver for non-human enemy seats (default: heuristic-tactical).",
+    )
+    p_play.add_argument(
+        "--nl-driver",
+        dest="nl_driver",
+        default=None,
+        help="Optional LLM driver spec (e.g. openai-compat:gpt-4o-mini) for natural-language-to-intent mode.",
+    )
+    p_play.add_argument(
+        "--api-base",
+        dest="api_base",
+        default=None,
+        help="Optional API base URL for live LLM seat or NL driver.",
+    )
+    p_play.add_argument(
+        "--api-key-env",
+        dest="api_key_env",
+        default=None,
+        help="Optional environment variable name holding the LLM API key.",
+    )
+    p_play.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="Sampling temperature for live LLM seat/NL drivers (default: 0.0).",
+    )
+    p_play.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Deterministic PRNG seed (default: 42).",
+    )
+    p_play.add_argument(
+        "--max-rounds",
+        dest="max_rounds",
+        type=int,
+        default=None,
+        help="Optional override for maximum combat rounds.",
+    )
+    p_play.add_argument(
+        "--max-actions-per-turn",
+        dest="max_actions_per_turn",
+        type=int,
+        default=6,
+        help="Maximum actions per combatant turn (default: 6).",
+    )
+    p_play.add_argument(
+        "--max-retries",
+        dest="max_retries",
+        type=int,
+        default=2,
+        help="Maximum retries per rejected action before fallback (default: 2).",
+    )
+    p_play.add_argument(
+        "--save",
+        dest="save_path",
+        default=None,
+        help="Path to save a resumable checkpoint JSON when pausing with 'save' or 'quit'.",
+    )
+    p_play.add_argument(
+        "--resume",
+        dest="resume_path",
+        default=None,
+        help="Path to a saved checkpoint JSON to resume an interactive session.",
+    )
+    p_play.add_argument(
+        "--out-trace",
+        dest="out_trace",
+        default=None,
+        help="Write the final MatchTranscript JSON to this file path (replayable via 'srd-arena replay').",
+    )
+
 
 def run_arena_cli_command(
     args: argparse.Namespace,
@@ -474,6 +655,56 @@ def run_arena_cli_command(
         result = execute_arena_replay(rules, transcript)
         exit_code = 0 if bool(result.get("deterministic_match")) else 1
         return "arena_replay", result, exit_code
+
+    if subcmd == "play":
+        if args.scenario is None and args.resume_path is None:
+            raise ValueError("Provide a scenario ID/path or --resume <checkpoint.json>.")
+        scenario_input = _parse_scenario_arg(args.scenario) if args.scenario is not None else None
+        fmt = getattr(args, "format", "markdown")
+        if fmt == "json":
+            # Keep stdout strictly pure JSON; stream interactive HUD/prompts to stderr.
+            def _stderr_out(msg: str) -> None:
+                print(msg, file=sys.stderr, flush=True)
+
+            def _stderr_in(prompt: str) -> str:
+                if prompt:
+                    sys.stderr.write(prompt)
+                    sys.stderr.flush()
+                line = sys.stdin.readline()
+                if line == "":
+                    raise EOFError
+                return line.rstrip("\r\n")
+
+            play_in = _stderr_in
+            play_out = _stderr_out
+        else:
+            play_in = input
+            play_out = print
+
+        result = execute_arena_play(
+            rules,
+            scenario=scenario_input,
+            play_as=args.play_as,
+            seat_overrides=args.seats,
+            party_agent=args.party_agent,
+            enemy_agent=args.enemy_agent,
+            nl_driver_spec=args.nl_driver,
+            api_base=args.api_base,
+            api_key_env=args.api_key_env,
+            temperature=args.temperature,
+            seed=args.seed,
+            max_rounds=args.max_rounds,
+            max_actions_per_turn=args.max_actions_per_turn,
+            max_retries_per_action=args.max_retries,
+            save_path=args.save_path,
+            resume_path=args.resume_path,
+            out_trace=args.out_trace,
+            input_fn=play_in,
+            output_fn=play_out,
+        )
+        if result.get("status") == "paused":
+            return "arena_play_paused", result, 0
+        return "arena_run", result, 0
 
     raise ValueError(f"Unknown arena subcommand: {subcmd}")
 

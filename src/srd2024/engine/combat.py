@@ -59,6 +59,34 @@ def _ability_mod(score: int) -> int:
     return (int(score) - 10) // 2
 
 
+def _parse_int(value: Any, *, allow_str: bool = False) -> int | None:
+    """Safely parse an integer, strictly rejecting booleans (and floats)."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if allow_str and isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_point(raw: Any) -> dict[str, int] | None:
+    """Safely parse a grid coordinate dict `{x, y}` with int-convertible coords (rejecting bools)."""
+    if not isinstance(raw, dict) or "x" not in raw or "y" not in raw:
+        return None
+    x = _parse_int(raw["x"], allow_str=True)
+    y = _parse_int(raw["y"], allow_str=True)
+    if x is None or y is None:
+        return None
+    return {"x": x, "y": y}
+
+
 # ----------------------------------------------------------------------
 # Condition & Active-Effect Helpers
 # ----------------------------------------------------------------------
@@ -1651,7 +1679,10 @@ def step(
     # 1. `start_encounter`
     # ------------------------------------------------------------------
     if intent_type == "start_encounter":
-        seed = int(intent.get("seed", 1))
+        safe_start = copy.deepcopy(state) if isinstance(state, dict) else {}
+        seed = _parse_int(intent.get("seed", 1), allow_str=False)
+        if seed is None:
+            return _invalid(safe_start, "start_encounter 'seed' must be an integer.", rules)
         encounter_id = str(intent.get("encounter_id") or "enc-1")
         raw_combatants = intent.get("combatants")
         if not isinstance(raw_combatants, list) or not raw_combatants:
@@ -1802,7 +1833,14 @@ def step(
         if to_pos is None:
             to_pos = copy.deepcopy(actor["position"])
         else:
-            to_pos = {"x": int(to_pos["x"]), "y": int(to_pos["y"])}
+            parsed_to = _parse_point(to_pos)
+            if parsed_to is None:
+                return _invalid(
+                    copy.deepcopy(state),
+                    "move 'to' must be a dict with integer 'x' and 'y' coordinates.",
+                    rules,
+                )
+            to_pos = parsed_to
 
         if stand_up:
             if "prone" in _effective_conditions(actor, rules):
@@ -2079,7 +2117,14 @@ def step(
                 res["action"] = False
 
         spell_level = int(spell.get("level", 0))
-        slot_level = int(intent.get("slot_level") if intent.get("slot_level") is not None else spell_level)
+        raw_slot_level = intent.get("slot_level")
+        if raw_slot_level is None:
+            slot_level = spell_level
+        else:
+            parsed_slot = _parse_int(raw_slot_level, allow_str=False)
+            if parsed_slot is None:
+                return _invalid(copy.deepcopy(state), "cast_spell 'slot_level' must be an integer.", rules)
+            slot_level = parsed_slot
         if spell_level >= 1:
             if slot_level < spell_level:
                 return _invalid(
@@ -2105,7 +2150,16 @@ def step(
         raw_targets = intent.get("target_ids")
         if raw_targets is None and intent.get("target_id"):
             raw_targets = [intent["target_id"]]
-        target_ids = [str(t) for t in (raw_targets or [])]
+        if raw_targets is None:
+            target_ids: list[str] = []
+        elif isinstance(raw_targets, (list, tuple)):
+            target_ids = [str(t) for t in raw_targets]
+        else:
+            return _invalid(
+                copy.deepcopy(state),
+                "cast_spell 'target_ids' must be a list of combatant IDs.",
+                rules,
+            )
         for tid in target_ids:
             if tid not in s["combatants"]:
                 return _invalid(copy.deepcopy(state), f"Unknown spell target '{tid}'.", rules)
@@ -2193,10 +2247,14 @@ def step(
         for buff in buffs:
             if buff.get("kind") == "teleport":
                 dest = intent.get("destination")
-                if not isinstance(dest, dict):
-                    return _invalid(copy.deepcopy(state), f"Spell '{spell_slug}' requires 'destination': {{x, y}}.", rules)
+                to_pos = _parse_point(dest)
+                if to_pos is None:
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"Spell '{spell_slug}' requires 'destination': {{x, y}} with integer coordinates.",
+                        rules,
+                    )
                 max_d = int(buff.get("max_distance_ft", 30))
-                to_pos = {"x": int(dest["x"]), "y": int(dest["y"])}
                 if distance_ft(actor["position"], to_pos) > max_d:
                     return _invalid(
                         copy.deepcopy(state),
@@ -2225,12 +2283,27 @@ def step(
             for tid in (target_ids or [actor_id]):
                 t = s["combatants"][tid]
                 hp_before = int(t["hp"])
+                if not t.get("alive"):
+                    tracker.emit(
+                        "healing_applied",
+                        source_id=actor_id,
+                        target_id=tid,
+                        spell=spell_slug,
+                        amount=0,
+                        hp_before=hp_before,
+                        hp_after=hp_before,
+                        revived=False,
+                        reason="target_dead",
+                    )
+                    tracker.hook(
+                        f"{spell.get('name', spell_slug)} has no effect on {t['name']}, who is dead."
+                    )
+                    continue
                 revived = False
                 if hp_before == 0 and t.get("kind") == "pc" and heal_amt > 0:
-                    # 2024 RAW: healing revives 0-HP PC, removes unconscious, LEAVES prone!
+                    # 2024 RAW: healing revives 0-HP living (unconscious) PC, removes unconscious, LEAVES prone!
                     _remove_condition(t, "unconscious")
                     t["death_saves"] = {"successes": 0, "failures": 0}
-                    t["alive"] = True
                     revived = True
                 t["hp"] = min(int(t["hp_max"]), hp_before + heal_amt)
                 tracker.emit(

@@ -2979,13 +2979,17 @@ def create_driver(
     http_transport: HttpTransport | None = None,
     replay_transcript: dict[str, Any] | None = None,
     replay_side: str | None = None,
+    input_fn: Callable[[str], str] | None = None,
+    output_fn: Callable[[str], Any] | None = None,
+    nl_driver: BaseLLMDriver | None = None,
 ) -> AgentDriver:
-    """Instantiate any supported offline or live LLM Arena driver from a spec.
+    """Instantiate any supported offline, human, or live LLM Arena driver from a spec.
 
     Accepted string specs:
     - `"random"`
     - `"greedy"`
     - `"heuristic-tactical"`
+    - `"human"`
     - `"replay"` (requires `replay_transcript`)
     - `"openai-compat:<model>"`
     - `"anthropic:<model>"`
@@ -3014,6 +3018,9 @@ def create_driver(
             http_transport=cfg.get("http_transport", http_transport),
             replay_transcript=cfg.get("replay_transcript", replay_transcript),
             replay_side=cfg.get("replay_side", replay_side),
+            input_fn=cfg.get("input_fn", input_fn),
+            output_fn=cfg.get("output_fn", output_fn),
+            nl_driver=cfg.get("nl_driver", nl_driver),
         )
 
     if not isinstance(spec, str) or not spec.strip():
@@ -3028,6 +3035,15 @@ def create_driver(
         return GreedyDriver(rules=rules)
     if lower == "heuristic-tactical":
         return HeuristicTacticalDriver(rules=rules)
+    if lower == "human":
+        from .human import HumanDriver
+
+        return HumanDriver(
+            rules=rules,
+            input_fn=input_fn or input,
+            output_fn=output_fn or print,
+            nl_driver=nl_driver,
+        )
     if lower == "replay":
         if replay_transcript is None:
             raise ValueError("Driver spec 'replay' requires 'replay_transcript'.")
@@ -3075,7 +3091,7 @@ def create_driver(
 
     raise ValueError(
         f"Unknown driver spec {spec!r}. Expected one of: 'random', 'greedy', "
-        "'heuristic-tactical', 'replay', 'openai-compat:<model>', "
+        "'heuristic-tactical', 'human', 'replay', 'openai-compat:<model>', "
         "'anthropic:<model>', 'gemini:<model>'."
     )
 

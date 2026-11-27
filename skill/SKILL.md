@@ -136,6 +136,26 @@ Both `bin/srd-arena <subcommand>` and `bin/srd arena <subcommand>` expose identi
 
 ---
 
+## Stage 4: Human-in-the-Loop Interactive Play & Adversarial QA
+
+Stage 4 extends the 5e 2024 (SRD 5.2) pack with interactive human-in-the-loop tabletop play and automated adversarial engine verification (strictly Python 3.11+ stdlib, zero external dependencies):
+
+- **Interactive Play (`bin/srd-arena play` / `bin/srd arena play`):** Join any built-in or custom scenario with an ASCII 5-ft battlefield HUD, strict partial observability (enemy HP bands only, never exact HP/AC), numbered legal action menus, tactical shortcuts (`e`, `move <x> <y>`, `stand`, `say <msg>`, `save`, `quit`), and optional natural-language intent translation (`--nl-driver <spec>`).
+  - Control one PC alongside AI companions (`--as pc-bram`), the whole party (`--as party`), the enemy side (`--as dm`), or mix arbitrary seats (`--seat pc-aldric=human --seat pc-lyra=heuristic-tactical`).
+  - Pause/resume mid-match with `--save <checkpoint.json>` / `--resume <checkpoint.json>` and export deterministic traces via `--out-trace <trace.json>` (verifiable with `bin/srd-arena replay`).
+- **Deterministic Simulation Testing (`bin/srd-dst`):** Runs seeded stateful fuzzing across scenarios and adversarial intents, checking universal 5e 2024 invariants after every `step()` (HP/slot bounds, concentration/condition rules, immutability, RNG monotonicity, and 100% seed determinism).
+- **AST Mutation Testing (`bin/srd-mutate`):** Runs isolated, non-destructive AST mutation campaigns against `src/srd2024/engine/{dice,character,combat}.py` to measure test suite fault-detection strength without modifying repository files.
+
+### Stage 4 CLI Quick Reference
+
+| CLI Surface | Purpose |
+|---|---|
+| `bin/srd-arena play <scenario> [--as pc\|party\|dm] [--seat id=spec]... [--save P] [--resume P] [--nl-driver S] [--out-trace T]` | Play interactively alongside or against AI agents (also `bin/srd arena play`) |
+| `bin/srd-dst [--seeds N] [--max-steps M] [--format markdown\|json]` | Run deterministic simulation & invariant fuzzing over `srd2024.engine` |
+| `bin/srd-mutate [--target dice\|character\|combat\|all] [--limit N] [--format markdown\|json]` | Run isolated AST mutation testing on the rules engine |
+
+---
+
 ## Attribution (CC-BY-4.0)
 
 When quoting or summarizing rules from this pack, include this notice:
