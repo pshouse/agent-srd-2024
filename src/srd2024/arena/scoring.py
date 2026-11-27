@@ -21,9 +21,13 @@ SCORE_WEIGHTS: dict[str, float] = {
     "coordination": 0.15,
 }
 
-_PRODUCTIVE_INTENT_TYPES: frozenset[str] = frozenset(
-    {"attack", "cast_spell", "help", "dodge", "dash", "disengage"}
-)
+_PRODUCTIVE_INTENT_TYPES: frozenset[str] = frozenset({"attack", "cast_spell", "help"})
+
+# Idle turns (end_turn / dodge / dash / disengage only) used to collect a full
+# legality score plus free immunity and friendly-fire points. Those points are
+# paid only once the side has actually attacked, cast, or helped. A legal idle
+# side keeps a small legality fraction so it still ranks above pure violations.
+_IDLE_LEGALITY_FACTOR = 0.15
 
 _SETUP_MASTERIES: frozenset[str] = frozenset({"sap", "topple", "vex", "slow"})
 
@@ -199,6 +203,10 @@ def score_match(
     forced_fallbacks = sum(1 for a in decision_actions if bool(a.get("forced_fallback", False)))
     side_violations = sum(1 for v in violations if str(v.get("side")) == side)
 
+    engaged = any(
+        str((a.get("intent") or {}).get("type") or "").strip().lower() in _PRODUCTIVE_INTENT_TYPES
+        for a in decision_actions
+    )
     if total_decisions == 0:
         rules_legality_score = 100.0
     else:
@@ -208,10 +216,10 @@ def score_match(
             20.0,
             2.0 * max(0, side_violations - (total_decisions - first_attempt_legal)),
         )
-        rules_legality_score = round(
-            _clamp(100.0 * first_attempt_rate - fallback_penalty - extra_retry_penalty),
-            2,
-        )
+        raw_legality = _clamp(100.0 * first_attempt_rate - fallback_penalty - extra_retry_penalty)
+        if not engaged:
+            raw_legality *= _IDLE_LEGALITY_FACTOR
+        rules_legality_score = round(raw_legality, 2)
 
     # ------------------------------------------------------------------
     # 3 & 4. Event Telemetry, Tactical & Coordination Metrics
@@ -431,7 +439,7 @@ def score_match(
         max(1, int(c.get("hp_max", c.get("hp", 1)))) for c in opp_init
     )
     dmg_eff_pts = 40.0 * min(1.0, effective_damage_dealt / max(1, total_opponent_initial_hp))
-    immunity_pts = max(0.0, 25.0 - 12.5 * wasted_immune_hits)
+    immunity_pts = max(0.0, 25.0 - 12.5 * wasted_immune_hits) if engaged else 0.0
 
     active_turns = len(turn_productivity)
     productive_turns = sum(1 for prod in turn_productivity.values() if prod)
@@ -449,10 +457,14 @@ def score_match(
     # ------------------------------------------------------------------
     # 4. Coordination Score (0..100, weight 0.15)
     # ------------------------------------------------------------------
-    ff_pts = max(0.0, 40.0 - 20.0 * friendly_fire_incidents)
+    ff_pts = max(0.0, 40.0 - 20.0 * friendly_fire_incidents) if engaged else 0.0
 
     table_talk_messages = max(len(blackboard_side), action_table_talk_count)
-    comm_pts = 20.0 * min(1.0, table_talk_messages / max(1.0, active_turns * 0.5))
+    # Talk with no attack, cast, or help does not score. The message count stays in metrics.
+    if engaged:
+        comm_pts = 20.0 * min(1.0, table_talk_messages / max(1.0, active_turns * 0.5))
+    else:
+        comm_pts = 0.0
 
     if offensive_multi_enemy_actions == 0:
         focus_fire_ratio = 1.0 if (len(opp_ids) <= 1 or winner == side) else 0.0

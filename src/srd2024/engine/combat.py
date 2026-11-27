@@ -1634,6 +1634,31 @@ def _has_active_shield(target: dict[str, Any], spell_slug: str) -> bool:
 # ----------------------------------------------------------------------
 
 
+def _reaction_trigger_applies(
+    state: dict[str, Any],
+    actor_id: str,
+    spell: dict[str, Any],
+) -> bool:
+    """True only for a reaction spell with a real trigger.
+
+    A trigger is an engine `reaction_window` naming this caster, or the caster
+    spending their own reaction on their own turn. `as_reaction` on any other
+    spell does not qualify.
+    """
+    if str(spell.get("action_type") or "").lower() != "reaction":
+        return False
+    if not spell.get("reaction_trigger"):
+        return False
+    window = state.get("reaction_window")
+    if isinstance(window, dict) and str(window.get("actor_id") or "") == str(actor_id):
+        return True
+    turn_order = state.get("turn_order") or []
+    if not turn_order:
+        return False
+    active_id = turn_order[int(state.get("active_index", 0)) % len(turn_order)]
+    return str(active_id) == str(actor_id)
+
+
 def step(
     state: dict[str, Any] | None,
     intent: dict[str, Any],
@@ -2059,13 +2084,23 @@ def step(
             return _invalid(copy.deepcopy(state), f"{actor_id} does not have spellcasting.", rules)
 
         action_type = str(spell.get("action_type") or "action").lower()
-        as_reaction = bool(intent.get("as_reaction", False)) or action_type == "reaction"
+        wants_reaction = bool(intent.get("as_reaction", False)) or action_type == "reaction"
+        if action_type == "reaction" and wants_reaction and not _reaction_trigger_applies(s, actor_id, spell):
+            return _invalid(
+                copy.deepcopy(state),
+                f"No valid reaction trigger for '{spell_slug}'.",
+                rules,
+            )
+        as_reaction = action_type == "reaction" and wants_reaction
         res = actor["turn_resources"]
 
         if as_reaction:
             if not res.get("reaction"):
                 return _invalid(copy.deepcopy(state), f"{actor_id} has no Reaction remaining.", rules)
             res["reaction"] = False
+            window = s.get("reaction_window")
+            if isinstance(window, dict) and str(window.get("actor_id") or "") == actor_id:
+                s.pop("reaction_window", None)
         else:
             if actor_id != active_id:
                 return _invalid(copy.deepcopy(state), f"It is {active_id}'s turn, not {actor_id}'s.", rules)

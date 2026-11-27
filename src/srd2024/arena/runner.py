@@ -318,7 +318,7 @@ def build_observation(
     legal["downed_allies"] = downed_allies
 
     side_board = list(blackboard.get(side) or [])[-12:]
-    hooks_window = list(recent_hooks or [])[-12:]
+    hooks_window = [_observer_event_text(h) for h in list(recent_hooks or [])[-12:]]
 
     return {
         "round": int(state.get("round", 1)),
@@ -379,6 +379,55 @@ def _describe_driver_config(driver_or_map: AgentDriver | dict[str, AgentDriver])
     if isinstance(driver_or_map, dict):
         return {k: str(getattr(v, "name", type(v).__name__)) for k, v in sorted(driver_or_map.items())}
     return str(getattr(driver_or_map, "name", type(driver_or_map).__name__))
+
+
+_ARENA_INTENT_TYPES = frozenset(
+    {"move", "attack", "cast_spell", "dodge", "dash", "disengage", "help", "end_turn"}
+)
+_PRIVATE_RESOURCE_RE = re.compile(
+    r"spell slots?|slots remaining|no Reaction|Reaction remaining",
+    re.IGNORECASE,
+)
+_NAMED_RESOURCE_RE = re.compile(r"^(\S+) has no\b")
+_HIDDEN_NARRATION_RE = re.compile(
+    r"\s*\(\s*\d+\s+vs\s+AC\s+\d+\s*\)"
+    r"|\bvs\s+AC\s+\d+\b"
+    r"|\s*\(\s*DC\s+\d+\s*\)",
+    re.IGNORECASE,
+)
+
+
+def _observer_event_text(text: str) -> str:
+    """Drop hidden to-hit, AC, and save-DC numbers from narration a player sees."""
+    cleaned = _HIDDEN_NARRATION_RE.sub("", str(text))
+    return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+
+
+def _arena_intent_rejection(intent: dict[str, Any], active_id: str) -> str | None:
+    """Reject intents the arena must not pass to the engine.
+
+    Allowed types are the turn actions a combatant can choose. `actor_id` must
+    be present and equal the active combatant, so a driver cannot rebuild the
+    encounter or spend another creature's action.
+    """
+    raw_type = intent.get("type")
+    itype = str(raw_type).strip().lower() if isinstance(raw_type, str) else ""
+    if itype not in _ARENA_INTENT_TYPES:
+        shown = itype[:64]
+        return f"Intent type {shown!r} is not allowed."
+    actor = intent.get("actor_id")
+    if not isinstance(actor, str) or actor != active_id:
+        return "Intent rejected: actor_id must be the active combatant."
+    return None
+
+
+def _driver_visible_error(message: str, active_id: str) -> str:
+    """Hide another combatant's slots and reaction from driver-facing text."""
+    text = str(message or "Invalid intent.")
+    named = _NAMED_RESOURCE_RE.match(text)
+    if _PRIVATE_RESOURCE_RE.search(text) and (named is None or named.group(1) != active_id):
+        return "Intent rejected."
+    return text
 
 
 def _cannot_act(actor: dict[str, Any], rules: RulesStore) -> bool:
@@ -573,17 +622,23 @@ def run_match(
 
                 itype = str(intent["type"]).strip().lower()
                 intent["type"] = itype
-                if not intent.get("actor_id") and itype in (
-                    "move",
-                    "attack",
-                    "dodge",
-                    "dash",
-                    "disengage",
-                    "help",
-                    "end_turn",
-                    "cast_spell",
-                ):
-                    intent["actor_id"] = active_id
+                rejection = _arena_intent_rejection(intent, active_id)
+                if rejection is not None:
+                    violations.append(
+                        {
+                            "round": cur_round,
+                            "turn_index": turn_counter,
+                            "actor_id": active_id,
+                            "side": side,
+                            "attempt": attempt,
+                            "intent": {"type": itype},
+                            "error": rejection,
+                        }
+                    )
+                    retry_feedback = (
+                        f"{rejection} Emit one allowed intent for the active combatant."
+                    )
+                    continue
 
                 # Recharge sidecar validation before calling combat.step().
                 recharging_action_name: str | None = None
@@ -668,7 +723,7 @@ def run_match(
                         turn_ended = True
                     break
 
-                err_msg = str(res.get("error") or "Invalid intent.")
+                err_msg = _driver_visible_error(str(res.get("error") or "Invalid intent."), active_id)
                 violations.append(
                     {
                         "round": cur_round,
