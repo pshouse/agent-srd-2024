@@ -9,7 +9,7 @@ Covers:
      and bench --scenarios goblin-ambush --agents heuristic-tactical,random --seeds 1,2
      succeed (exit 0) in BOTH markdown and json formats with 1:1 identical JSON parity.
 3. MCP Stage 3 Discovery & Lock Preservation:
-   - Default bin/srd-mcp still returns exact 5 Stage 1 tools in tools/list (Lock C) while dispatching Stage 3 tools.
+   - Default bin/srd-mcp still returns exact 5 Stage 1 tools in tools/list (Lock C) and rejects Stage 3 tools/calls.
    - bin/srd-engine-mcp, bin/srd-mcp --engine, SRD2024_ENGINE=1 still return exact 8 Stage 1+2 tools (Lock D).
    - bin/srd-mcp --arena, SRD2024_ARENA=1 bin/srd-mcp, and bin/srd-engine-mcp --arena advertise all 11 tools +
      srd://arena/scenarios resource, and tools/call for srd_arena_scenarios, srd_arena_run, srd_arena_bench
@@ -256,7 +256,7 @@ class TestStage3PackagingAndCliParity(unittest.TestCase):
 class TestStage3McpDiscoveryLocksAndParity(unittest.TestCase):
     """§8.4.3: Lock C (5 tools), Lock D (8 tools), Arena 11-tool discovery, resource & CLI/MCP JSON parity."""
 
-    def test_lock_c_default_mcp_keeps_5_tools_and_dispatches_stage3(self) -> None:
+    def test_lock_c_default_mcp_keeps_5_tools_and_rejects_arena(self) -> None:
         with _CustomMcpClient([str(BIN_MCP)], env_unset=["SRD2024_ENGINE", "SRD2024_ARENA"]) as mcp:
             _init_mcp(mcp)
             tools_resp = mcp.request("tools/list")
@@ -268,14 +268,15 @@ class TestStage3McpDiscoveryLocksAndParity(unittest.TestCase):
             self.assertIn("srd://meta", uris)
             self.assertNotIn("srd://arena/scenarios", uris)
 
-            # tools/call & resources/read still work for Stage 3 even in default mode
-            scen_out = _call_tool_json(mcp, "srd_arena_scenarios", {"format": "json"})
-            cli_scen = _run_arena_bin_json(["scenarios"])
-            self.assertEqual(scen_out, cli_scen)
+            for tool_name in ("srd_arena_scenarios", "srd_arena_run", "srd_arena_bench"):
+                resp = mcp.request("tools/call", {"name": tool_name, "arguments": {"format": "json"}})
+                self.assertNotIn("error", resp, resp)
+                self.assertTrue(resp["result"].get("isError"), resp)
+                self.assertIn("Unknown tool", resp["result"]["content"][0]["text"])
 
             res_read = mcp.request("resources/read", {"uri": "srd://arena/scenarios"})
-            self.assertNotIn("error", res_read)
-            self.assertTrue(json.loads(res_read["result"]["contents"][0]["text"]))
+            self.assertIn("error", res_read)
+            self.assertIn("Unknown resource", res_read["error"]["message"])
 
             rc, stderr = mcp.close()
             self.assertEqual(rc, 0, f"stderr={stderr}")

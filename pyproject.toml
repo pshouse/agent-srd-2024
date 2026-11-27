@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-srd-2024"
-version = "0.1.0"
+version = "0.3.1"
 description = "Zero-server, agent-native 5e 2024 (SRD 5.2) SQLite, Markdown card, CLI, and MCP pack"
 readme = "README.md"
 requires-python = ">=3.11"

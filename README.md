@@ -121,6 +121,8 @@ Emits deterministic Stage 2 artifacts (also triggered automatically at the end o
 
 ## Stage 3 Quickstart: Multi-Agent Tabletop & Model Eval Arena
 
+Experimental: arena scoring and isolation fixes are in progress. Do not run the arena or srd-mcp --arena with a model API key set in your environment.
+
 Stage 3 adds a deterministic, partial-observability **Multi-Agent 5e 2024 (SRD 5.2) Tabletop & Model Evaluation Arena** (`src/srd2024/arena/`, `bin/srd-arena`, `bin/srd arena`) strictly on top of the Stage 2 rules engine. Agents (offline deterministic bots or live LLMs over pure Python stdlib `urllib.request`) never roll dice or mutate state—every combat action is adjudicated by `srd2024.engine.combat.step()`, scored quantitatively (`0–100` across outcome, rules legality, tactical execution, and party coordination), and verifiable via 100% deterministic SHA-256 trace replay.
 
 ### 1. List Scenarios, Run Matches & Replay Traces (`bin/srd-arena` / `bin/srd arena`)
@@ -154,6 +156,8 @@ Both `./bin/srd-arena <subcommand>` and `./bin/srd arena <subcommand>` support i
 
 ### 2. Evaluate Live LLM Drivers (Zero External SDKs — Pure Stdlib `urllib.request`)
 
+The value of `--api-key-env` (or the provider's default key variable) is sent only to `--api-base`. Use `https` except on loopback (`127.0.0.1`, `localhost`, `::1`). Redirects are refused, and these calls ignore `HTTP_PROXY` / `HTTPS_PROXY`. Put the key in a dedicated variable, not a general cloud secret.
+
 ```bash
 # OpenAI-compatible endpoint (OpenAI, OpenRouter, Ollama, vLLM, LM Studio, etc.)
 OPENAI_API_KEY=... ./bin/srd-arena run goblin-ambush \
@@ -182,7 +186,7 @@ GEMINI_API_KEY=... ./bin/srd-arena run wyrmling-lair \
 
 - Default `bin/srd-mcp` preserves the exact **5 Stage 1 tools** in `tools/list`.
 - `bin/srd-engine-mcp` / `bin/srd-mcp --engine` / `SRD2024_ENGINE=1` preserves the exact **8 Stage 1 + Stage 2 tools** in `tools/list`.
-- Launch **`bin/srd-mcp --arena`** (or set `SRD2024_ARENA=1`, or `bin/srd-engine-mcp --arena`) to advertise all **11 MCP tools** (`srd_arena_scenarios`, `srd_arena_run`, `srd_arena_bench` added) plus the `srd://arena/scenarios` resource. All 11 tools and Stage 3 resources are dispatchable via `tools/call` / `resources/read` across every launcher mode.
+- Launch **`bin/srd-mcp --arena`** (or set `SRD2024_ARENA=1`, or `bin/srd-engine-mcp --arena`) to advertise and enable all **11 MCP tools** (`srd_arena_scenarios`, `srd_arena_run`, `srd_arena_bench` added) plus the `srd://arena/scenarios` resource. Arena tools and that resource are neither advertised nor callable unless that flag is set. Paid LLM drivers over MCP also require `--arena-allow-llm` or `SRD2024_ARENA_ALLOW_LLM=1` at server start. The `scenario` argument accepts a built-in id or inline JSON (64KB cap), never a filesystem path.
 
 ```json
 {

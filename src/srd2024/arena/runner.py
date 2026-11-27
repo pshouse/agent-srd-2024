@@ -29,7 +29,7 @@ from srd2024.engine.combat import (
 from srd2024.engine.dice import DeterministicRNG
 from srd2024.engine.store import RulesStore, strip_prefix
 
-from .agents import AgentDriver, ReplayDriver, create_driver
+from .agents import AgentDriver, ReplayDriver, create_driver, scrub_secrets
 from .scenarios import BUILTIN_SCENARIO_IDS, load_scenario
 from .scoring import score_match
 
@@ -553,7 +553,7 @@ def run_match(
                         raise ValueError("Driver decision intent must be a dict with a non-empty 'type'.")
                     intent = copy.deepcopy(raw_intent)
                 except Exception as exc:
-                    err_msg = str(exc) or type(exc).__name__
+                    err_msg = scrub_secrets(str(exc) or type(exc).__name__)
                     violations.append(
                         {
                             "round": cur_round,
@@ -565,7 +565,7 @@ def run_match(
                             "error": err_msg,
                         }
                     )
-                    retry_feedback = (
+                    retry_feedback = scrub_secrets(
                         f"Attempt {attempt} decision error: {err_msg}. "
                         "Emit a single valid JSON object with a legal 'intent'."
                     )
@@ -624,6 +624,8 @@ def run_match(
                     talk_raw = getattr(decision, "table_talk", None)
                     talk_clean = talk_raw.strip() if isinstance(talk_raw, str) and talk_raw.strip() else None
                     if talk_clean is not None:
+                        talk_clean = scrub_secrets(talk_clean) or None
+                    if talk_clean is not None:
                         blackboard.setdefault(side, []).append(
                             {
                                 "round": cur_round,
@@ -653,7 +655,7 @@ def run_match(
                             "auto_end_turn": False,
                             "forced_fallback": False,
                             "intent": intent,
-                            "rationale": str(getattr(decision, "rationale", "") or ""),
+                            "rationale": scrub_secrets(str(getattr(decision, "rationale", "") or "")),
                             "table_talk": talk_clean,
                             "events": res.get("events") or [],
                             "state_diff": res.get("state_diff") or {},
@@ -668,7 +670,7 @@ def run_match(
                         turn_ended = True
                     break
 
-                err_msg = str(res.get("error") or "Invalid intent.")
+                err_msg = scrub_secrets(str(res.get("error") or "Invalid intent."))
                 violations.append(
                     {
                         "round": cur_round,
@@ -680,7 +682,7 @@ def run_match(
                         "error": err_msg,
                     }
                 )
-                retry_feedback = (
+                retry_feedback = scrub_secrets(
                     f"Previous intent {json.dumps(intent, sort_keys=True)} was rejected: {err_msg}. "
                     "Choose a legal action from legal_actions."
                 )
