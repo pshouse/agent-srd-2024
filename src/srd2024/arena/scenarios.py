@@ -222,7 +222,7 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
         "name": "Goblin Ambush",
         "description": (
             "Tier 1 5e 2024 (SRD 5.2) skirmish: two Level 1 adventurers (Fighter and Wizard) "
-            "repel a pair of Goblin Warriors testing reach vs. ranged positioning, 2024 Weapon "
+            "repel two Goblin Warriors and a Goblin Minion testing reach vs. ranged positioning, 2024 Weapon "
             "Masteries (Sap, Vex, Slow), Shield/Mage Armor economy, and focus fire."
         ),
         "tier": 1,
@@ -251,6 +251,12 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
                 "name": "Goblin Scout B",
                 "position": {"x": 25, "y": 15},
             },
+            {
+                "id": "goblin-minion-1",
+                "monster": "goblin-minion",
+                "name": "Goblin Runt",
+                "position": {"x": 25, "y": 5},
+            },
         ],
     },
     "crypt-of-ghouls": {
@@ -258,8 +264,8 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
         "name": "Crypt of Ghouls",
         "description": (
             "Tier 2 5e 2024 (SRD 5.2) undead gauntlet: three Level 5 adventurers (Champion "
-            "Fighter, Evoker Wizard, Life Cleric) face two Ghouls, a Ghast, and a Skeleton "
-            "archer, testing AoE Fireball placement, Paralysis threat management, 0-HP revival "
+            "Fighter, Evoker Wizard, Life Cleric) face four Ghouls, two Ghasts, a Mummy, and "
+            "a Skeleton archer, testing AoE Fireball placement, Paralysis threat management, 0-HP revival "
             "via Healing Word, Bless concentration, Extra Attack, and Weapon Masteries."
         ),
         "tier": 2,
@@ -302,6 +308,30 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
                 "name": "Crypt Archer",
                 "position": {"x": 35, "y": 15},
             },
+            {
+                "id": "mummy-1",
+                "monster": "mummy",
+                "name": "Crypt Mummy",
+                "position": {"x": 35, "y": 5},
+            },
+            {
+                "id": "ghast-2",
+                "monster": "ghast",
+                "name": "Crypt Ghast B",
+                "position": {"x": 30, "y": 15},
+            },
+            {
+                "id": "ghoul-3",
+                "monster": "ghoul",
+                "name": "Crypt Ghoul C",
+                "position": {"x": 35, "y": 25},
+            },
+            {
+                "id": "ghoul-4",
+                "monster": "ghoul",
+                "name": "Crypt Ghoul D",
+                "position": {"x": 20, "y": -5},
+            },
         ],
     },
     "wyrmling-lair": {
@@ -309,8 +339,8 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
         "name": "Wyrmling Lair",
         "description": (
             "Tier 2 5e 2024 (SRD 5.2) boss encounter: four Level 5 adventurers (Fighter, "
-            "Wizard, Cleric, Rogue) battle a Red Dragon Wyrmling, Cinder Hound, and Ember "
-            "Magmin—all fire-immune—testing damage-immunity awareness, breath-weapon spacing, "
+            "Wizard, Cleric, Rogue) battle a Red Dragon Wyrmling, two Cinder Hounds (one "
+            "held back), and an Ember Magmin—all fire-immune—testing damage-immunity awareness, breath-weapon spacing, "
             "Bless + Shield economy, Vex + Nick mastery combos, and multi-round focus fire."
         ),
         "tier": 2,
@@ -347,6 +377,12 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
                 "monster": "magmin",
                 "name": "Ember Magmin",
                 "position": {"x": 25, "y": 20},
+            },
+            {
+                "id": "hound-2",
+                "monster": "hell-hound",
+                "name": "Cinder Hound B",
+                "position": {"x": 50, "y": 30},
             },
         ],
     },

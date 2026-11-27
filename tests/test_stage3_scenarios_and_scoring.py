@@ -212,6 +212,8 @@ def _make_action(
 # Stat-block elements of the built-in scenario monsters that the engine does not execute yet (#39, #33, #38).
 EXPECTED_SCENARIO_MONSTER_GAPS: dict[str, list[str]] = {
     "goblin-warrior": ["bonus_action:nimble-escape"],
+    "goblin-minion": ["bonus_action:nimble-escape"],
+    "mummy": [],
     "ghoul": [],
     "ghast": [],  # Stench executes (#39)
     "skeleton": [],

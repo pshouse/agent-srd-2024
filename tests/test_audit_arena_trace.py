@@ -26,16 +26,18 @@ class TestAuditArenaTrace(unittest.TestCase):
     def setUpClass(cls) -> None:
         rules = RulesStore()
         cls.trace = None
-        # A Crypt of Ghouls match with at least one Shield and one Opportunity Attack.
+        # A Crypt of Ghouls match with a Shield and an Opportunity Attack the mover survives.
         for seed in range(1, 40):
             t = run_match("crypt-of-ghouls", party_driver=HeuristicTacticalDriver(rules),
                           enemy_driver=HeuristicTacticalDriver(rules), rules=rules, seed=seed)
-            types = [e["type"] for a in t["actions"] for e in a["events"]]
-            if "opportunity_attack" in types and any(
+            escaped_oa = any(
+                e["type"] == "opportunity_attack" and any(x["type"] == "moved" and x["actor_id"] == e["target_id"] for x in a["events"][k:])
+                for a in t["actions"] for k, e in enumerate(a["events"]))
+            if escaped_oa and any(
                     e["type"] == "spell_cast" and e.get("spell") == "shield" for a in t["actions"] for e in a["events"]):
                 cls.trace = t
                 break
-        assert cls.trace is not None, "no Crypt seed in 1-39 had both a Shield and an Opportunity Attack"
+        assert cls.trace is not None, "no Crypt seed in 1-39 had a Shield and a survived Opportunity Attack"
         cls.tmp = tempfile.TemporaryDirectory()
 
     @classmethod
@@ -61,10 +63,11 @@ class TestAuditArenaTrace(unittest.TestCase):
                 if e["type"] == "spell_cast" and e.get("spell") == "shield":
                     a["actor_id"] = e["actor_id"]
                     break
-        # And delete one Opportunity Attack together with its attack.
+        # And delete one Opportunity Attack whose mover still gets away (a dropped mover never "moves").
         for a in bad["actions"]:
             evs = a["events"]
-            i = next((k for k, e in enumerate(evs) if e["type"] == "opportunity_attack"), None)
+            i = next((k for k, e in enumerate(evs) if e["type"] == "opportunity_attack"
+                      and any(x["type"] == "moved" and x["actor_id"] == e["target_id"] for x in evs[k:])), None)
             if i is not None:
                 del evs[i]
                 break

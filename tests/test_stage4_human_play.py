@@ -51,6 +51,7 @@ from srd2024.arena import (
     resolve_seat_drivers,
     run_interactive_session,
 )
+from srd2024.arena.scenarios import _BUILTIN_SCENARIOS
 from srd2024.engine.combat import step
 from srd2024.engine.store import RulesStore
 from tests.helpers import BIN_SRD, REPO_ROOT
@@ -242,7 +243,7 @@ class TestHumanMenuAndHud(unittest.TestCase):
         )
         md = render_match_markdown(transcript)
         self.assertIn("| Party Driver | `pc-bram: human, pc-talia: heuristic-tactical` |", md)
-        self.assertIn("| Enemy Driver | `goblin-1: heuristic-tactical, goblin-2: heuristic-tactical` |", md)
+        self.assertIn("| Enemy Driver | `goblin-1: heuristic-tactical, goblin-2: heuristic-tactical, goblin-minion-1: heuristic-tactical` |", md)
         self.assertNotIn("{'", md)
 
         # String drivers remain unchanged
@@ -618,11 +619,15 @@ class TestInteractiveSessionsAndSeats(unittest.TestCase):
         # R2: Bram throws Javelin at Goblin Scout B [2] -> misses (7 vs AC 15),
         #     sees Heroic Inspiration option #1 in HUD/menu, types 'r' to reroll; Talia casts Ray of Frost.
         # (Seed 22 since #33: Talia no longer casts Shield on her own turn, which shifted seed 42's dice.)
+        # The menu script needs the original two-goblin line-up (before the difficulty retune added a Goblin Minion);
+        # its replay then rebuilds the scenario from the trace, since the built-in line-up no longer matches.
         script = ["5", "1", "e", "2", "r", "e"] + ["1", "e"] * 15
         in_fn, out_fn, outputs = _make_scripted_io(script, fallback="e")
+        two_goblins = copy.deepcopy(_BUILTIN_SCENARIOS["goblin-ambush"])
+        two_goblins["enemies"] = [e for e in two_goblins["enemies"] if e["id"] in ("goblin-1", "goblin-2")]
 
         transcript = run_interactive_session(
-            "goblin-ambush",
+            two_goblins,
             rules=self.rules,
             play_as="pc-bram",
             seed=22,
