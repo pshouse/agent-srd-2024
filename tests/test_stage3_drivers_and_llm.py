@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -447,6 +448,51 @@ class TestStage3LiveLLMDriversOverLocalHTTP(unittest.TestCase):
             # Current Claude models 400 on sampling params, and their default-on thinking needs token headroom.
             self.assertNotIn("temperature", req["body"])
             self.assertGreaterEqual(req["body"]["max_tokens"], AnthropicDriver.MIN_MAX_TOKENS)
+
+    def test_anthropic_driver_uses_sign_in_when_no_api_key(self) -> None:
+        from unittest import mock
+
+        from srd2024.arena import agents as agents_mod
+
+        clean = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
+
+        # 1. ANTHROPIC_AUTH_TOKEN -> Bearer + OAuth beta header, no x-api-key.
+        with mock.patch.dict(os.environ, {**clean, "ANTHROPIC_AUTH_TOKEN": "oat-env"}, clear=True):
+            _, headers, _ = AnthropicDriver(model="claude-haiku-5-5")._build_request("s", "u")
+        self.assertEqual(headers["Authorization"], "Bearer oat-env")
+        self.assertEqual(headers["anthropic-beta"], "oauth-2025-04-20")
+        self.assertNotIn("x-api-key", headers)
+
+        # 2. Otherwise the `ant` sign-in, fetched per request (it refreshes the token itself).
+        done = mock.Mock(returncode=0, stdout="oat-from-ant\n")
+        with mock.patch.dict(os.environ, clean, clear=True), \
+                mock.patch.object(agents_mod.shutil, "which", return_value="/usr/local/bin/ant"), \
+                mock.patch.object(agents_mod.subprocess, "run", return_value=done) as run:
+            _, headers, _ = AnthropicDriver(model="claude-haiku-5-5")._build_request("s", "u")
+        self.assertEqual(headers["Authorization"], "Bearer oat-from-ant")
+        self.assertEqual(run.call_args.args[0], ["/usr/local/bin/ant", "auth", "print-credentials", "--access-token"])
+
+        # 3. An API key wins over both, as in the SDKs.
+        with mock.patch.dict(os.environ, {**clean, "ANTHROPIC_API_KEY": "sk-k", "ANTHROPIC_AUTH_TOKEN": "oat"}, clear=True):
+            _, headers, _ = AnthropicDriver(model="claude-haiku-5-5")._build_request("s", "u")
+        self.assertEqual(headers.get("x-api-key"), "sk-k")
+        self.assertNotIn("Authorization", headers)
+
+        # 4. A sign-in token never goes to a custom --api-base.
+        with mock.patch.dict(os.environ, {**clean, "ANTHROPIC_AUTH_TOKEN": "oat"}, clear=True), \
+                mock.patch.object(agents_mod.shutil, "which", return_value="/usr/local/bin/ant"), \
+                mock.patch.object(agents_mod.subprocess, "run", return_value=done) as run:
+            with self.assertRaisesRegex(RuntimeError, "ant auth login"):
+                AnthropicDriver(model="m", api_base="https://proxy.example.com")._build_request("s", "u")
+        run.assert_not_called()
+
+        # 5. The JSON form of print-credentials (or garbage) is never used as a header.
+        bad = mock.Mock(returncode=0, stdout='{"access_token": "x"}\n')
+        with mock.patch.dict(os.environ, clean, clear=True), \
+                mock.patch.object(agents_mod.shutil, "which", return_value="/usr/local/bin/ant"), \
+                mock.patch.object(agents_mod.subprocess, "run", return_value=bad):
+            with self.assertRaises(RuntimeError):
+                AnthropicDriver(model="m")._build_request("s", "u")
 
     def test_anthropic_driver_names_empty_refusal_and_truncation(self) -> None:
         driver = AnthropicDriver(model="claude-haiku-5-5", api_key="k")
