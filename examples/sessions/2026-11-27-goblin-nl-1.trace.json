@@ -2265,12 +2265,15 @@
       "ally_heals": 0,
       "ally_buff_targets": 0,
       "help_actions": 0,
+      "effective_help_actions": 0,
       "friendly_fire_incidents": 0,
       "friendly_fire_damage": 0,
       "table_talk_messages": 5,
       "focus_fire_ratio": 1.0,
       "active_turns": 4,
       "productive_turns": 4,
+      "contribution": 1.0,
+      "productive_talk_turns": 4,
       "total_decisions": 10,
       "first_attempt_legal": 10,
       "total_violations": 0,
@@ -2282,5 +2285,5 @@
       }
     }
   },
-  "digest": "d345d49e8a4345ef983d13554369a863ba2dd39f9e1a9428b16f8a6db1a7d160"
+  "digest": "d3d64f6101491a0a77bde2b82cf5bba9349e0a6a8a1713727213d644c11699e1"
 }
