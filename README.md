@@ -182,6 +182,11 @@ ANTHROPIC_API_KEY=... ./bin/srd-arena run crypt-of-ghouls \
 GEMINI_API_KEY=... ./bin/srd-arena run wyrmling-lair \
   --party-agent gemini:gemini-2.5-flash \
   --enemy-agent heuristic-tactical
+
+# TypeSafe AI Jev (calibrated choice over generated legal candidates; party seat only, no table talk)
+TYPESAFE_API_KEY=... ./bin/srd-arena run wyrmling-lair \
+  --party-agent typesafe:jev-1.14.0 \
+  --enemy-agent heuristic-tactical
 ```
 
 ### 3. Stage 3 MCP Server Mode (`bin/srd-mcp --arena` / `SRD2024_ARENA=1`)
