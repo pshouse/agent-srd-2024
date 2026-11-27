@@ -42,7 +42,7 @@ jobs:
         run: node --disable-warning=ExperimentalWarning --test
 
       - name: Python tests
-        run: python -m unittest discover -s tests -q
+        run: PYTHONPATH=src python -m unittest discover -s tests -q
 
       - name: Assemble the Pages tree
         run: python3 scripts/site_files.py assemble _site

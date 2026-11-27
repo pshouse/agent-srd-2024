@@ -32,7 +32,7 @@ jobs:
         run: node --disable-warning=ExperimentalWarning --test
 
       - name: Python tests
-        run: python -m unittest discover -s tests -q
+        run: PYTHONPATH=src python -m unittest discover -s tests -q
 
       - name: Vendored markdown-it SHA-256
         run: echo "d5432491790141da046b1197353705db03264f40b5727f3b4b591f5aba193e30  web/vendor/markdown-it/markdown-it.esm.min.mjs" | sha256sum -c -
