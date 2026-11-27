@@ -482,6 +482,60 @@ class TestObservationHiddenStats(unittest.TestCase):
                                 )
 
 
+# Enemy line-ups from before the difficulty retune (#48), pinned here so the exploit bound below stays calibrated.
+# On the tuned scenarios a random policy dies within a few turns and plays about as unproductively as talk-spam
+# (both get 1-2 productive turns), so a ratio against random there measures the baseline's weakness, not the exploit.
+_CALIBRATION_ENEMIES: dict[str, list[dict[str, Any]]] = {
+    "goblin-ambush": [
+        {"id": "goblin-1", "monster": "goblin-warrior", "name": "Goblin Scout A", "position": {"x": 20, "y": 0}},
+        {"id": "goblin-2", "monster": "goblin-warrior", "name": "Goblin Scout B", "position": {"x": 25, "y": 15}},
+    ],
+    "crypt-of-ghouls": [
+        {"id": "ghoul-1", "monster": "ghoul", "name": "Crypt Ghoul A", "position": {"x": 25, "y": 0}},
+        {"id": "ghoul-2", "monster": "ghoul", "name": "Crypt Ghoul B", "position": {"x": 25, "y": 10}},
+        {"id": "ghast-1", "monster": "ghast", "name": "Crypt Ghast", "position": {"x": 30, "y": 5}},
+        {"id": "skeleton-1", "monster": "skeleton", "name": "Crypt Archer", "position": {"x": 35, "y": 15}},
+    ],
+    "wyrmling-lair": [
+        {"id": "wyrmling-1", "monster": "red-dragon-wyrmling", "name": "Red Dragon Wyrmling", "position": {"x": 30, "y": 10}},
+        {"id": "hound-1", "monster": "hell-hound", "name": "Cinder Hound", "position": {"x": 25, "y": 0}},
+        {"id": "magmin-1", "monster": "magmin", "name": "Ember Magmin", "position": {"x": 25, "y": 20}},
+    ],
+}
+
+
+class TestTalkSpamRegression(unittest.TestCase):
+    """CTO (Phase 3): talk-spam must stay at or under ~0.6x a random policy, and never win.
+
+    Measured on the calibration line-ups: 17.24 vs 32.75 (0.526) on seeds 1-3, 16.20 vs 35.97 (0.450) on seeds 1-10.
+    """
+
+    def test_talk_spam_stays_under_six_tenths_of_random_with_zero_wins(self) -> None:
+        from srd2024.arena.scenarios import _BUILTIN_SCENARIOS
+
+        rules = RulesStore()
+
+        def mean_and_wins(driver: Any) -> tuple[float, int]:
+            scores: list[float] = []
+            wins = 0
+            for sid, enemies in _CALIBRATION_ENEMIES.items():
+                raw = copy.deepcopy(_BUILTIN_SCENARIOS[sid])
+                raw["id"] = f"{sid}-calibration"
+                raw["enemies"] = copy.deepcopy(enemies)
+                for seed in _SEEDS:
+                    if hasattr(driver, "reset"):
+                        driver.reset(seed)
+                    t = run_match(raw, party_driver=driver, enemy_driver=HeuristicTacticalDriver(rules), rules=rules, seed=seed)
+                    scores.append(float(t["scorecard"]["composite_score"]))
+                    wins += t["winner"] == "party"
+            return sum(scores) / len(scores), wins
+
+        talk_spam, talk_wins = mean_and_wins(_TalkSpam(rules))
+        random_score, _ = mean_and_wins(RandomDriver(seed=1, rules=rules))
+        self.assertEqual(talk_wins, 0, "talk-spam must never win")
+        self.assertLessEqual(talk_spam, 0.6 * random_score, f"talk-spam {talk_spam:.2f} vs random {random_score:.2f}")
+
+
 class TestScoreFloorAndOrdering(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
