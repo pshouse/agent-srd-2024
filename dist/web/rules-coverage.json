@@ -4057,10 +4057,12 @@
     ],
     "spells": [
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "spells:acid-arrow",
         "name": "Acid Arrow",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "secondary_or_delayed_damage_clause"
+        ]
       },
       {
         "coverage": "full",
@@ -5364,10 +5366,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "spells:ice-knife",
         "name": "Ice Knife",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "secondary_or_delayed_damage_clause"
+        ]
       },
       {
         "coverage": "partial",
@@ -5879,7 +5883,7 @@
         "id": "spells:prismatic-spray",
         "name": "Prismatic Spray",
         "unmodeled_clauses": [
-          "extended_secondary_prose_mechanics"
+          "secondary_or_delayed_damage_clause"
         ]
       },
       {
@@ -5887,7 +5891,7 @@
         "id": "spells:prismatic-wall",
         "name": "Prismatic Wall",
         "unmodeled_clauses": [
-          "extended_secondary_prose_mechanics"
+          "secondary_or_delayed_damage_clause"
         ]
       },
       {
@@ -6317,7 +6321,8 @@
         "id": "spells:storm-of-vengeance",
         "name": "Storm of Vengeance",
         "unmodeled_clauses": [
-          "persistent_zone_or_wall"
+          "persistent_zone_or_wall",
+          "secondary_or_delayed_damage_clause"
         ]
       },
       {
@@ -6483,7 +6488,8 @@
         "name": "Tsunami",
         "unmodeled_clauses": [
           "non_combat_casting_time",
-          "persistent_zone_or_wall"
+          "persistent_zone_or_wall",
+          "secondary_or_delayed_damage_clause"
         ]
       },
       {
@@ -6509,10 +6515,12 @@
         "unmodeled_clauses": []
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "spells:vitriolic-sphere",
         "name": "Vitriolic Sphere",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "secondary_or_delayed_damage_clause"
+        ]
       },
       {
         "coverage": "partial",
@@ -6535,7 +6543,8 @@
         "id": "spells:wall-of-ice",
         "name": "Wall of Ice",
         "unmodeled_clauses": [
-          "persistent_zone_or_wall"
+          "persistent_zone_or_wall",
+          "secondary_or_delayed_damage_clause"
         ]
       },
       {
@@ -6552,7 +6561,8 @@
         "id": "spells:wall-of-thorns",
         "name": "Wall of Thorns",
         "unmodeled_clauses": [
-          "persistent_zone_or_wall"
+          "persistent_zone_or_wall",
+          "secondary_or_delayed_damage_clause"
         ]
       },
       {
@@ -6593,7 +6603,7 @@
         "id": "spells:weird",
         "name": "Weird",
         "unmodeled_clauses": [
-          "concentration_sustained_damage_prose"
+          "secondary_or_delayed_damage_clause"
         ]
       },
       {
@@ -6715,9 +6725,9 @@
       },
       "spells": {
         "executable_pct": 63.4,
-        "full": 81,
+        "full": 78,
         "narrative": 124,
-        "partial": 134,
+        "partial": 137,
         "total": 339
       },
       "weapon_masteries": {
@@ -6739,9 +6749,9 @@
       "traits": 68
     },
     "executable_pct": 76.0,
-    "full": 304,
+    "full": 301,
     "narrative": 212,
-    "partial": 369,
+    "partial": 372,
     "total_compiled": 885
   }
 }

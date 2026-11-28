@@ -952,6 +952,66 @@ _ICONIC_TEMPLATES: dict[str, dict[str, Any]] = {
 }
 
 
+# How a later damage clause relates to the one before it (#51).
+_ADDITIVE_JOIN_RE = re.compile(r"^\s*,?\s*(?:and|plus)\s*$", re.IGNORECASE)
+_DELAYED_AFTER_RE = re.compile(
+    r"^\s*(?:immediately\s+)?(?:at\s+the\s+(?:end|start)\s+of|on\s+(?:its|their|your)\s+next\s+turn)",
+    re.IGNORECASE,
+)
+_CHOICE_JOIN_RE = re.compile(r"\bor\b", re.IGNORECASE)
+
+
+def _resolve_damage_clauses(
+    damage_list: list[dict[str, Any]], main_desc: str
+) -> tuple[list[dict[str, Any]], bool]:
+    """Keep only damage that lands together on the primary effect (#51).
+
+    Returns `(kept, dropped_secondary)`. Each later clause is classified by the prose that joins it to the
+    previous kept clause:
+    - "X damage and Y damage" (Flame Strike, Ice Storm, Meteor Swarm) is additive, unless Y is delayed
+      ("... at the end of its next turn", Acid Arrow), and stays in `damage`.
+    - "X damage (if ...) or X' damage" with the same dice (Spirit Guardians, Fire Shield) is a choice of
+      damage type. The first type stays; the alternatives go in `type_choices`.
+    - Anything else (a delayed tick, a separate save or explosion, another turn's effect) is dropped from
+      `damage` and the spell is graded partial with a `secondary_or_delayed_damage_clause`.
+    """
+    if len(damage_list) <= 1:
+        return damage_list, False
+    spans: list[tuple[int, int, str, str]] = []
+    for rx in (_DAMAGE_MOD_RE, _DAMAGE_RE):
+        for m in rx.finditer(main_desc):
+            spans.append((m.start(), m.end(), clean_dice_expr(m.group(1)), m.group(2).lower()))
+    spans.sort()
+
+    def span_of(d: dict[str, Any]) -> tuple[int, int, str, str] | None:
+        return next((sp for sp in spans if (sp[2], sp[3]) == (d["dice"], d["type"])), None)
+
+    kept = [damage_list[0]]
+    prev = span_of(damage_list[0])
+    dropped = False
+    for d in damage_list[1:]:
+        sp = span_of(d)
+        if prev is None or sp is None or sp[0] < prev[1]:
+            dropped = True
+            continue
+        between = main_desc[prev[1]:sp[0]]
+        after = main_desc[sp[1]:sp[1] + 40]
+        if _ADDITIVE_JOIN_RE.match(between) and not _DELAYED_AFTER_RE.match(after):
+            kept.append(d)
+            prev = sp
+        elif (
+            "." not in between
+            and len(between) <= 60
+            and _CHOICE_JOIN_RE.search(between)
+            and d["dice"] == kept[-1]["dice"]
+        ):
+            kept[-1].setdefault("type_choices", [kept[-1]["type"]]).append(d["type"])
+            prev = sp
+        else:
+            dropped = True
+    return kept, dropped
+
+
 def _compile_spell(rec: dict[str, Any]) -> dict[str, Any]:
     slug = rec["index"]
     eid = f"spells:{slug}"
@@ -1102,6 +1162,7 @@ def _compile_spell(rec: dict[str, Any]) -> dict[str, Any]:
                 continue
             seen_dmg.add((dice_s, dtype))
             damage_list.append({"dice": dice_s, "type": dtype, "add_spell_mod": False})
+    damage_list, secondary_damage_dropped = _resolve_damage_clauses(damage_list, main_desc)
     base["damage"] = damage_list
 
     # Healing
@@ -1185,6 +1246,8 @@ def _compile_spell(rec: dict[str, Any]) -> dict[str, Any]:
         if pat.search(main_desc):
             unmodeled.append(label)
 
+    if secondary_damage_dropped:
+        unmodeled.append("secondary_or_delayed_damage_clause")
     if action_type == "long" and not healing:
         unmodeled.append("non_combat_casting_time")
     if save_obj and not damage_list and not conds_applied and not healing:

@@ -9,15 +9,21 @@ is not implemented in a driver.
 from __future__ import annotations
 
 import copy
+import json
 import unittest
+from pathlib import Path
 from typing import Any
 
+from srd2024.arena.agents import AgentDecision, GreedyDriver, HeuristicTacticalDriver, RandomDriver
 from srd2024.arena.human import build_human_action_menu
 from srd2024.arena.jev import enumerate_candidates
-from srd2024.arena.runner import build_observation
+from srd2024.arena.runner import build_observation, run_match
 from srd2024.arena.scenarios import load_scenario
+from srd2024.engine.character import compile_character
 from srd2024.engine.combat import creature_type_of, spell_target_allowed, step
 from srd2024.engine.store import RulesStore
+
+from tests.test_stage3_arena_integrity import _TalkSpam
 
 from tests.test_reactions import _wizard
 from tests.test_stage4_engine_hardening import _make_fighter, _start
@@ -150,6 +156,126 @@ class TestHoldPersonTarget(unittest.TestCase):
         )
         crypt_menu = build_human_action_menu(crypt_obs, self.rules)
         self.assertFalse(any(m["intent"].get("spell") == "hold-person" for m in crypt_menu))
+
+    def test_smite_on_undead_and_hold_person_checks_both_run(self) -> None:
+        """#69's smite retarget and the Hold Person type check share step().
+
+        Divine Smite still adds +1d8 against an Undead. Hold Person on that same Undead is refused,
+        and Hold Person on a Humanoid in the same fight is accepted. The smite check does not
+        replace the Humanoid error.
+        """
+        paladin = compile_character(
+            json.loads((Path(__file__).resolve().parents[1] / "examples" / "characters" / "aldric-paladin-1.json").read_text()),
+            self.rules,
+        )["statblock"]
+        started = step(
+            None,
+            {
+                "type": "start_encounter",
+                "seed": 1,
+                "combatants": [
+                    {"id": "pal", "side": "party", "statblock": paladin, "position": {"x": 0, "y": 0}},
+                    {"id": "wiz", "side": "party", "statblock": self.wizard, "position": {"x": 0, "y": 5}},
+                    {"id": "skel", "side": "enemy", "monster": "skeleton", "name": "Skeleton", "position": {"x": 5, "y": 0}},
+                    {"id": "bandit", "side": "enemy", "monster": "bandit", "name": "Bandit", "position": {"x": 25, "y": 0}},
+                ],
+            },
+            self.rules,
+            roll_overrides=[20, 14, 6, 1],
+        )
+        self.assertEqual(started["status"], "ok", started.get("error"))
+        st = started["state"]
+        self.assertEqual(st["turn_order"][st["active_index"]], "pal")
+        hit = step(
+            st,
+            {"type": "attack", "actor_id": "pal", "target_id": "skel", "weapon": "longsword"},
+            self.rules,
+            roll_overrides=[15, 1],
+        )
+        self.assertEqual(hit["status"], "ok", hit.get("error"))
+        smite = step(
+            hit["state"],
+            {"type": "cast_spell", "actor_id": "pal", "spell": "divine-smite", "slot_level": 1, "target_ids": ["skel"]},
+            self.rules,
+            roll_overrides=[2, 2, 2],
+        )
+        self.assertEqual(smite["status"], "ok", smite.get("error"))
+        radiant = sum(
+            part["effective"]
+            for event in smite["events"]
+            if event["type"] == "damage_applied"
+            for part in event["breakdown"]
+            if part["type"] == "radiant"
+        )
+        self.assertEqual(radiant, 6)  # 2d8 + 1d8 vs Undead; the type check does not refuse the smite
+        self.assertIn("vs Undead", smite["narrative_hooks"][0])
+
+        st = step(smite["state"], {"type": "end_turn", "actor_id": "pal"}, self.rules)["state"]
+        self.assertEqual(st["turn_order"][st["active_index"]], "wiz")
+        refused = self._cast(st, "skel")
+        # _cast hardcodes actor wiz / hold-person. The encounter state uses those ids.
+        self.assertEqual(refused["status"], "invalid_intent", refused.get("error"))
+        self.assertIn("Hold Person requires a Humanoid target", refused["error"])
+        self.assertNotIn("melee", refused["error"])
+        accepted = self._cast(st, "bandit")
+        self.assertEqual(accepted["status"], "ok", accepted.get("error"))
+        self.assertIn("paralyzed", _names(accepted["state"]["combatants"]["bandit"]))
+
+    def test_offline_drivers_do_not_land_hold_person_on_non_humanoids(self) -> None:
+        """Every built-in offline driver goes through step(), which refuses the cast."""
+        class _AlwaysHoldPerson:
+            """Submits Hold Person at the nearest living enemy, whatever its creature type."""
+
+            name = "always-hold-person"
+
+            def reset(self, seed: int | None = None) -> None:
+                return None
+
+            def decide(self, observation: dict[str, Any]) -> AgentDecision:
+                me = observation["self"]["id"]
+                enemies = [e for e in (observation.get("enemies") or []) if e.get("alive")]
+                resources = observation["self"].get("turn_resources") or {}
+                if enemies and resources.get("action"):
+                    return AgentDecision(
+                        intent={
+                            "type": "cast_spell",
+                            "actor_id": me,
+                            "spell": "hold-person",
+                            "slot_level": 2,
+                            "target_ids": [enemies[0]["id"]],
+                        }
+                    )
+                return AgentDecision(intent={"type": "end_turn", "actor_id": me})
+
+        factories = [
+            lambda seed: HeuristicTacticalDriver(self.rules),
+            lambda seed: GreedyDriver(self.rules),
+            lambda seed: RandomDriver(seed=seed, rules=self.rules),
+            lambda seed: _TalkSpam(self.rules),
+            lambda seed: _AlwaysHoldPerson(),
+        ]
+        for factory in factories:
+            for sid in ("goblin-ambush", "crypt-of-ghouls", "wyrmling-lair"):
+                driver = factory(1)
+                if hasattr(driver, "reset"):
+                    driver.reset(1)
+                transcript = run_match(
+                    sid,
+                    party_driver=driver,
+                    enemy_driver=HeuristicTacticalDriver(self.rules),
+                    rules=self.rules,
+                    seed=1,
+                )
+                sheets = transcript["initial_state"]["combatants"]
+                for action in transcript["actions"]:
+                    for event in action["events"]:
+                        if event.get("type") == "spell_cast" and event.get("spell") == "hold-person":
+                            for tid in event.get("target_ids") or []:
+                                self.assertEqual(
+                                    creature_type_of(sheets[tid], self.rules),
+                                    "humanoid",
+                                    f"{getattr(driver, 'name', driver)} {sid} {tid}",
+                                )
 
 
 if __name__ == "__main__":

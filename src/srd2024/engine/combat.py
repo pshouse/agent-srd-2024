@@ -101,6 +101,23 @@ def spell_target_allowed(
     kind = creature_type_of(combatant, rules)
     return kind is not None and kind in allowed
 
+
+# Spells whose damage rides on a melee hit made earlier this turn (#6). "bonus_vs" adds dice against those
+# creature types (Divine Smite: +1d8 against Fiends and Undead).
+ON_HIT_SMITES: dict[str, dict[str, Any]] = {
+    "divine-smite": {"bonus_vs": {"fiend", "undead"}, "bonus_dice": "1d8"},
+    "shining-smite": {},
+}
+
+
+def _knows_on_hit_smite(combatant: dict[str, Any]) -> bool:
+    sc = combatant.get("spellcasting")
+    if not isinstance(sc, dict):
+        return False
+    known = {strip_prefix(str(x)) for x in list(sc.get("prepared_spells") or []) + list(sc.get("cantrips") or [])}
+    return bool(known & set(ON_HIT_SMITES))
+
+
 SIZE_RANK: dict[str, int] = {
     "tiny": 0,
     "small": 1,
@@ -1369,6 +1386,13 @@ def _resolve_single_weapon_attack(
         f"{attacker['name']} hits {target['name']} with {weapon['name']}{crit_txt} "
         f"({total_to_hit} vs AC {target_ac}) for {eff_dmg} {dmg_type} damage."
     )
+    # A smite (#6) can follow a melee hit on the attacker's own turn. Recorded only for casters who know one,
+    # so nobody else's state changes. Cleared when turn_resources reset at the start of the next turn.
+    if not is_ranged and _knows_on_hit_smite(attacker):
+        order = state.get("turn_order") or []
+        active = order[int(state.get("active_index", 0)) % len(order)] if order else None
+        if active == attacker_id:
+            attacker["turn_resources"]["last_melee_hit"] = {"target_id": target_id, "crit": bool(crit)}
 
     # Trigger on-hit 2024 Weapon Masteries.
     if mastery == "push":
@@ -2025,8 +2049,13 @@ def _maybe_reactive_shield(
     target_ac: int,
     rules: RulesStore,
     tracker: _StepTracker,
+    *,
+    trigger: str = "hit_by_attack",
 ) -> int | None:
     """Cast Shield as a Reaction when an attack roll hits and +5 AC would make it miss (SRD 5.2 Shield).
+
+    With `trigger="targeted_by_magic_missile"` (#33), the other trigger in the SRD 5.2 text, the hit/miss
+    test is skipped: Shield negates every Magic Missile dart, so it is always worth casting.
 
     Requires Shield prepared, a free Reaction, a level-1+ slot, and no Shield already up. A natural 20 still hits,
     so Shield isn't wasted on it. Returns the new AC when Shield is cast (the caller re-checks the hit), else None.
@@ -2035,13 +2064,14 @@ def _maybe_reactive_shield(
     sc = target.get("spellcasting")
     if not isinstance(sc, dict) or "shield" not in (sc.get("prepared_spells") or []):
         return None
-    if d20.get("nat20") or any(e.get("kind") == "shield" for e in target.get("active_effects", [])):
+    mm_trigger = trigger == "targeted_by_magic_missile"
+    if (not mm_trigger and d20.get("nat20")) or any(e.get("kind") == "shield" for e in target.get("active_effects", [])):
         return None
     if not _can_react(target, rules):
         return None
     spell = rules.get_spell("shield") or {}
     bonus = next((int(b.get("value", 5)) for b in (spell.get("buffs") or []) if b.get("kind") == "ac_bonus"), 5)
-    if total_to_hit >= target_ac + bonus:
+    if not mm_trigger and total_to_hit >= target_ac + bonus:
         return None  # Shield wouldn't turn this hit into a miss
     slots = sc.setdefault("slots", {})
     slot_level = next((lvl for lvl in sorted(int(k) for k, v in slots.items() if int(v) > 0) if lvl >= 1), None)
@@ -2073,7 +2103,7 @@ def _maybe_reactive_shield(
         slot_level=slot_level,
         target_ids=[target_id],
         as_reaction=True,
-        trigger="hit_by_attack",
+        trigger=trigger,
         trigger_source_id=attacker_id,
         coverage=str(spell.get("coverage") or "full"),
         unmodeled_clauses=list((spell.get("provenance") or {}).get("unmodeled_clauses") or []),
@@ -2769,9 +2799,31 @@ def step(
             if tid not in s["combatants"]:
                 return _invalid(copy.deepcopy(state), f"Unknown spell target '{tid}'.", rules)
 
-        # Creature-type restrictions (Hold Person: Humanoid). Unknown types fail closed.
-        # Same as the other target checks: a refusal returns the caller's original state,
-        # so every driver is rejected the same way as any other illegal intent.
+        # #69: Divine Smite / Shining Smite ride the melee hit from earlier this turn and may
+        # replace target_ids with that creature. A refusal returns the caller's original state.
+        smite = ON_HIT_SMITES.get(spell_slug)
+        if smite is not None:
+            last_hit = (actor.get("turn_resources") or {}).get("last_melee_hit")
+            if not isinstance(last_hit, dict):
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"{spell.get('name', spell_slug)} must be cast right after you hit with a melee weapon this turn.",
+                    rules,
+                )
+            smite_tid = str(last_hit["target_id"])
+            if target_ids not in ([], [actor_id], [smite_tid]):
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"{spell.get('name', spell_slug)} must target the creature you just hit ({smite_tid}).",
+                    rules,
+                )
+            smite_target = s["combatants"].get(smite_tid)
+            if not smite_target or not smite_target.get("alive") or int(smite_target.get("hp", 0)) <= 0:
+                return _invalid(copy.deepcopy(state), f"{smite_tid} is already down.", rules)
+            target_ids = [smite_tid]
+
+        # Hold Person: Humanoid only. Unknown types fail closed. Runs after the smite retarget
+        # so the creature that will actually be affected is the one that is checked.
         allowed_types = _required_creature_types(spell_slug, spell)
         if allowed_types and target_ids:
             spell_name = str(spell.get("name") or spell_slug)
@@ -2973,6 +3025,15 @@ def step(
             num_proj = proj_base + upcast * proj_per_lvl
             if not target_ids:
                 return _invalid(copy.deepcopy(state), f"Spell '{spell_slug}' requires at least one target.", rules)
+
+            # Being targeted by Magic Missile is a Shield trigger (#33): the target may react before the darts land.
+            if spell_slug == "magic-missile":
+                for tid in dict.fromkeys(target_ids):
+                    t = s["combatants"][tid]
+                    if t.get("side") != actor.get("side") and not _has_active_shield(t, spell_slug):
+                        _maybe_reactive_shield(
+                                s, tid, actor_id, {}, 0, 0, rules, tracker, trigger="targeted_by_magic_missile"
+                        )
 
             pre_auto_hooks = len(tracker.hooks)
             dmg_by_target: dict[str, int] = {}
@@ -3298,6 +3359,34 @@ def step(
                     tracker.hook(f"{t_name} is affected by {spell_name}: {', '.join(applied_notes)}.")
 
         # 7. Auto-apply / Buff spells (`shield`, `mage-armor`, `shield-of-faith`, `barkskin`, `bless`, `longstrider`, `haste`).
+        elif smite is not None:
+            last_hit = actor["turn_resources"].pop("last_melee_hit")
+            tid = target_ids[0]
+            t = s["combatants"][tid]
+            crit = bool(last_hit.get("crit"))
+            per_lvl = scaling.get("slot_damage_per_level")
+            exprs = [(str(d.get("dice") or "1"), strip_prefix(d.get("type") or "radiant")) for d in dmg_list]
+            if per_lvl and exprs:
+                exprs += [(str(per_lvl), exprs[0][1])] * upcast
+            ctype = ""
+            if t.get("kind") == "monster":
+                m_rec = rules.get_monster(str(t.get("source_id") or "")) or {}
+                ctype = str(m_rec.get("creature_type") or "").lower()
+            bonus_txt = ""
+            if smite.get("bonus_vs") and ctype in smite["bonus_vs"] and exprs:
+                exprs.append((str(smite["bonus_dice"]), exprs[0][1]))
+                bonus_txt = f" (+{smite['bonus_dice']} vs {ctype.title()})"
+            parts = [
+                {"amount": max(0, int(rng.roll_dice_expr(dx, crit=crit)["total"])), "type": dt} for dx, dt in exprs
+            ]
+            hook_idx = len(tracker.hooks)
+            eff = _apply_damage_parts(s, tid, parts, rules, rng, tracker, source_id=actor_id, is_crit=crit)
+            crit_txt = " (critical: dice doubled)" if crit else ""
+            tracker.hooks.insert(
+                hook_idx,
+                f"{actor['name']} casts {spell_name} on {t['name']}{crit_txt}{bonus_txt} for {eff} "
+                f"{exprs[0][1] if exprs else ''} damage.",
+            )
         else:
             apply_targets = target_ids or [actor_id]
             bless_targets: list[str] = []
@@ -3468,6 +3557,11 @@ def step(
                     f"{actor['name']} casts {spell_name} on {', '.join(bless_targets)} "
                     f"({sign_sym}{bless_dice} to attacks and saves)."
                 )
+            if dmg_list and resolution == "auto_apply":
+                # Safety net (#6): this spell has damage the engine doesn't apply (e.g. a per-hit rider).
+                # Say so, rather than spending the slot silently.
+                tracker.emit("spell_damage_unresolved", actor_id=actor_id, spell=spell_slug, damage=copy.deepcopy(dmg_list))
+                tracker.hook(f"{actor['name']} casts {spell_name}; its damage isn't modeled by the engine (resolve at the table).")
             if not tracker.hooks:
                 tracker.hook(f"{actor['name']} casts {spell_name}.")
 

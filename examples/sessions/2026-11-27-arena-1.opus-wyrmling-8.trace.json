@@ -7,7 +7,7 @@
     "tier": 2,
     "party_level": 5,
     "max_rounds": 15,
-    "description": "Tier 2 5e 2024 (SRD 5.2) boss encounter: four Level 5 adventurers (Fighter, Wizard, Cleric, Rogue) battle a Red Dragon Wyrmling, two Cinder Hounds (one held back), and an Ember Magmin—all fire-immune—testing damage-immunity awareness, breath-weapon spacing, Bless + Shield economy, Vex + Nick mastery combos, and multi-round focus fire.",
+    "description": "Tier 2 5e 2024 (SRD 5.2) boss encounter: four Level 5 adventurers (Fighter, Wizard, Cleric, Rogue) battle a Red Dragon Wyrmling, two Cinder Hounds (one held back), and an Ember Magmin\u2014all fire-immune\u2014testing damage-immunity awareness, breath-weapon spacing, Bless + Shield economy, Vex + Nick mastery combos, and multi-round focus fire.",
     "party_ids": [
       "pc-aldric",
       "pc-lyra",
@@ -26,8 +26,8 @@
     "max_rounds": 15,
     "max_actions_per_turn": 6,
     "max_retries_per_action": 2,
-    "party_driver": "anthropic:claude-opus-5-5",
-    "enemy_driver": "heuristic-tactical"
+    "party_driver": "replay",
+    "enemy_driver": "replay"
   },
   "winner": "enemy",
   "rounds": 3,
@@ -1226,7 +1226,7 @@
     "active_index": 1,
     "rng": {
       "seed": 8,
-      "draw_index": 105
+      "draw_index": 104
     },
     "pending_reroll": null,
     "combatants": {
@@ -1653,8 +1653,8 @@
           "light_attack_made": false
         },
         "death_saves": {
-          "successes": 1,
-          "failures": 0
+          "successes": 0,
+          "failures": 2
         },
         "alive": true,
         "weapons": [
@@ -1794,7 +1794,7 @@
           "light_attack_made": false
         },
         "death_saves": {
-          "successes": 1,
+          "successes": 0,
           "failures": 2
         },
         "alive": true,
@@ -1889,7 +1889,7 @@
           "x": 10,
           "y": 15
         },
-        "hp": 41,
+        "hp": 25,
         "hp_max": 75,
         "temp_hp": 0,
         "ac": 17,
@@ -1931,18 +1931,7 @@
         "conditions": [],
         "exhaustion_level": 0,
         "concentration": null,
-        "active_effects": [
-          {
-            "id": "sap-2",
-            "kind": "sap",
-            "source_id": "pc-aldric",
-            "target_id": "wyrmling-1",
-            "value": true,
-            "expires": "start_of_source_next_turn",
-            "created_round": 2,
-            "concentration_spell": null
-          }
-        ],
+        "active_effects": [],
         "heroic_inspiration": false,
         "extra_attacks": 1,
         "feats": [],
@@ -2466,7 +2455,7 @@
       "actor_id": "pc-kaelen",
       "actor_name": "Kaelen Whisper",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -2557,7 +2546,7 @@
       "actor_id": "pc-kaelen",
       "actor_name": "Kaelen Whisper",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -2608,7 +2597,7 @@
       "actor_id": "hound-1",
       "actor_name": "Cinder Hound",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -2675,7 +2664,7 @@
       "actor_id": "hound-1",
       "actor_name": "Cinder Hound",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -2879,7 +2868,7 @@
       "actor_id": "hound-1",
       "actor_name": "Cinder Hound",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -2926,7 +2915,7 @@
       "actor_id": "wyrmling-1",
       "actor_name": "Red Dragon Wyrmling",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -2993,7 +2982,7 @@
       "actor_id": "wyrmling-1",
       "actor_name": "Red Dragon Wyrmling",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -3228,7 +3217,7 @@
       "actor_id": "wyrmling-1",
       "actor_name": "Red Dragon Wyrmling",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -3275,7 +3264,7 @@
       "actor_id": "magmin-1",
       "actor_name": "Ember Magmin",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -3342,7 +3331,7 @@
       "actor_id": "magmin-1",
       "actor_name": "Ember Magmin",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -3430,7 +3419,7 @@
       "actor_id": "magmin-1",
       "actor_name": "Ember Magmin",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -3477,7 +3466,7 @@
       "actor_id": "pc-dorian",
       "actor_name": "Dorian Dawnshield",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -3607,7 +3596,7 @@
       "actor_id": "pc-dorian",
       "actor_name": "Dorian Dawnshield",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -3655,13 +3644,13 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            8
+            11
           ],
-          "chosen": 8,
+          "chosen": 11,
           "modifier": 7,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 15,
+          "total": 18,
           "success": true,
           "reason": "spirit-guardians"
         },
@@ -3676,19 +3665,13 @@
               "raw": 5,
               "effective": 5,
               "modifier": "normal"
-            },
-            {
-              "type": "necrotic",
-              "raw": 6,
-              "effective": 6,
-              "modifier": "normal"
             }
           ],
-          "total_damage": 11,
+          "total_damage": 5,
           "temp_hp_absorbed": 0,
-          "hp_damage": 11,
+          "hp_damage": 5,
           "hp_before": 22,
-          "hp_after": 11
+          "hp_after": 17
         },
         {
           "seq": 5,
@@ -3699,13 +3682,13 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            17
+            18
           ],
-          "chosen": 17,
+          "chosen": 18,
           "modifier": 2,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 19,
+          "total": 20,
           "success": true,
           "reason": "concentration"
         }
@@ -3715,8 +3698,8 @@
           {
             "id": "pc-dorian",
             "before": 22,
-            "after": 11,
-            "delta": -11
+            "after": 17,
+            "delta": -5
           }
         ],
         "condition_changes": [],
@@ -3733,7 +3716,7 @@
         "turn_changed": false
       },
       "narrative_hooks": [
-        "Dorian Dawnshield casts Spirit Guardians (DC 15 WIS): Dorian Dawnshield succeeds and takes 11 radiant/necrotic damage."
+        "Dorian Dawnshield casts Spirit Guardians (DC 15 WIS): Dorian Dawnshield succeeds and takes 5 radiant damage."
       ],
       "usage": {
         "prompt_tokens": 3519,
@@ -3749,7 +3732,7 @@
       "actor_id": "pc-dorian",
       "actor_name": "Dorian Dawnshield",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -3800,7 +3783,7 @@
       "actor_id": "pc-aldric",
       "actor_name": "Aldric Vance",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -3872,7 +3855,7 @@
       "actor_id": "pc-aldric",
       "actor_name": "Aldric Vance",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -3887,6 +3870,113 @@
       },
       "rationale": "The wyrmling is the biggest threat and is in reach. A Longsword hit applies Sap, giving it Disadvantage on its next attack while my wounded allies recover. Slashing damage avoids the fire immunity, and it stays in Dorian's Spirit Guardians aura.",
       "table_talk": "On the wyrmling and sapping its strikes. Lyra, stay low and back off once you're up!",
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "pc-aldric",
+          "target_id": "wyrmling-1",
+          "weapon": "longsword",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            20
+          ],
+          "chosen": 20,
+          "nat20": true,
+          "nat1": false,
+          "attack_bonus": 7,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 27,
+          "target_ac": 17,
+          "hit": true,
+          "crit": true
+        },
+        {
+          "seq": 2,
+          "type": "damage_applied",
+          "source_id": "pc-aldric",
+          "target_id": "wyrmling-1",
+          "breakdown": [
+            {
+              "type": "slashing",
+              "raw": 9,
+              "effective": 9,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 9,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 9,
+          "hp_before": 75,
+          "hp_after": 66
+        },
+        {
+          "seq": 3,
+          "type": "mastery_triggered",
+          "mastery": "sap",
+          "actor_id": "pc-aldric",
+          "target_id": "wyrmling-1"
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "wyrmling-1",
+            "before": 75,
+            "after": 66,
+            "delta": -9
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [
+          {
+            "id": "wyrmling-1",
+            "added": [
+              "sap"
+            ],
+            "removed": []
+          }
+        ],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Aldric Vance hits Red Dragon Wyrmling with Longsword (CRITICAL HIT!) (27 vs AC 17) for 9 slashing damage.",
+        "Sap mastery gives Red Dragon Wyrmling Disadvantage on its next attack roll."
+      ],
+      "usage": {
+        "prompt_tokens": 3999,
+        "completion_tokens": 366,
+        "total_tokens": 4365
+      }
+    },
+    {
+      "seq": 17,
+      "round": 1,
+      "turn_index": 5,
+      "action_index": 2,
+      "actor_id": "pc-aldric",
+      "actor_name": "Aldric Vance",
+      "side": "party",
+      "driver": "replay",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "pc-aldric",
+        "target_id": "wyrmling-1",
+        "weapon": "longsword",
+        "offhand": false
+      },
+      "rationale": "My Extra Attack swing goes on the wyrmling, the biggest threat. Slashing damage gets around its fire immunity. A Longsword hit applies Sap, giving its next attack Disadvantage, which protects our low-HP casters. The schema has no reroll intent, so I'm keeping Heroic Inspiration for later and making a fresh attack.",
+      "table_talk": "Swinging at the wyrmling again. If this lands, its next bite or claw is sapped. Dorian, keep it in your aura!",
       "events": [
         {
           "seq": 1,
@@ -3924,71 +4014,6 @@
         "Aldric Vance misses Red Dragon Wyrmling with Longsword (13 vs AC 17)."
       ],
       "usage": {
-        "prompt_tokens": 3999,
-        "completion_tokens": 366,
-        "total_tokens": 4365
-      }
-    },
-    {
-      "seq": 17,
-      "round": 1,
-      "turn_index": 5,
-      "action_index": 2,
-      "actor_id": "pc-aldric",
-      "actor_name": "Aldric Vance",
-      "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
-      "attempts": 1,
-      "first_attempt_legal": true,
-      "auto_skipped": false,
-      "auto_end_turn": false,
-      "forced_fallback": false,
-      "intent": {
-        "type": "attack",
-        "actor_id": "pc-aldric",
-        "target_id": "wyrmling-1",
-        "weapon": "longsword",
-        "offhand": false
-      },
-      "rationale": "My Extra Attack swing goes on the wyrmling, the biggest threat. Slashing damage gets around its fire immunity. A Longsword hit applies Sap, giving its next attack Disadvantage, which protects our low-HP casters. The schema has no reroll intent, so I'm keeping Heroic Inspiration for later and making a fresh attack.",
-      "table_talk": "Swinging at the wyrmling again. If this lands, its next bite or claw is sapped. Dorian, keep it in your aura!",
-      "events": [
-        {
-          "seq": 1,
-          "type": "attack_roll",
-          "actor_id": "pc-aldric",
-          "target_id": "wyrmling-1",
-          "weapon": "longsword",
-          "mode": "normal",
-          "advantage_sources": [],
-          "disadvantage_sources": [],
-          "rolls": [
-            7
-          ],
-          "chosen": 7,
-          "nat20": false,
-          "nat1": false,
-          "attack_bonus": 7,
-          "exhaustion_penalty": 0,
-          "bonus_dice": [],
-          "total": 14,
-          "target_ac": 17,
-          "hit": false,
-          "crit": false
-        }
-      ],
-      "state_diff": {
-        "hp_changes": [],
-        "condition_changes": [],
-        "position_changes": [],
-        "slot_changes": [],
-        "effect_changes": [],
-        "turn_changed": false
-      },
-      "narrative_hooks": [
-        "Aldric Vance misses Red Dragon Wyrmling with Longsword (14 vs AC 17)."
-      ],
-      "usage": {
         "prompt_tokens": 4109,
         "completion_tokens": 429,
         "total_tokens": 4538
@@ -4002,7 +4027,7 @@
       "actor_id": "pc-aldric",
       "actor_name": "Aldric Vance",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -4053,7 +4078,7 @@
       "actor_id": "pc-lyra",
       "actor_name": "Lyra Starweave",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -4140,7 +4165,7 @@
       "actor_id": "pc-lyra",
       "actor_name": "Lyra Starweave",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -4182,14 +4207,14 @@
           "breakdown": [
             {
               "type": "force",
-              "raw": 4,
-              "effective": 4,
+              "raw": 5,
+              "effective": 5,
               "modifier": "normal"
             }
           ],
-          "total_damage": 4,
+          "total_damage": 5,
           "temp_hp_absorbed": 0,
-          "hp_damage": 4,
+          "hp_damage": 5,
           "hp_before": 4,
           "hp_after": 0
         },
@@ -4204,7 +4229,7 @@
           "source_id": "magmin-1",
           "radius_ft": 10,
           "dice": "2d6",
-          "damage": 4,
+          "damage": 5,
           "damage_type": "fire",
           "targets": [
             "pc-kaelen",
@@ -4223,14 +4248,14 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            2
+            12
           ],
-          "chosen": 2,
+          "chosen": 12,
           "modifier": 7,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 9,
-          "success": false,
+          "total": 19,
+          "success": true,
           "reason": "Death Burst"
         },
         {
@@ -4241,16 +4266,16 @@
           "breakdown": [
             {
               "type": "fire",
-              "raw": 4,
-              "effective": 4,
+              "raw": 2,
+              "effective": 2,
               "modifier": "normal"
             }
           ],
-          "total_damage": 4,
+          "total_damage": 2,
           "temp_hp_absorbed": 0,
-          "hp_damage": 4,
+          "hp_damage": 2,
           "hp_before": 15,
-          "hp_after": 11
+          "hp_after": 13
         },
         {
           "seq": 7,
@@ -4261,13 +4286,13 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            3
+            2
           ],
-          "chosen": 3,
+          "chosen": 2,
           "modifier": 1,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 4,
+          "total": 3,
           "success": false,
           "reason": "Death Burst"
         },
@@ -4279,7 +4304,7 @@
           "breakdown": [
             {
               "type": "fire",
-              "raw": 4,
+              "raw": 5,
               "effective": 0,
               "modifier": "immune"
             }
@@ -4299,14 +4324,14 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            18
+            3
           ],
-          "chosen": 18,
+          "chosen": 3,
           "modifier": 2,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 20,
-          "success": true,
+          "total": 5,
+          "success": false,
           "reason": "Death Burst"
         },
         {
@@ -4317,7 +4342,7 @@
           "breakdown": [
             {
               "type": "fire",
-              "raw": 2,
+              "raw": 5,
               "effective": 0,
               "modifier": "immune"
             }
@@ -4325,8 +4350,8 @@
           "total_damage": 0,
           "temp_hp_absorbed": 0,
           "hp_damage": 0,
-          "hp_before": 75,
-          "hp_after": 75
+          "hp_before": 66,
+          "hp_after": 66
         },
         {
           "seq": 11,
@@ -4337,13 +4362,13 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            13
+            18
           ],
-          "chosen": 13,
+          "chosen": 18,
           "modifier": 0,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 13,
+          "total": 18,
           "success": true,
           "reason": "Death Burst"
         },
@@ -4363,8 +4388,8 @@
           "total_damage": 2,
           "temp_hp_absorbed": 0,
           "hp_damage": 2,
-          "hp_before": 11,
-          "hp_after": 9
+          "hp_before": 17,
+          "hp_after": 15
         },
         {
           "seq": 13,
@@ -4375,13 +4400,13 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            14
+            13
           ],
-          "chosen": 14,
+          "chosen": 13,
           "modifier": 2,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 16,
+          "total": 15,
           "success": true,
           "reason": "concentration"
         },
@@ -4394,13 +4419,13 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            12
+            14
           ],
-          "chosen": 12,
+          "chosen": 14,
           "modifier": 2,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 14,
+          "total": 16,
           "success": true,
           "reason": "Death Burst"
         },
@@ -4431,14 +4456,14 @@
           "breakdown": [
             {
               "type": "force",
-              "raw": 2,
-              "effective": 2,
+              "raw": 5,
+              "effective": 5,
               "modifier": "normal"
             }
           ],
-          "total_damage": 2,
+          "total_damage": 5,
           "temp_hp_absorbed": 0,
-          "hp_damage": 2,
+          "hp_damage": 5,
           "hp_before": 0,
           "hp_after": 0
         },
@@ -4450,14 +4475,14 @@
           "breakdown": [
             {
               "type": "force",
-              "raw": 3,
-              "effective": 3,
+              "raw": 2,
+              "effective": 2,
               "modifier": "normal"
             }
           ],
-          "total_damage": 3,
+          "total_damage": 2,
           "temp_hp_absorbed": 0,
-          "hp_damage": 3,
+          "hp_damage": 2,
           "hp_before": 0,
           "hp_after": 0
         }
@@ -4478,15 +4503,15 @@
           },
           {
             "id": "pc-dorian",
-            "before": 11,
-            "after": 9,
+            "before": 17,
+            "after": 15,
             "delta": -2
           },
           {
             "id": "pc-kaelen",
             "before": 15,
-            "after": 11,
-            "delta": -4
+            "after": 13,
+            "delta": -2
           }
         ],
         "condition_changes": [],
@@ -4503,7 +4528,7 @@
         "turn_changed": false
       },
       "narrative_hooks": [
-        "Lyra Starweave casts Magic Missile at Ember Magmin for 9 force damage.",
+        "Lyra Starweave casts Magic Missile at Ember Magmin for 12 force damage.",
         "Ember Magmin drops to 0 HP and is defeated.",
         "Ember Magmin explodes in a 10-ft burst!"
       ],
@@ -4521,7 +4546,7 @@
       "actor_id": "pc-lyra",
       "actor_name": "Lyra Starweave",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -4593,7 +4618,7 @@
       "actor_id": "pc-lyra",
       "actor_name": "Lyra Starweave",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -4644,7 +4669,7 @@
       "actor_id": "hound-2",
       "actor_name": "Cinder Hound B",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -4711,7 +4736,7 @@
       "actor_id": "hound-2",
       "actor_name": "Cinder Hound B",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -4743,14 +4768,14 @@
           "on_success": "half",
           "rolled_damage": [
             {
-              "amount": 16,
+              "amount": 19,
               "type": "fire",
               "rolls": [
+                5,
                 4,
                 5,
                 1,
-                4,
-                2
+                4
               ],
               "dice": "5d6"
             }
@@ -4765,13 +4790,13 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            4
+            6
           ],
-          "chosen": 4,
+          "chosen": 6,
           "modifier": 0,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 4,
+          "total": 6,
           "success": false,
           "reason": "Fire Breath"
         },
@@ -4783,15 +4808,15 @@
           "breakdown": [
             {
               "type": "fire",
-              "raw": 16,
-              "effective": 16,
+              "raw": 19,
+              "effective": 19,
               "modifier": "normal"
             }
           ],
-          "total_damage": 16,
+          "total_damage": 19,
           "temp_hp_absorbed": 0,
-          "hp_damage": 16,
-          "hp_before": 9,
+          "hp_damage": 19,
+          "hp_before": 15,
           "hp_after": 0
         },
         {
@@ -4829,14 +4854,14 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            19
+            4
           ],
-          "chosen": 19,
+          "chosen": 4,
           "modifier": 2,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 21,
-          "success": true,
+          "total": 6,
+          "success": false,
           "reason": "Fire Breath"
         },
         {
@@ -4847,16 +4872,16 @@
           "breakdown": [
             {
               "type": "fire",
-              "raw": 8,
-              "effective": 8,
+              "raw": 19,
+              "effective": 19,
               "modifier": "normal"
             }
           ],
-          "total_damage": 8,
+          "total_damage": 19,
           "temp_hp_absorbed": 0,
-          "hp_damage": 8,
+          "hp_damage": 19,
           "hp_before": 42,
-          "hp_after": 34
+          "hp_after": 23
         }
       ],
       "state_diff": {
@@ -4864,14 +4889,14 @@
           {
             "id": "pc-aldric",
             "before": 42,
-            "after": 34,
-            "delta": -8
+            "after": 23,
+            "delta": -19
           },
           {
             "id": "pc-dorian",
-            "before": 9,
+            "before": 15,
             "after": 0,
-            "delta": -9
+            "delta": -15
           }
         ],
         "condition_changes": [
@@ -4892,8 +4917,8 @@
       "narrative_hooks": [
         "Dorian Dawnshield loses concentration on spirit-guardians (dropped_to_0_hp).",
         "Dorian Dawnshield drops to 0 HP and falls Unconscious and Prone.",
-        "Dorian Dawnshield fails against Cinder Hound B's Fire Breath (DC 12) and takes 16 damage.",
-        "Aldric Vance saves against Cinder Hound B's Fire Breath (DC 12) and takes 8 damage."
+        "Dorian Dawnshield fails against Cinder Hound B's Fire Breath (DC 12) and takes 19 damage.",
+        "Aldric Vance fails against Cinder Hound B's Fire Breath (DC 12) and takes 19 damage."
       ],
       "usage": {}
     },
@@ -4905,7 +4930,7 @@
       "actor_id": "hound-2",
       "actor_name": "Cinder Hound B",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -4952,7 +4977,7 @@
       "actor_id": "pc-kaelen",
       "actor_name": "Kaelen Whisper",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -4978,15 +5003,15 @@
           "advantage_sources": [],
           "disadvantage_sources": [],
           "rolls": [
-            11
+            19
           ],
-          "chosen": 11,
+          "chosen": 19,
           "nat20": false,
           "nat1": false,
           "attack_bonus": 7,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 18,
+          "total": 26,
           "target_ac": 17,
           "hit": true,
           "crit": false
@@ -5007,8 +5032,8 @@
           "total_damage": 9,
           "temp_hp_absorbed": 0,
           "hp_damage": 9,
-          "hp_before": 75,
-          "hp_after": 66
+          "hp_before": 66,
+          "hp_after": 57
         },
         {
           "seq": 3,
@@ -5022,8 +5047,8 @@
         "hp_changes": [
           {
             "id": "wyrmling-1",
-            "before": 75,
-            "after": 66,
+            "before": 66,
+            "after": 57,
             "delta": -9
           }
         ],
@@ -5042,7 +5067,7 @@
         "turn_changed": false
       },
       "narrative_hooks": [
-        "Kaelen Whisper hits Red Dragon Wyrmling with Shortsword (18 vs AC 17) for 9 piercing damage.",
+        "Kaelen Whisper hits Red Dragon Wyrmling with Shortsword (26 vs AC 17) for 9 piercing damage.",
         "Vex mastery grants Kaelen Whisper Advantage on the next attack against Red Dragon Wyrmling."
       ],
       "usage": {
@@ -5059,7 +5084,7 @@
       "actor_id": "pc-kaelen",
       "actor_name": "Kaelen Whisper",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -5095,23 +5120,49 @@
           ],
           "disadvantage_sources": [],
           "rolls": [
-            8,
-            1
+            17,
+            8
           ],
-          "chosen": 8,
+          "chosen": 17,
           "nat20": false,
           "nat1": false,
           "attack_bonus": 7,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 15,
+          "total": 24,
           "target_ac": 17,
-          "hit": false,
+          "hit": true,
           "crit": false
+        },
+        {
+          "seq": 3,
+          "type": "damage_applied",
+          "source_id": "pc-kaelen",
+          "target_id": "wyrmling-1",
+          "breakdown": [
+            {
+              "type": "piercing",
+              "raw": 4,
+              "effective": 4,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 4,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 4,
+          "hp_before": 57,
+          "hp_after": 53
         }
       ],
       "state_diff": {
-        "hp_changes": [],
+        "hp_changes": [
+          {
+            "id": "wyrmling-1",
+            "before": 57,
+            "after": 53,
+            "delta": -4
+          }
+        ],
         "condition_changes": [],
         "position_changes": [],
         "slot_changes": [],
@@ -5127,7 +5178,7 @@
         "turn_changed": false
       },
       "narrative_hooks": [
-        "Kaelen Whisper misses Red Dragon Wyrmling with Dagger (15 vs AC 17)."
+        "Kaelen Whisper hits Red Dragon Wyrmling with Dagger (24 vs AC 17) for 4 piercing damage."
       ],
       "usage": {
         "prompt_tokens": 4434,
@@ -5143,7 +5194,7 @@
       "actor_id": "pc-kaelen",
       "actor_name": "Kaelen Whisper",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 3,
       "first_attempt_legal": false,
       "auto_skipped": false,
@@ -5190,7 +5241,7 @@
       "actor_id": "hound-1",
       "actor_name": "Cinder Hound",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -5266,39 +5317,18 @@
           "total_damage": 12,
           "temp_hp_absorbed": 0,
           "hp_damage": 12,
-          "hp_before": 11,
-          "hp_after": 0
+          "hp_before": 13,
+          "hp_after": 1
         },
         {
           "seq": 4,
-          "type": "condition_applied",
-          "target_id": "pc-kaelen",
-          "condition": "unconscious",
-          "source_id": "hound-1"
-        },
-        {
-          "seq": 5,
-          "type": "condition_applied",
-          "target_id": "pc-kaelen",
-          "condition": "prone",
-          "source_id": "hound-1"
-        },
-        {
-          "seq": 6,
-          "type": "pc_unconscious",
-          "combatant_id": "pc-kaelen"
-        },
-        {
-          "seq": 7,
           "type": "attack_roll",
           "actor_id": "hound-1",
           "target_id": "pc-kaelen",
           "action": "Bite",
           "mode": "advantage",
           "advantage_sources": [
-            "pack_tactics",
-            "target_unconscious",
-            "target_prone_within_5ft"
+            "pack_tactics"
           ],
           "disadvantage_sources": [],
           "rolls": [
@@ -5314,48 +5344,60 @@
           "total": 22,
           "target_ac": 16,
           "hit": true,
-          "crit": true
+          "crit": false
         },
         {
-          "seq": 8,
+          "seq": 5,
           "type": "damage_applied",
           "source_id": "hound-1",
           "target_id": "pc-kaelen",
           "breakdown": [
             {
               "type": "piercing",
-              "raw": 9,
-              "effective": 9,
+              "raw": 5,
+              "effective": 5,
               "modifier": "normal"
             },
             {
               "type": "fire",
-              "raw": 5,
-              "effective": 5,
+              "raw": 1,
+              "effective": 1,
               "modifier": "normal"
             }
           ],
-          "total_damage": 14,
+          "total_damage": 6,
           "temp_hp_absorbed": 0,
-          "hp_damage": 14,
-          "hp_before": 0,
+          "hp_damage": 6,
+          "hp_before": 1,
           "hp_after": 0
         },
         {
-          "seq": 9,
-          "type": "death_save_damage_failure",
+          "seq": 6,
+          "type": "condition_applied",
           "target_id": "pc-kaelen",
-          "failures_added": 2,
-          "failures_total": 2
+          "condition": "unconscious",
+          "source_id": "hound-1"
+        },
+        {
+          "seq": 7,
+          "type": "condition_applied",
+          "target_id": "pc-kaelen",
+          "condition": "prone",
+          "source_id": "hound-1"
+        },
+        {
+          "seq": 8,
+          "type": "pc_unconscious",
+          "combatant_id": "pc-kaelen"
         }
       ],
       "state_diff": {
         "hp_changes": [
           {
             "id": "pc-kaelen",
-            "before": 11,
+            "before": 13,
             "after": 0,
-            "delta": -11
+            "delta": -13
           }
         ],
         "condition_changes": [
@@ -5375,8 +5417,8 @@
       },
       "narrative_hooks": [
         "Cinder Hound hits Kaelen Whisper with Bite (21 vs AC 16) for 12 damage.",
-        "Kaelen Whisper drops to 0 HP and falls Unconscious and Prone.",
-        "Cinder Hound hits Kaelen Whisper with Bite (22 vs AC 16) for 14 damage."
+        "Cinder Hound hits Kaelen Whisper with Bite (22 vs AC 16) for 6 damage.",
+        "Kaelen Whisper drops to 0 HP and falls Unconscious and Prone."
       ],
       "usage": {}
     },
@@ -5388,7 +5430,7 @@
       "actor_id": "hound-1",
       "actor_name": "Cinder Hound",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -5435,7 +5477,7 @@
       "actor_id": "wyrmling-1",
       "actor_name": "Red Dragon Wyrmling",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -5465,16 +5507,16 @@
           "on_success": "half",
           "rolled_damage": [
             {
-              "amount": 23,
+              "amount": 20,
               "type": "fire",
               "rolls": [
+                2,
+                3,
                 1,
                 1,
                 5,
                 5,
-                3,
-                3,
-                5
+                3
               ],
               "dice": "7d6"
             }
@@ -5489,14 +5531,14 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            7
+            20
           ],
-          "chosen": 7,
+          "chosen": 20,
           "modifier": 2,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 9,
-          "success": false,
+          "total": 22,
+          "success": true,
           "reason": "Fire Breath"
         },
         {
@@ -5507,25 +5549,25 @@
           "breakdown": [
             {
               "type": "fire",
-              "raw": 23,
-              "effective": 23,
+              "raw": 10,
+              "effective": 10,
               "modifier": "normal"
             }
           ],
-          "total_damage": 23,
+          "total_damage": 10,
           "temp_hp_absorbed": 0,
-          "hp_damage": 23,
-          "hp_before": 34,
-          "hp_after": 11
+          "hp_damage": 10,
+          "hp_before": 23,
+          "hp_after": 13
         }
       ],
       "state_diff": {
         "hp_changes": [
           {
             "id": "pc-aldric",
-            "before": 34,
-            "after": 11,
-            "delta": -23
+            "before": 23,
+            "after": 13,
+            "delta": -10
           }
         ],
         "condition_changes": [],
@@ -5535,7 +5577,7 @@
         "turn_changed": false
       },
       "narrative_hooks": [
-        "Aldric Vance fails against Red Dragon Wyrmling's Fire Breath (DC 13) and takes 23 damage."
+        "Aldric Vance saves against Red Dragon Wyrmling's Fire Breath (DC 13) and takes 10 damage."
       ],
       "usage": {}
     },
@@ -5547,7 +5589,7 @@
       "actor_id": "wyrmling-1",
       "actor_name": "Red Dragon Wyrmling",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -5576,10 +5618,10 @@
           "seq": 3,
           "type": "death_save",
           "actor_id": "pc-dorian",
-          "roll": 12,
-          "outcome": "success",
-          "successes": 1,
-          "failures": 0
+          "roll": 1,
+          "outcome": "nat1_two_failures",
+          "successes": 0,
+          "failures": 2
         }
       ],
       "state_diff": {
@@ -5603,7 +5645,7 @@
       "actor_id": "pc-dorian",
       "actor_name": "Dorian Dawnshield",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 0,
       "first_attempt_legal": true,
       "auto_skipped": true,
@@ -5624,6 +5666,13 @@
         },
         {
           "seq": 2,
+          "type": "effect_expired",
+          "target_id": "wyrmling-1",
+          "kind": "sap",
+          "source_id": "pc-aldric"
+        },
+        {
+          "seq": 3,
           "type": "turn_started",
           "actor_id": "pc-aldric",
           "round": 2
@@ -5634,7 +5683,15 @@
         "condition_changes": [],
         "position_changes": [],
         "slot_changes": [],
-        "effect_changes": [],
+        "effect_changes": [
+          {
+            "id": "wyrmling-1",
+            "added": [],
+            "removed": [
+              "sap"
+            ]
+          }
+        ],
         "turn_changed": true
       },
       "narrative_hooks": [
@@ -5650,7 +5707,7 @@
       "actor_id": "pc-aldric",
       "actor_name": "Aldric Vance",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -5676,72 +5733,30 @@
           "advantage_sources": [],
           "disadvantage_sources": [],
           "rolls": [
-            10
+            7
           ],
-          "chosen": 10,
+          "chosen": 7,
           "nat20": false,
           "nat1": false,
           "attack_bonus": 7,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 17,
+          "total": 14,
           "target_ac": 17,
-          "hit": true,
+          "hit": false,
           "crit": false
-        },
-        {
-          "seq": 2,
-          "type": "damage_applied",
-          "source_id": "pc-aldric",
-          "target_id": "wyrmling-1",
-          "breakdown": [
-            {
-              "type": "slashing",
-              "raw": 6,
-              "effective": 6,
-              "modifier": "normal"
-            }
-          ],
-          "total_damage": 6,
-          "temp_hp_absorbed": 0,
-          "hp_damage": 6,
-          "hp_before": 66,
-          "hp_after": 60
-        },
-        {
-          "seq": 3,
-          "type": "mastery_triggered",
-          "mastery": "sap",
-          "actor_id": "pc-aldric",
-          "target_id": "wyrmling-1"
         }
       ],
       "state_diff": {
-        "hp_changes": [
-          {
-            "id": "wyrmling-1",
-            "before": 66,
-            "after": 60,
-            "delta": -6
-          }
-        ],
+        "hp_changes": [],
         "condition_changes": [],
         "position_changes": [],
         "slot_changes": [],
-        "effect_changes": [
-          {
-            "id": "wyrmling-1",
-            "added": [
-              "sap"
-            ],
-            "removed": []
-          }
-        ],
+        "effect_changes": [],
         "turn_changed": false
       },
       "narrative_hooks": [
-        "Aldric Vance hits Red Dragon Wyrmling with Longsword (17 vs AC 17) for 6 slashing damage.",
-        "Sap mastery gives Red Dragon Wyrmling Disadvantage on its next attack roll."
+        "Aldric Vance misses Red Dragon Wyrmling with Longsword (14 vs AC 17)."
       ],
       "usage": {
         "prompt_tokens": 4446,
@@ -5757,7 +5772,7 @@
       "actor_id": "pc-aldric",
       "actor_name": "Aldric Vance",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -5783,55 +5798,46 @@
           "advantage_sources": [],
           "disadvantage_sources": [],
           "rolls": [
-            8
+            12
           ],
-          "chosen": 8,
+          "chosen": 12,
           "nat20": false,
           "nat1": false,
           "attack_bonus": 7,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 15,
+          "total": 19,
           "target_ac": 17,
-          "hit": false,
+          "hit": true,
           "crit": false
         },
         {
           "seq": 2,
-          "type": "mastery_triggered",
-          "mastery": "graze",
-          "actor_id": "pc-aldric",
-          "target_id": "wyrmling-1",
-          "damage": 4,
-          "damage_type": "slashing"
-        },
-        {
-          "seq": 3,
           "type": "damage_applied",
           "source_id": "pc-aldric",
           "target_id": "wyrmling-1",
           "breakdown": [
             {
               "type": "slashing",
-              "raw": 4,
-              "effective": 4,
+              "raw": 13,
+              "effective": 13,
               "modifier": "normal"
             }
           ],
-          "total_damage": 4,
+          "total_damage": 13,
           "temp_hp_absorbed": 0,
-          "hp_damage": 4,
-          "hp_before": 60,
-          "hp_after": 56
+          "hp_damage": 13,
+          "hp_before": 53,
+          "hp_after": 40
         }
       ],
       "state_diff": {
         "hp_changes": [
           {
             "id": "wyrmling-1",
-            "before": 60,
-            "after": 56,
-            "delta": -4
+            "before": 53,
+            "after": 40,
+            "delta": -13
           }
         ],
         "condition_changes": [],
@@ -5841,8 +5847,7 @@
         "turn_changed": false
       },
       "narrative_hooks": [
-        "Aldric Vance misses Red Dragon Wyrmling with Greatsword (15 vs AC 17).",
-        "Graze mastery still deals 4 slashing damage to Red Dragon Wyrmling."
+        "Aldric Vance hits Red Dragon Wyrmling with Greatsword (19 vs AC 17) for 13 slashing damage."
       ],
       "usage": {
         "prompt_tokens": 4436,
@@ -5858,7 +5863,7 @@
       "actor_id": "pc-aldric",
       "actor_name": "Aldric Vance",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 2,
       "first_attempt_legal": false,
       "auto_skipped": false,
@@ -5909,7 +5914,7 @@
       "actor_id": "pc-lyra",
       "actor_name": "Lyra Starweave",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -5956,49 +5961,11 @@
           "total_damage": 3,
           "temp_hp_absorbed": 0,
           "hp_damage": 3,
-          "hp_before": 56,
-          "hp_after": 53
+          "hp_before": 40,
+          "hp_after": 37
         },
         {
           "seq": 3,
-          "type": "damage_applied",
-          "source_id": "pc-lyra",
-          "target_id": "wyrmling-1",
-          "breakdown": [
-            {
-              "type": "force",
-              "raw": 4,
-              "effective": 4,
-              "modifier": "normal"
-            }
-          ],
-          "total_damage": 4,
-          "temp_hp_absorbed": 0,
-          "hp_damage": 4,
-          "hp_before": 53,
-          "hp_after": 49
-        },
-        {
-          "seq": 4,
-          "type": "damage_applied",
-          "source_id": "pc-lyra",
-          "target_id": "wyrmling-1",
-          "breakdown": [
-            {
-              "type": "force",
-              "raw": 2,
-              "effective": 2,
-              "modifier": "normal"
-            }
-          ],
-          "total_damage": 2,
-          "temp_hp_absorbed": 0,
-          "hp_damage": 2,
-          "hp_before": 49,
-          "hp_after": 47
-        },
-        {
-          "seq": 5,
           "type": "damage_applied",
           "source_id": "pc-lyra",
           "target_id": "wyrmling-1",
@@ -6013,8 +5980,46 @@
           "total_damage": 3,
           "temp_hp_absorbed": 0,
           "hp_damage": 3,
-          "hp_before": 47,
-          "hp_after": 44
+          "hp_before": 37,
+          "hp_after": 34
+        },
+        {
+          "seq": 4,
+          "type": "damage_applied",
+          "source_id": "pc-lyra",
+          "target_id": "wyrmling-1",
+          "breakdown": [
+            {
+              "type": "force",
+              "raw": 4,
+              "effective": 4,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 4,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 4,
+          "hp_before": 34,
+          "hp_after": 30
+        },
+        {
+          "seq": 5,
+          "type": "damage_applied",
+          "source_id": "pc-lyra",
+          "target_id": "wyrmling-1",
+          "breakdown": [
+            {
+              "type": "force",
+              "raw": 2,
+              "effective": 2,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 2,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 2,
+          "hp_before": 30,
+          "hp_after": 28
         },
         {
           "seq": 6,
@@ -6032,16 +6037,16 @@
           "total_damage": 3,
           "temp_hp_absorbed": 0,
           "hp_damage": 3,
-          "hp_before": 44,
-          "hp_after": 41
+          "hp_before": 28,
+          "hp_after": 25
         }
       ],
       "state_diff": {
         "hp_changes": [
           {
             "id": "wyrmling-1",
-            "before": 56,
-            "after": 41,
+            "before": 40,
+            "after": 25,
             "delta": -15
           }
         ],
@@ -6075,7 +6080,7 @@
       "actor_id": "pc-lyra",
       "actor_name": "Lyra Starweave",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -6126,7 +6131,7 @@
       "actor_id": "hound-2",
       "actor_name": "Cinder Hound B",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -6156,14 +6161,14 @@
           "on_success": "half",
           "rolled_damage": [
             {
-              "amount": 23,
+              "amount": 20,
               "type": "fire",
               "rolls": [
+                3,
                 5,
                 4,
                 4,
-                4,
-                6
+                4
               ],
               "dice": "5d6"
             }
@@ -6178,13 +6183,13 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            1
+            8
           ],
-          "chosen": 1,
+          "chosen": 8,
           "modifier": 2,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 3,
+          "total": 10,
           "success": false,
           "reason": "Fire Breath"
         },
@@ -6196,15 +6201,15 @@
           "breakdown": [
             {
               "type": "fire",
-              "raw": 23,
-              "effective": 23,
+              "raw": 20,
+              "effective": 20,
               "modifier": "normal"
             }
           ],
-          "total_damage": 23,
+          "total_damage": 20,
           "temp_hp_absorbed": 0,
-          "hp_damage": 23,
-          "hp_before": 11,
+          "hp_damage": 20,
+          "hp_before": 13,
           "hp_after": 0
         },
         {
@@ -6231,9 +6236,9 @@
         "hp_changes": [
           {
             "id": "pc-aldric",
-            "before": 11,
+            "before": 13,
             "after": 0,
-            "delta": -11
+            "delta": -13
           }
         ],
         "condition_changes": [
@@ -6253,7 +6258,7 @@
       },
       "narrative_hooks": [
         "Aldric Vance drops to 0 HP and falls Unconscious and Prone.",
-        "Aldric Vance fails against Cinder Hound B's Fire Breath (DC 12) and takes 23 damage."
+        "Aldric Vance fails against Cinder Hound B's Fire Breath (DC 12) and takes 20 damage."
       ],
       "usage": {}
     },
@@ -6265,7 +6270,7 @@
       "actor_id": "hound-2",
       "actor_name": "Cinder Hound B",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -6294,9 +6299,9 @@
           "seq": 3,
           "type": "death_save",
           "actor_id": "pc-kaelen",
-          "roll": 15,
-          "outcome": "success",
-          "successes": 1,
+          "roll": 1,
+          "outcome": "nat1_two_failures",
+          "successes": 0,
           "failures": 2
         }
       ],
@@ -6321,7 +6326,7 @@
       "actor_id": "pc-kaelen",
       "actor_name": "Kaelen Whisper",
       "side": "party",
-      "driver": "anthropic:claude-opus-5-5",
+      "driver": "replay",
       "attempts": 0,
       "first_attempt_legal": true,
       "auto_skipped": true,
@@ -6368,7 +6373,7 @@
       "actor_id": "hound-1",
       "actor_name": "Cinder Hound",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -6435,7 +6440,7 @@
       "actor_id": "hound-1",
       "actor_name": "Cinder Hound",
       "side": "enemy",
-      "driver": "heuristic-tactical",
+      "driver": "replay",
       "attempts": 1,
       "first_attempt_legal": true,
       "auto_skipped": false,
@@ -6469,10 +6474,10 @@
               "type": "fire",
               "rolls": [
                 4,
+                4,
                 3,
                 4,
-                5,
-                4
+                5
               ],
               "dice": "5d6"
             }
@@ -6487,13 +6492,13 @@
           "auto_fail": false,
           "mode": "normal",
           "rolls": [
-            13
+            11
           ],
-          "chosen": 13,
+          "chosen": 11,
           "modifier": 1,
           "exhaustion_penalty": 0,
           "bonus_dice": [],
-          "total": 14,
+          "total": 12,
           "success": true,
           "reason": "Fire Breath"
         },
@@ -6793,9 +6798,9 @@
     "side": "party",
     "outcome_score": 0.0,
     "rules_legality_score": 85.76,
-    "tactical_score": 70.2,
-    "coordination_score": 73.33,
-    "composite_score": 49.99,
+    "tactical_score": 73.92,
+    "coordination_score": 75.56,
+    "composite_score": 51.25,
     "weights": {
       "outcome": 0.35,
       "rules_legality": 0.25,
@@ -6809,10 +6814,10 @@
       "survivors": 4,
       "total_allies": 4,
       "hp_ratio": 0.0,
-      "effective_damage_dealt": 52,
+      "effective_damage_dealt": 71,
       "wasted_immune_hits": 0,
       "wasted_immune_raw_damage": 0,
-      "mastery_triggers": 4,
+      "mastery_triggers": 3,
       "mastery_setup_triggers": 2,
       "effective_buff_casts": 1,
       "ally_revivals": 1,
@@ -6821,9 +6826,9 @@
       "help_actions": 0,
       "effective_help_actions": 0,
       "friendly_fire_incidents": 1,
-      "friendly_fire_damage": 11,
+      "friendly_fire_damage": 5,
       "table_talk_messages": 20,
-      "focus_fire_ratio": 0.6667,
+      "focus_fire_ratio": 0.7778,
       "active_turns": 7,
       "productive_turns": 7,
       "contribution": 1.0,
@@ -6839,5 +6844,5 @@
       }
     }
   },
-  "digest": "0fa30faab4e1697fa2edc92388aac4326cfc34ced90b46fef26f6f6a3acea470"
+  "digest": "8128f2956523d874df4c3c70db2804b4ad6128c7647c7621ac563d19462231e6"
 }
