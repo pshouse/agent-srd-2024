@@ -206,6 +206,7 @@ def execute_arena_bench(
     max_rounds: int | None = None,
     api_base: str | None = None,
     api_key_env: str | None = None,
+    on_match: Any = None,
 ) -> dict[str, Any]:
     """Run a multi-seed / multi-scenario arena benchmark via `srd2024.arena`."""
     from srd2024.arena import run_benchmark
@@ -229,7 +230,57 @@ def execute_arena_bench(
         seeds=seeds,
         rules=rules,
         max_rounds=max_rounds,
+        on_match=on_match,
     )
+
+
+def _fmt_duration(seconds: float) -> str:
+    seconds = max(0, int(round(seconds)))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}h{m:02d}m" if h else f"{m}m{s:02d}s"
+
+
+def make_bench_progress(
+    *,
+    stream: Any = None,
+    jsonl_path: Path | None = None,
+    quiet: bool = False,
+    clock: Any = None,
+) -> Any:
+    """Build an `on_match` callback: a progress line per finished match, plus optional JSONL rows.
+
+    Each line goes to `stream` (stderr by default), so stdout keeps only the report. The line shows the count,
+    the match, its result, elapsed time and a rough ETA (mean time so far × matches left; LLM contenders are
+    much slower than offline ones, so it's least accurate early on). With `jsonl_path`, each match summary is
+    appended and flushed as one JSON line as soon as it finishes, so an interrupted bench keeps finished matches.
+    """
+    import time
+
+    out = stream if stream is not None else sys.stderr
+    now = clock or time.monotonic
+    started = now()
+    if jsonl_path is not None:
+        jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+        jsonl_path.write_text("", encoding="utf-8")
+
+    def on_match(summary: dict[str, Any], done: int, total: int) -> None:
+        if jsonl_path is not None:
+            with jsonl_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(summary, ensure_ascii=False, sort_keys=True) + "\n")
+                fh.flush()
+        if quiet:
+            return
+        elapsed = now() - started
+        eta = elapsed / done * (total - done) if done else 0.0
+        out.write(
+            f"[bench {done}/{total}] {summary['contender']} {summary['scenario_id']} seed {summary['seed']}: "
+            f"{summary['winner']} in {summary['rounds']} rounds, composite {summary['composite_score']:.2f}, "
+            f"{summary['violations']} violations | {_fmt_duration(elapsed)} elapsed, ETA {_fmt_duration(eta)}\n"
+        )
+        out.flush()
+
+    return on_match
 
 
 def execute_arena_replay(rules: Any, transcript: dict[str, Any]) -> dict[str, Any]:
@@ -476,6 +527,18 @@ def add_arena_subcommands(
         default=None,
         help="Write the full BenchmarkReport JSON to this file path.",
     )
+    p_bench.add_argument(
+        "--matches-jsonl",
+        dest="matches_jsonl",
+        default=None,
+        help="Append each match summary to this JSONL file as soon as the match finishes (kept if interrupted).",
+    )
+    p_bench.add_argument(
+        "--quiet",
+        dest="quiet",
+        action="store_true",
+        help="Don't print per-match progress lines to stderr.",
+    )
 
     # 4. replay
     p_replay = subparsers.add_parser(
@@ -647,6 +710,10 @@ def run_arena_cli_command(
         scenarios = _parse_csv_list(args.scenarios)
         agents = _parse_csv_list(args.agents)
         seeds = _parse_seeds_arg(args.seeds)
+        progress = make_bench_progress(
+            jsonl_path=Path(args.matches_jsonl).expanduser() if getattr(args, "matches_jsonl", None) else None,
+            quiet=bool(getattr(args, "quiet", False)),
+        )
         report = execute_arena_bench(
             rules,
             scenarios=scenarios,
@@ -656,6 +723,7 @@ def run_arena_cli_command(
             max_rounds=args.max_rounds,
             api_base=args.api_base,
             api_key_env=args.api_key_env,
+            on_match=progress,
         )
         if args.out_json:
             out_path = Path(args.out_json).expanduser()
