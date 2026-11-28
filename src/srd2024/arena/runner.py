@@ -328,7 +328,7 @@ def build_observation(
     side_board = list(blackboard.get(side) or [])[-12:]
     hooks_window = [_observer_event_text(h) for h in list(recent_hooks or [])[-12:]]
 
-    return {
+    obs: dict[str, Any] = {
         "round": int(state.get("round", 1)),
         "scenario": {
             "id": str(scenario.get("id") or state.get("encounter_id") or ""),
@@ -343,6 +343,11 @@ def build_observation(
         "recent_events": list(hooks_window),
         "retry_feedback": retry_feedback,
     }
+    if state.get("bounds") is not None:
+        obs["bounds"] = copy.deepcopy(state["bounds"])
+    if state.get("terrain") is not None:
+        obs["terrain"] = copy.deepcopy(state["terrain"])
+    return obs
 
 
 def _resolve_winner(state: dict[str, Any]) -> str:
@@ -693,16 +698,17 @@ def run_match(
     if effective_max_rounds < 1:
         raise ValueError(f"max_rounds must be >= 1, got {effective_max_rounds}.")
 
-    start_res = step(
-        None,
-        {
-            "type": "start_encounter",
-            "encounter_id": compiled["id"],
-            "seed": int(seed),
-            "combatants": copy.deepcopy(compiled["combatants"]),
-        },
-        rules,
-    )
+    start_payload: dict[str, Any] = {
+        "type": "start_encounter",
+        "encounter_id": compiled["id"],
+        "seed": int(seed),
+        "combatants": copy.deepcopy(compiled["combatants"]),
+    }
+    if compiled.get("bounds") is not None:
+        start_payload["bounds"] = copy.deepcopy(compiled["bounds"])
+    if compiled.get("terrain") is not None:
+        start_payload["terrain"] = copy.deepcopy(compiled["terrain"])
+    start_res = step(None, start_payload, rules)
     if start_res.get("status") != "ok":
         raise ValueError(f"Failed to start encounter '{compiled['id']}': {start_res.get('error')}")
 
@@ -1188,9 +1194,15 @@ def _builtin_lineup_matches(scenario_id: str, transcript: dict[str, Any]) -> boo
     def xy(pos: Any) -> tuple[Any, Any]:
         return ((pos or {}).get("x"), (pos or {}).get("y"))
 
+    init_state = transcript.get("initial_state") or {}
     builtin = {e["id"]: xy(e.get("position")) for e in list(raw.get("party") or []) + list(raw.get("enemies") or [])}
-    recorded = {cid: xy(c.get("position")) for cid, c in ((transcript.get("initial_state") or {}).get("combatants") or {}).items()}
-    return builtin == recorded
+    recorded = {cid: xy(c.get("position")) for cid, c in (init_state.get("combatants") or {}).items()}
+    if builtin != recorded:
+        return False
+    # Old traces recorded before bounds/terrain were added replay from their own initial_state (unbounded).
+    if raw.get("bounds") != init_state.get("bounds") or raw.get("terrain") != init_state.get("terrain"):
+        return False
+    return True
 
 
 def _reconstruct_scenario_from_transcript(transcript: dict[str, Any]) -> dict[str, Any]:
@@ -1212,7 +1224,7 @@ def _reconstruct_scenario_from_transcript(transcript: dict[str, Any]) -> dict[st
             ordered_ids.append(cid)
 
     combatants = [_combatant_to_start_entry(init_combatants[cid]) for cid in ordered_ids]
-    return {
+    reconstructed: dict[str, Any] = {
         "id": str(sc_meta.get("id") or init_state.get("encounter_id") or "replayed-scenario"),
         "name": str(sc_meta.get("name") or sc_meta.get("id") or "Replayed Scenario"),
         "description": str(sc_meta.get("description") or ""),
@@ -1225,6 +1237,11 @@ def _reconstruct_scenario_from_transcript(transcript: dict[str, Any]) -> dict[st
         "enemy_ids": enemy_ids,
         "source": "inline",
     }
+    if init_state.get("bounds") is not None:
+        reconstructed["bounds"] = copy.deepcopy(init_state["bounds"])
+    if init_state.get("terrain") is not None:
+        reconstructed["terrain"] = copy.deepcopy(init_state["terrain"])
+    return reconstructed
 
 
 def replay_match(

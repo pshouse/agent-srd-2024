@@ -220,6 +220,9 @@ EXPECTED_SCENARIO_MONSTER_GAPS: dict[str, list[str]] = {
     "red-dragon-wyrmling": [],
     "hell-hound": [],  # Pack Tactics executes (#39)
     "magmin": ["bonus_action:ignited-illumination"],  # Death Burst executes (#39)
+    "animated-armor": [],
+    "bandit-captain": [],
+    "hobgoblin-warrior": [],
 }
 
 
@@ -233,12 +236,12 @@ class TestStage3BuiltinScenarios(unittest.TestCase):
     def test_builtin_scenario_ids_and_list_scenarios(self) -> None:
         self.assertEqual(
             BUILTIN_SCENARIO_IDS,
-            ("goblin-ambush", "crypt-of-ghouls", "wyrmling-lair"),
+            ("goblin-ambush", "crypt-of-ghouls", "wyrmling-lair", "ruined-keep"),
         )
         listed = list_scenarios()
         ids = [s["id"] for s in listed]
         self.assertEqual(set(ids), set(BUILTIN_SCENARIO_IDS))
-        self.assertEqual(len(listed), 3)
+        self.assertEqual(len(listed), 4)
 
         required_keys = {
             "id",

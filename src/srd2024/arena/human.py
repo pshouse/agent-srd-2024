@@ -23,7 +23,17 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from srd2024.engine.combat import distance_ft, spell_target_allowed
+from srd2024.engine.combat import (
+    compute_cover,
+    distance_ft,
+    has_line_of_sight,
+    in_bounds,
+    is_wall,
+    movement_path_cost,
+    reachable_grid_costs,
+    spell_target_allowed,
+    terrain_sets,
+)
 from srd2024.engine.store import RulesStore, strip_prefix
 
 from .agents import (
@@ -45,6 +55,7 @@ from .agents import (
     _downed_allies,
     _ensure_rules,
     _monster_action_range,
+    _obs_bounds_terrain,
     _spell_aoe_spec,
     _spell_effective_range_ft,
     _step_toward,
@@ -91,6 +102,11 @@ def _retreat_step(
     enemies: list[dict[str, Any]],
     max_move_ft: int,
     occupied: set[tuple[int, int]] | None = None,
+    *,
+    bounds: dict[str, int] | None = None,
+    terrain: dict[str, Any] | None = None,
+    is_prone: bool = False,
+    is_teleport: bool = False,
 ) -> dict[str, int] | None:
     """Compute a fallback retreat step away from the nearest enemy when not adjacent (never an occupied square)."""
     if max_move_ft < 5 or not enemies:
@@ -98,6 +114,47 @@ def _retreat_step(
     nearest = min(enemies, key=lambda e: (distance_ft(origin, e["position"]), str(e.get("id") or "")))
     ox, oy = int(origin["x"]), int(origin["y"])
     ex, ey = int(nearest["position"]["x"]), int(nearest["position"]["y"])
+    cur_dist = distance_ft(origin, nearest["position"])
+
+    if is_teleport:
+        max_steps = min(6, max_move_ft // 5)
+        best: dict[str, int] | None = None
+        best_d = cur_dist
+        for dx_s in range(-max_steps, max_steps + 1):
+            for dy_s in range(-max_steps, max_steps + 1):
+                if dx_s == 0 and dy_s == 0:
+                    continue
+                cand = {"x": ox + dx_s * 5, "y": oy + dy_s * 5}
+                if distance_ft(origin, cand) > max_move_ft:
+                    continue
+                if not _is_free(cand, occupied):
+                    continue
+                if not in_bounds(cand, bounds) or is_wall(cand, terrain):
+                    continue
+                if not has_line_of_sight(origin, cand, terrain):
+                    continue
+                d = distance_ft(cand, nearest["position"])
+                if d > best_d:
+                    best_d = d
+                    best = cand
+        return best
+
+    if bounds is not None or terrain is not None:
+        reach_map = reachable_grid_costs(origin, max_move_ft, bounds, terrain, is_prone=is_prone)
+        best = None
+        best_d = cur_dist
+        for (cx, cy) in sorted(reach_map.keys()):
+            if (cx, cy) == (ox, oy):
+                continue
+            cand = {"x": cx, "y": cy}
+            if not _is_free(cand, occupied):
+                continue
+            d = distance_ft(cand, nearest["position"])
+            if d > best_d:
+                best_d = d
+                best = cand
+        return best
+
     dx = ox - ex
     dy = oy - ey
     if dx == 0 and dy == 0:
@@ -111,7 +168,7 @@ def _retreat_step(
         return None
     if distance_ft(origin, cand) > max_move_ft:
         return None
-    if distance_ft(cand, nearest["position"]) <= distance_ft(origin, nearest["position"]):
+    if distance_ft(cand, nearest["position"]) <= cur_dist:
         return None
     return cand
 
@@ -152,6 +209,8 @@ def build_human_action_menu(
     conds = _condition_set(self_data)
     rem_move = int(self_data.get("movement_remaining_ft", legal.get("movement_remaining_ft", 0)))
     speed = int(self_data.get("speed_ft", 30))
+    bounds, terrain = _obs_bounds_terrain(observation)
+    is_prone = "prone" in conds
 
     enemies = sorted(
         _alive_enemies(observation),
@@ -270,11 +329,15 @@ def build_human_action_menu(
                     dist = distance_ft(self_pos, enemy["position"])
                     if dist > max_r:
                         continue
+                    if not has_line_of_sight(self_pos, enemy["position"], terrain):
+                        continue
+                    cov_kind, cov_b = compute_cover(self_pos, enemy["position"], terrain)
+                    cov_tag = f", {cov_kind.replace('_', '-')} cover +{cov_b} AC" if (cov_b > 0 and cov_kind) else ""
                     long_tag = " [long range, disadv]" if dist > normal_r else ""
                     m_tag = f", Mastery: {mastery}" if (mastery and mastery_active) else ""
                     _add(
                         "attack",
-                        f"Attack {enemy['name']} with {wname} ({dist} ft{m_tag}{long_tag})",
+                        f"Attack {enemy['name']} with {wname} ({dist} ft{m_tag}{cov_tag}{long_tag})",
                         f"{_fmt_signed(atk_bonus)} to hit, {dmg_str}, mastery: {mastery_txt}",
                         {
                             "type": "attack",
@@ -292,6 +355,7 @@ def build_human_action_menu(
                             "long_range": dist > normal_r,
                             "is_ranged": is_ranged,
                             "offhand": False,
+                            "cover": cov_kind,
                         },
                     )
 
@@ -314,6 +378,8 @@ def build_human_action_menu(
                 for enemy in enemies:
                     dist = distance_ft(self_pos, enemy["position"])
                     if dist > max_r:
+                        continue
+                    if not has_line_of_sight(self_pos, enemy["position"], terrain):
                         continue
                     _add(
                         "attack",
@@ -345,7 +411,12 @@ def build_human_action_menu(
             if not aname:
                 continue
             max_r, is_ranged, is_save_aoe = _monster_action_range(m_act, all_m_acts)
-            in_r = [e for e in enemies if distance_ft(self_pos, e["position"]) <= max_r]
+            in_r = [
+                e
+                for e in enemies
+                if distance_ft(self_pos, e["position"]) <= max_r
+                and has_line_of_sight(self_pos, e["position"], terrain)
+            ]
             if not in_r:
                 continue
             if is_save_aoe:
@@ -439,13 +510,39 @@ def build_human_action_menu(
                 for b in buffs:
                     if isinstance(b, dict) and b.get("kind") == "teleport":
                         max_d = int(b.get("max_distance_ft", 30))
+                occ = _occupied_squares(observation)
                 dest = _best_kite_position(
-                    self_pos, max_d, enemies, conscious_allies, preferred_range_ft=35,
-                    occupied=_occupied_squares(observation),
-                ) or _retreat_step(self_pos, enemies, max_d, occupied=_occupied_squares(observation))
+                    self_pos,
+                    max_d,
+                    enemies,
+                    conscious_allies,
+                    preferred_range_ft=35,
+                    occupied=occ,
+                    bounds=bounds,
+                    terrain=terrain,
+                    is_teleport=True,
+                ) or _retreat_step(
+                    self_pos,
+                    enemies,
+                    max_d,
+                    occupied=occ,
+                    bounds=bounds,
+                    terrain=terrain,
+                    is_teleport=True,
+                )
                 if dest is None:
-                    dest = {"x": sx - 15, "y": sy}
-                if dest != self_pos and _is_free(dest, _occupied_squares(observation)):
+                    for dx_t, dy_t in ((-15, 0), (15, 0), (0, -15), (0, 15), (-10, 0), (10, 0), (-5, 0), (5, 0), (0, -5), (0, 5)):
+                        cand = {"x": sx + dx_t, "y": sy + dy_t}
+                        if (
+                            distance_ft(self_pos, cand) <= max_d
+                            and _is_free(cand, occ)
+                            and in_bounds(cand, bounds)
+                            and not is_wall(cand, terrain)
+                            and has_line_of_sight(self_pos, cand, terrain)
+                        ):
+                            dest = cand
+                            break
+                if dest is not None and dest != self_pos and _is_free(dest, occ):
                     _add(
                         "spell",
                         f"Cast {sp_name} -> teleport to {_fmt_pos(dest)} ({slot_tag})",
@@ -473,6 +570,7 @@ def build_human_action_menu(
                     heal_targets = [
                         a for a in (downed_allies + conscious_allies)
                         if distance_ft(self_pos, a["position"]) <= eff_range
+                        and has_line_of_sight(self_pos, a["position"], terrain)
                         and int(a.get("hp", 0)) < int(a.get("hp_max", 1))
                     ]
                     tids = [str(a["id"]) for a in heal_targets]
@@ -497,11 +595,12 @@ def build_human_action_menu(
                     # Offer downed allies first, then wounded conscious allies, then self if wounded
                     heal_candidates: list[dict[str, Any]] = []
                     for a in downed_allies:
-                        if distance_ft(self_pos, a["position"]) <= eff_range:
+                        if distance_ft(self_pos, a["position"]) <= eff_range and has_line_of_sight(self_pos, a["position"], terrain):
                             heal_candidates.append(a)
                     for a in conscious_allies:
                         if (
                             distance_ft(self_pos, a["position"]) <= eff_range
+                            and has_line_of_sight(self_pos, a["position"], terrain)
                             and int(a.get("hp", 0)) < int(a.get("hp_max", 1))
                         ):
                             heal_candidates.append(a)
@@ -578,7 +677,12 @@ def build_human_action_menu(
 
             # 3d. Multi-ally Buffs (Bless, Aid)
             if sp_slug in _MULTI_ALLY_BUFF_SPELLS:
-                in_r_allies = [a for a in conscious_allies if distance_ft(self_pos, a["position"]) <= eff_range]
+                in_r_allies = [
+                    a
+                    for a in conscious_allies
+                    if distance_ft(self_pos, a["position"]) <= eff_range
+                    and has_line_of_sight(self_pos, a["position"], terrain)
+                ]
                 tids = [str(a["id"]) for a in in_r_allies[:2]] + [actor_id]
                 if len(in_r_allies) >= 3:
                     tids = [str(a["id"]) for a in in_r_allies[:3]]
@@ -602,7 +706,7 @@ def build_human_action_menu(
                 buff_targets: list[tuple[str, str, int]] = [(actor_id, f"{self_data.get('name', actor_id)} (self)", 0)]
                 for a in conscious_allies:
                     d = distance_ft(self_pos, a["position"])
-                    if d <= eff_range:
+                    if d <= eff_range and has_line_of_sight(self_pos, a["position"], terrain):
                         buff_targets.append((str(a["id"]), str(a["name"]), d))
                 for tid, tname, dist in buff_targets[:3]:
                     _add(
@@ -622,8 +726,9 @@ def build_human_action_menu(
 
             # 3f. AoE Offensive Spells (Fireball, Shatter, Burning Hands, Lightning Bolt, Spirit Guardians)
             if aoe_spec is not None and enemies:
+                los_enemies = [e for e in enemies if has_line_of_sight(self_pos, e["position"], terrain)]
                 safe_hits = _aoe_targets_for_spell(
-                    sp_slug, sp_rec, self_pos, enemies, friendlies_for_aoe, avoid_friendlies=True
+                    sp_slug, sp_rec, self_pos, los_enemies, friendlies_for_aoe, avoid_friendlies=True
                 )
                 if safe_hits:
                     tids = [str(e["id"]) for e in safe_hits]
@@ -649,7 +754,7 @@ def build_human_action_menu(
                 else:
                     # Check if any enemies are in range individually (e.g., if emanation or tight quarters)
                     any_hits = _aoe_targets_for_spell(
-                        sp_slug, sp_rec, self_pos, enemies, [], avoid_friendlies=False
+                        sp_slug, sp_rec, self_pos, los_enemies, [], avoid_friendlies=False
                     )
                     if any_hits:
                         tids = [str(e["id"]) for e in any_hits]
@@ -684,6 +789,8 @@ def build_human_action_menu(
                             continue
                         dist = distance_ft(self_pos, enemy["position"])
                         if dist > eff_range:
+                            continue
+                        if not has_line_of_sight(self_pos, enemy["position"], terrain):
                             continue
                         _add(
                             "spell",
@@ -722,9 +829,9 @@ def build_human_action_menu(
             )
 
     # 4. Smart Tactical Movement Destinations
-    crawl_mult = 2 if "prone" in conds else 1
-    max_step = rem_move // crawl_mult
-    if max_step >= 5 and speed > 0:
+    crawl_mult = 2 if is_prone else 1
+    max_step = rem_move if (bounds is not None or terrain is not None) else (rem_move // crawl_mult)
+    if rem_move >= 5 * crawl_mult and speed > 0:
         seen_dests: set[tuple[int, int]] = {(sx, sy)}
 
         # 4a. Close into melee with up to 2 nearest enemies currently > 5 ft away
@@ -734,15 +841,28 @@ def build_human_action_menu(
                 if closed_count >= 2:
                     break
                 cur_d = distance_ft(self_pos, enemy["position"])
-                if cur_d <= 5:
+                if cur_d <= 5 and has_line_of_sight(self_pos, enemy["position"], terrain):
                     continue
-                dest = _step_toward(self_pos, enemy["position"], max_step, desired_dist_ft=5, occupied=_occupied_squares(observation))
+                dest = _step_toward(
+                    self_pos,
+                    enemy["position"],
+                    max_step,
+                    desired_dist_ft=5,
+                    occupied=_occupied_squares(observation),
+                    bounds=bounds,
+                    terrain=terrain,
+                    is_prone=is_prone,
+                )
                 key = (int(dest["x"]), int(dest["y"]))
                 if key in seen_dests:
                     continue
+                move_cost, path_err = movement_path_cost(
+                    self_pos, dest, bounds, terrain, is_prone=is_prone, max_cost=rem_move
+                )
+                if path_err is not None or move_cost is None or move_cost > rem_move:
+                    continue
                 seen_dests.add(key)
                 new_d = distance_ft(dest, enemy["position"])
-                move_cost = distance_ft(self_pos, dest) * crawl_mult
                 _add(
                     "move",
                     f"Move to {_fmt_pos(dest)} — close toward {enemy['name']} (now {new_d} ft)",
@@ -759,25 +879,44 @@ def build_human_action_menu(
 
         # 4b. Kite / Fall Back
         if enemies:
+            occ = _occupied_squares(observation)
             kite_dest = _best_kite_position(
-                self_pos, max_step, enemies, conscious_allies, preferred_range_ft=30,
-                occupied=_occupied_squares(observation),
+                self_pos,
+                max_step,
+                enemies,
+                conscious_allies,
+                preferred_range_ft=30,
+                occupied=occ,
+                bounds=bounds,
+                terrain=terrain,
+                is_prone=is_prone,
             )
             if kite_dest is None:
-                kite_dest = _retreat_step(self_pos, enemies, max_step, occupied=_occupied_squares(observation))
+                kite_dest = _retreat_step(
+                    self_pos,
+                    enemies,
+                    max_step,
+                    occupied=occ,
+                    bounds=bounds,
+                    terrain=terrain,
+                    is_prone=is_prone,
+                )
             if kite_dest is not None:
                 key = (int(kite_dest["x"]), int(kite_dest["y"]))
                 if key not in seen_dests:
-                    seen_dests.add(key)
-                    min_e_dist = min(distance_ft(kite_dest, e["position"]) for e in enemies)
-                    move_cost = distance_ft(self_pos, kite_dest) * crawl_mult
-                    _add(
-                        "move",
-                        f"Move to {_fmt_pos(kite_dest)} — kite / fall back ({min_e_dist} ft from nearest foe)",
-                        f"Costs {move_cost} ft of {rem_move} ft movement",
-                        {"type": "move", "actor_id": actor_id, "to": kite_dest},
-                        {"action_kind": "kite", "to": kite_dest, "cost_ft": move_cost},
+                    move_cost, path_err = movement_path_cost(
+                        self_pos, kite_dest, bounds, terrain, is_prone=is_prone, max_cost=rem_move
                     )
+                    if path_err is None and move_cost is not None and move_cost <= rem_move:
+                        seen_dests.add(key)
+                        min_e_dist = min(distance_ft(kite_dest, e["position"]) for e in enemies)
+                        _add(
+                            "move",
+                            f"Move to {_fmt_pos(kite_dest)} — kite / fall back ({min_e_dist} ft from nearest foe)",
+                            f"Costs {move_cost} ft of {rem_move} ft movement",
+                            {"type": "move", "actor_id": actor_id, "to": kite_dest},
+                            {"action_kind": "kite", "to": kite_dest, "cost_ft": move_cost},
+                        )
 
     # 5. Standard Tactical Actions (Dodge, Dash, Disengage, Help)
     if res.get("action"):
@@ -875,6 +1014,9 @@ def _render_ascii_battlefield(
     self_data: dict[str, Any],
     allies: list[dict[str, Any]],
     enemies: list[dict[str, Any]],
+    *,
+    bounds: dict[str, int] | None = None,
+    terrain: dict[str, Any] | None = None,
 ) -> list[str]:
     """Render a compact 5-ft grid ASCII battlefield map + coordinate legend."""
     actor_id = str(self_data.get("id") or "")
@@ -911,14 +1053,21 @@ def _render_ascii_battlefield(
             )
 
     tokens = _assign_map_tokens(displayed)
+    walls, difficult, cover_map = terrain_sets(terrain)
 
     # Snap coordinates to 5-ft cells
     xs = [int(ent["position"]["x"]) // 5 * 5 for ent in displayed]
     ys = [int(ent["position"]["y"]) // 5 * 5 for ent in displayed]
-    min_x = min(xs) - 5
-    max_x = max(xs) + 5
-    min_y = min(ys) - 5
-    max_y = max(ys) + 5
+    if isinstance(bounds, dict):
+        min_x = int(bounds["min_x"])
+        max_x = int(bounds["max_x"])
+        min_y = int(bounds["min_y"])
+        max_y = int(bounds["max_y"])
+    else:
+        min_x = min(xs) - 5
+        max_x = max(xs) + 5
+        min_y = min(ys) - 5
+        max_y = max(ys) + 5
 
     # Cap grid dimensions so far-apart combatants stay compact in terminals
     cols = list(range(min_x, max_x + 1, 5))
@@ -932,11 +1081,17 @@ def _render_ascii_battlefield(
         return lines
 
     cell_map: dict[tuple[int, int], str] = {}
+    for xy in difficult:
+        cell_map[xy] = "~"
+    for xy, ckind in cover_map.items():
+        cell_map[xy] = "+" if ckind == "three_quarters" else ":"
+    for xy in walls:
+        cell_map[xy] = "#"
     for ent in displayed:
         cx = int(ent["position"]["x"]) // 5 * 5
         cy = int(ent["position"]["y"]) // 5 * 5
         tok = tokens[ent["id"]]
-        if (cx, cy) in cell_map:
+        if (cx, cy) in cell_map and cell_map[(cx, cy)] not in ("~", ":", "+", "#"):
             cell_map[(cx, cy)] = "*"
         else:
             cell_map[(cx, cy)] = tok
@@ -954,6 +1109,8 @@ def _render_ascii_battlefield(
         f"[{tokens[ent['id']]}]={ent['name']} {_fmt_pos(ent['position'])} ({ent['role']})"
         for ent in displayed
     ]
+    if walls or difficult or cover_map:
+        legend_bits.append("[#]=Wall [~]=Difficult [:]=1/2 Cover [+]=3/4 Cover")
     lines.append("Legend: " + " | ".join(legend_bits))
     return lines
 
@@ -1027,7 +1184,8 @@ def render_tactical_hud(
     ]
 
     # Battlefield Map
-    lines.extend(_render_ascii_battlefield(self_data, allies, enemies))
+    obs_bounds, obs_terrain = _obs_bounds_terrain(observation)
+    lines.extend(_render_ascii_battlefield(self_data, allies, enemies, bounds=obs_bounds, terrain=obs_terrain))
     lines.append("-" * 72)
 
     # Active Actor Status

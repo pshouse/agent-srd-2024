@@ -45,23 +45,134 @@ function isDown(u, info) {
 }
 
 /**
- * An empty board: an SVG with grid lines and a layer for tokens.
- * @param {{ x: number, y: number, w: number, h: number }} b bounds in feet
+ * An empty board: an SVG with optional battlefield bounds & terrain layers,
+ * 5-ft grid lines, and a layer for tokens.
+ * @param {{ x: number, y: number, w: number, h: number }} b viewBox extent in feet
+ * @param {{ bounds?: { min_x: number, min_y: number, max_x: number, max_y: number } | null, terrain?: { walls?: number[][], difficult_terrain?: number[][], cover?: Array<{ x: number, y: number, kind: string }> } | null }} [options]
  * @returns {{ svg: SVGSVGElement, layer: SVGGElement }}
  */
-export function createBoard(b) {
+export function createBoard(b, options = {}) {
   const svg = svgEl("svg", {
     viewBox: `${b.x} ${b.y} ${b.w} ${b.h}`,
     role: "img",
     "aria-label": `Tactical grid, ${b.w / 5} by ${b.h / 5} squares of 5 ft`,
     class: "rp-board",
   });
+  const room = options && options.bounds ? options.bounds : null;
+  const terrain = options && options.terrain ? options.terrain : null;
+
+  if (room) {
+    const rx = room.min_x;
+    const ry = room.min_y;
+    const rw = room.max_x - room.min_x + 5;
+    const rh = room.max_y - room.min_y + 5;
+    const oob = svgEl("g", { class: "rp-oob" });
+    if (ry > b.y) oob.append(svgEl("rect", { x: b.x, y: b.y, width: b.w, height: ry - b.y }));
+    if (ry + rh < b.y + b.h) oob.append(svgEl("rect", { x: b.x, y: ry + rh, width: b.w, height: b.y + b.h - (ry + rh) }));
+    if (rx > b.x) oob.append(svgEl("rect", { x: b.x, y: ry, width: rx - b.x, height: rh }));
+    if (rx + rw < b.x + b.w) oob.append(svgEl("rect", { x: rx + rw, y: ry, width: b.x + b.w - (rx + rw), height: rh }));
+    if (oob.childNodes.length) svg.append(oob);
+  }
+
+  if (terrain) {
+    svg.append(buildTerrainLayer(terrain));
+  }
+
   const grid = svgEl("g", { class: "rp-grid" });
   for (let x = b.x; x <= b.x + b.w; x += 5) grid.append(svgEl("line", { x1: x, y1: b.y, x2: x, y2: b.y + b.h }));
   for (let y = b.y; y <= b.y + b.h; y += 5) grid.append(svgEl("line", { x1: b.x, y1: y, x2: b.x + b.w, y2: y }));
+  svg.append(grid);
+
+  if (room) {
+    const rx = room.min_x;
+    const ry = room.min_y;
+    const rw = room.max_x - room.min_x + 5;
+    const rh = room.max_y - room.min_y + 5;
+    const box = svgEl("rect", { class: "rp-bounds", x: rx, y: ry, width: rw, height: rh });
+    box.append(svgTitle(`Battlefield bounds: x ${room.min_x}..${room.max_x} ft, y ${room.min_y}..${room.max_y} ft`));
+    svg.append(box);
+  }
+
   const layer = svgEl("g");
-  svg.append(grid, layer);
+  svg.append(layer);
   return { svg, layer };
+}
+
+/**
+ * Build the SVG group for walls, difficult terrain, and half/three-quarters cover tiles.
+ * @param {{ walls?: number[][], difficult_terrain?: number[][], cover?: Array<{ x: number, y: number, kind: string }> }} terrain
+ * @returns {SVGGElement}
+ */
+export function buildTerrainLayer(terrain) {
+  const g = svgEl("g", { class: "rp-terrain" });
+  for (const pair of terrain.difficult_terrain || []) {
+    const [tx, ty] = pair;
+    const cell = svgEl("g", { class: "rp-diff", "data-terrain": "difficult", "data-x": tx, "data-y": ty });
+    cell.append(
+      svgEl("rect", { x: tx, y: ty, width: 5, height: 5 }),
+      svgEl("line", { class: "rp-diff-line", x1: tx + 0.6, y1: ty + 4.4, x2: tx + 4.4, y2: ty + 0.6 }),
+      svgEl("line", { class: "rp-diff-line", x1: tx + 0.6, y1: ty + 2.5, x2: tx + 2.5, y2: ty + 0.6 }),
+      svgEl("line", { class: "rp-diff-line", x1: tx + 2.5, y1: ty + 4.4, x2: tx + 4.4, y2: ty + 2.5 }),
+      svgTitle(`Difficult terrain (${tx}, ${ty}) · 2x movement cost`),
+    );
+    g.append(cell);
+  }
+  for (const cov of terrain.cover || []) {
+    const is3q = cov.kind === "three_quarters";
+    const cls = is3q ? "rp-cov-3q" : "rp-cov-half";
+    const cell = svgEl("g", { class: cls, "data-terrain": cov.kind, "data-x": cov.x, "data-y": cov.y });
+    if (is3q) {
+      cell.append(
+        svgEl("rect", { class: "rp-cov-fill", x: cov.x + 0.3, y: cov.y + 0.3, width: 4.4, height: 4.4, rx: 0.4 }),
+        svgEl("rect", { class: "rp-cov-mark", x: cov.x + 1.0, y: cov.y + 1.0, width: 3.0, height: 3.0, rx: 0.25 }),
+        svgTitle(`Three-quarters cover (${cov.x}, ${cov.y}) · +5 AC, +5 DEX saves`),
+      );
+    } else {
+      cell.append(
+        svgEl("rect", { class: "rp-cov-fill", x: cov.x + 0.3, y: cov.y + 0.3, width: 4.4, height: 4.4, rx: 0.4 }),
+        svgEl("rect", { class: "rp-cov-mark", x: cov.x + 0.9, y: cov.y + 1.8, width: 3.2, height: 1.4, rx: 0.25 }),
+        svgTitle(`Half cover (${cov.x}, ${cov.y}) · +2 AC, +2 DEX saves`),
+      );
+    }
+    g.append(cell);
+  }
+  for (const pair of terrain.walls || []) {
+    const [wx, wy] = pair;
+    const cell = svgEl("g", { class: "rp-wall", "data-terrain": "wall", "data-x": wx, "data-y": wy });
+    cell.append(
+      svgEl("rect", { x: wx, y: wy, width: 5, height: 5 }),
+      svgEl("line", { class: "rp-wall-line", x1: wx + 0.5, y1: wy + 0.5, x2: wx + 4.5, y2: wy + 4.5 }),
+      svgEl("line", { class: "rp-wall-line", x1: wx + 4.5, y1: wy + 0.5, x2: wx + 0.5, y2: wy + 4.5 }),
+      svgTitle(`Wall (${wx}, ${wy}) · impassable, blocks Line of Sight`),
+    );
+    g.append(cell);
+  }
+  return g;
+}
+
+/**
+ * Legend swatch items for any battlefield bounds or terrain features present.
+ * @param {object | null} bounds
+ * @param {object | null} terrain
+ * @returns {HTMLElement[]}
+ */
+export function terrainLegendItems(bounds, terrain) {
+  const out = [];
+  if (bounds) out.push(el("span", {}, [el("i", { class: "rp-sw-bounds" }), " Arena bounds"]));
+  if (terrain && Array.isArray(terrain.walls) && terrain.walls.length) {
+    out.push(el("span", {}, [el("i", { class: "rp-sw-wall" }), " Wall (blocks LoS)"]));
+  }
+  if (terrain && Array.isArray(terrain.difficult_terrain) && terrain.difficult_terrain.length) {
+    out.push(el("span", {}, [el("i", { class: "rp-sw-diff" }), " Difficult terrain (2x)"]));
+  }
+  const cover = (terrain && Array.isArray(terrain.cover)) ? terrain.cover : [];
+  if (cover.some((c) => c.kind === "half")) {
+    out.push(el("span", {}, [el("i", { class: "rp-sw-cov-half" }), " Half cover (+2)"]));
+  }
+  if (cover.some((c) => c.kind === "three_quarters")) {
+    out.push(el("span", {}, [el("i", { class: "rp-sw-cov-3q" }), " 3/4 cover (+5)"]));
+  }
+  return out;
 }
 
 export function paintBoard(layer, frame, prevFrame, roster) {

@@ -32,7 +32,16 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
-from srd2024.engine.combat import distance_ft, grid_square
+from srd2024.engine.combat import (
+    compute_cover,
+    distance_ft,
+    grid_square,
+    has_line_of_sight,
+    in_bounds,
+    is_wall,
+    movement_path_cost,
+    reachable_grid_costs,
+)
 from srd2024.engine.dice import parse_dice_expr, scale_dice_expr
 from srd2024.engine.store import RulesStore, strip_prefix
 
@@ -653,6 +662,13 @@ def _is_free(pos: dict[str, int], occupied: set[tuple[int, int]] | None) -> bool
     return not occupied or grid_square(pos) not in occupied
 
 
+def _obs_bounds_terrain(observation: dict[str, Any]) -> tuple[dict[str, int] | None, dict[str, Any] | None]:
+    """Extract optional `(bounds, terrain)` from an arena observation."""
+    bounds = observation.get("bounds")
+    terrain = observation.get("terrain")
+    return (bounds if isinstance(bounds, dict) else None), (terrain if isinstance(terrain, dict) else None)
+
+
 def _step_toward(
     origin: dict[str, int],
     target_pos: dict[str, int],
@@ -660,18 +676,81 @@ def _step_toward(
     *,
     desired_dist_ft: int = 5,
     occupied: set[tuple[int, int]] | None = None,
+    bounds: dict[str, int] | None = None,
+    terrain: dict[str, Any] | None = None,
+    is_prone: bool = False,
 ) -> dict[str, int]:
     """Compute a 5-ft grid destination moving from `origin` toward `target_pos`.
 
-    With `occupied`, the destination is never another creature's square (#53): if the straight-line
-    step ends on one, the nearest free square within `max_move_ft` that still gets closer is used,
-    else `origin` (no move).
+    Respects optional `occupied` (#53), `bounds`, `terrain` (walls & difficult terrain 2x cost),
+    and `is_prone`. Never returns an out-of-bounds square, a wall tile, or another creature's square.
     """
+    ox, oy = int(origin["x"]), int(origin["y"])
+    tx, ty = int(target_pos["x"]), int(target_pos["y"])
     cur_dist = distance_ft(origin, target_pos)
-    if cur_dist <= desired_dist_ft or max_move_ft < 5:
-        return {"x": int(origin["x"]), "y": int(origin["y"])}
+    has_los = has_line_of_sight(origin, target_pos, terrain)
+    if (cur_dist <= desired_dist_ft and has_los) or max_move_ft < 5:
+        return {"x": ox, "y": oy}
+
+    # When bounds or terrain are active, select from exact Dijkstra-reachable valid free squares.
+    if bounds is not None or terrain is not None:
+        reach_map = reachable_grid_costs(origin, max_move_ft, bounds, terrain, is_prone=is_prone)
+        candidates = [
+            (xy, cost)
+            for xy, cost in reach_map.items()
+            if xy != (ox, oy)
+            and not (desired_dist_ft > 0 and xy == (tx, ty))
+            and _is_free({"x": xy[0], "y": xy[1]}, occupied)
+        ]
+        if not candidates:
+            return {"x": ox, "y": oy}
+
+        def _rank(item: tuple[tuple[int, int], int]) -> tuple[int, int, int, int, int, int]:
+            (cx, cy), cost = item
+            cpos = {"x": cx, "y": cy}
+            d = distance_ft(cpos, target_pos)
+            los_ok = has_line_of_sight(cpos, target_pos, terrain)
+            in_goal = d <= desired_dist_ft and los_ok
+            euclid2 = (cx - tx) ** 2 + (cy - ty) ** 2
+            if in_goal:
+                # Stop as soon as we reach desired_dist_ft with LoS: minimize movement spent
+                # and, for ranged/casters (desired_dist_ft > 5), stay near desired range rather than walking into melee.
+                return (
+                    0,
+                    0,
+                    cost,
+                    -d if desired_dist_ft > 5 else d,
+                    euclid2 if desired_dist_ft <= 5 else 0,
+                    cx * 10000 + cy,
+                )
+            # Otherwise close distance as much as possible, preferring squares with LoS.
+            return (
+                1,
+                0 if los_ok else 1,
+                d,
+                euclid2,
+                cost,
+                cx * 10000 + cy,
+            )
+
+        best_xy, _ = min(candidates, key=_rank)
+        best_pos = {"x": best_xy[0], "y": best_xy[1]}
+        best_d = distance_ft(best_pos, target_pos)
+        # Only move if we improve distance or establish LoS (avoid pointless oscillation).
+        if not has_los and has_line_of_sight(best_pos, target_pos, terrain):
+            return best_pos
+        if best_d < cur_dist or (desired_dist_ft == 5 and best_d <= 5 and cur_dist > 5):
+            return best_pos
+        # If blocked directly by a wall, allow moving to a square closer in Euclidean distance to navigate around.
+        if (best_xy[0] - tx) ** 2 + (best_xy[1] - ty) ** 2 < (ox - tx) ** 2 + (oy - ty) ** 2:
+            return best_pos
+        # Even if detouring around a wall initially moves slightly sideways, pick the best candidate if stuck behind wall.
+        if not has_los:
+            return best_pos
+        return {"x": ox, "y": oy}
+
     dest = _straight_step_toward(origin, target_pos, max_move_ft, desired_dist_ft=desired_dist_ft)
-    if _is_free(dest, occupied) or dest == {"x": int(origin["x"]), "y": int(origin["y"])}:
+    if _is_free(dest, occupied) or dest == {"x": ox, "y": oy}:
         return dest
     return _nearest_free_toward(origin, target_pos, max_move_ft, desired_dist_ft, dest, occupied or set())
 
@@ -757,8 +836,15 @@ def _best_kite_position(
     preferred_range_ft: int = 35,
     spread_from_allies: bool = False,
     occupied: set[tuple[int, int]] | None = None,
+    bounds: dict[str, int] | None = None,
+    terrain: dict[str, Any] | None = None,
+    is_prone: bool = False,
+    is_teleport: bool = False,
 ) -> dict[str, int] | None:
-    """Pick a safe 5-ft grid destination maximizing distance from adjacent enemies (never an occupied square)."""
+    """Pick a safe 5-ft grid destination maximizing distance from adjacent enemies (never an occupied square).
+
+    Respects optional `occupied` (#53), `bounds`, `terrain` (walls, difficult terrain, cover, LoS), and `is_teleport`.
+    """
     if max_move_ft < 5 or not enemies:
         return None
     ox, oy = int(origin["x"]), int(origin["y"])
@@ -768,33 +854,64 @@ def _best_kite_position(
 
     cur_min_e = min(distance_ft(origin, e["position"]) for e in enemies)
 
-    for dx_s in range(-max_steps, max_steps + 1):
-        for dy_s in range(-max_steps, max_steps + 1):
-            if dx_s == 0 and dy_s == 0:
+    cand_list: list[dict[str, int]] = []
+    if is_teleport:
+        for dx_s in range(-max_steps, max_steps + 1):
+            for dy_s in range(-max_steps, max_steps + 1):
+                if dx_s == 0 and dy_s == 0:
+                    continue
+                cand = {"x": ox + dx_s * 5, "y": oy + dy_s * 5}
+                if distance_ft(origin, cand) > max_move_ft:
+                    continue
+                if not in_bounds(cand, bounds) or is_wall(cand, terrain):
+                    continue
+                if not has_line_of_sight(origin, cand, terrain):
+                    continue
+                cand_list.append(cand)
+    elif bounds is not None or terrain is not None:
+        reach_map = reachable_grid_costs(origin, max_move_ft, bounds, terrain, is_prone=is_prone)
+        for (cx, cy) in sorted(reach_map.keys()):
+            if (cx, cy) == (ox, oy):
                 continue
-            cand = {"x": ox + dx_s * 5, "y": oy + dy_s * 5}
-            if distance_ft(origin, cand) > max_move_ft:
-                continue
-            if not _is_free(cand, occupied):
-                continue
-            dists_e = [distance_ft(cand, e["position"]) for e in enemies]
-            min_e = min(dists_e)
-            if min_e <= 5:
-                continue
-            score = float(min(min_e, preferred_range_ft)) * 2.0
-            # Keep at least one enemy comfortably in spell/ranged distance.
-            if min_e > 60:
-                score -= (min_e - 60) * 1.5
-            # Spread >= 20 ft from allies against breath-weapon threats.
-            if spread_from_allies and allies:
-                min_a = min(distance_ft(cand, a["position"]) for a in allies)
-                if min_a >= 20:
-                    score += 12.0
-                else:
-                    score -= (20 - min_a) * 0.8
-            if score > best_score:
-                best_score = score
-                best_pos = cand
+            cand_list.append({"x": cx, "y": cy})
+    else:
+        for dx_s in range(-max_steps, max_steps + 1):
+            for dy_s in range(-max_steps, max_steps + 1):
+                if dx_s == 0 and dy_s == 0:
+                    continue
+                cand = {"x": ox + dx_s * 5, "y": oy + dy_s * 5}
+                if distance_ft(origin, cand) > max_move_ft:
+                    continue
+                cand_list.append(cand)
+
+    for cand in cand_list:
+        if not _is_free(cand, occupied):
+            continue
+        dists_e = [distance_ft(cand, e["position"]) for e in enemies]
+        min_e = min(dists_e)
+        if min_e <= 5:
+            continue
+        score = float(min(min_e, preferred_range_ft)) * 2.0
+        # Keep at least one enemy comfortably in spell/ranged distance.
+        if min_e > 60:
+            score -= (min_e - 60) * 1.5
+        if terrain is not None:
+            if any(has_line_of_sight(cand, e["position"], terrain) for e in enemies):
+                score += 6.0
+            nearest_e = min(enemies, key=lambda e: distance_ft(cand, e["position"]))
+            _, cov_b = compute_cover(nearest_e["position"], cand, terrain)
+            if cov_b > 0:
+                score += float(cov_b) * 1.5
+        # Spread >= 20 ft from allies against breath-weapon threats.
+        if spread_from_allies and allies:
+            min_a = min(distance_ft(cand, a["position"]) for a in allies)
+            if min_a >= 20:
+                score += 12.0
+            else:
+                score -= (20 - min_a) * 0.8
+        if score > best_score:
+            best_score = score
+            best_pos = cand
 
     if best_pos is None:
         return None
@@ -1050,6 +1167,7 @@ def build_system_prompt() -> str:
         "Tactical rules:\n"
         "- Respect turn_resources (action, bonus_action, reaction, attacks_remaining), spell slots, and ranges.\n"
         "- Grid uses 5-ft squares with Chebyshev distance max(|dx|,|dy|).\n"
+        "- When observation.bounds or observation.terrain is present: stay within bounds, avoid wall tiles (they block movement, teleport, and Line of Sight), account for 2x movement cost entering difficult_terrain, and use half (+2 AC/DEX save) or three_quarters (+5 AC/DEX save) cover.\n"
         "- Avoid damage types enemies are immune to, never hit allies with AoE, revive 0-HP allies, and use Weapon Masteries.\n"
         "- Reactions are automatic: the engine makes Opportunity Attacks and casts Shield when they are triggered. "
         "Never cast a reaction spell yourself.\n"
@@ -1106,12 +1224,14 @@ class RandomDriver:
         allies = [a for a in (observation.get("allies") or []) if a.get("alive", False)]
         rem_move = int(self_data.get("movement_remaining_ft", legal.get("movement_remaining_ft", 0)))
         speed = int(self_data.get("speed_ft", 30))
+        bounds, terrain = _obs_bounds_terrain(observation)
+        is_prone = "prone" in conds
 
         # On retry feedback, bias safely toward end_turn if candidates shrink.
         candidates: list[dict[str, Any]] = []
 
         # 1. Stand up if prone.
-        if "prone" in conds and legal.get("can_stand_up", speed > 0 and rem_move >= speed // 2):
+        if is_prone and legal.get("can_stand_up", speed > 0 and rem_move >= speed // 2):
             candidates.append(
                 {
                     "type": "move",
@@ -1121,23 +1241,47 @@ class RandomDriver:
                 }
             )
 
-        # 2. Random short movement step within remaining movement (avoid frightened violation).
-        crawl_mult = 2 if "prone" in conds else 1
+        # 2. Random short movement step within remaining movement (avoid frightened/bounds/wall violations).
+        crawl_mult = 2 if is_prone else 1
         max_step_dist = rem_move // crawl_mult
         if max_step_dist >= 5 and "frightened" not in conds and speed > 0:
             max_grid_steps = min(3, max_step_dist // 5)
             dx = self._rng.randint(-max_grid_steps, max_grid_steps) * 5
             dy = self._rng.randint(-max_grid_steps, max_grid_steps) * 5
-            step_to = {"x": int(self_pos["x"]) + dx, "y": int(self_pos["y"]) + dy}
-            if (dx != 0 or dy != 0) and _is_free(step_to, _occupied_squares(observation)):
-                candidates.append({"type": "move", "actor_id": actor_id, "to": step_to})
+            if dx != 0 or dy != 0:
+                occ = _occupied_squares(observation)
+                ox, oy = int(self_pos["x"]), int(self_pos["y"])
+                cand = {"x": ox + dx, "y": oy + dy}
+                if bounds is None and terrain is None:
+                    if _is_free(cand, occ):
+                        candidates.append({"type": "move", "actor_id": actor_id, "to": cand})
+                else:
+                    reach_map = reachable_grid_costs(
+                        self_pos, min(rem_move, max_grid_steps * 5 * crawl_mult), bounds, terrain, is_prone=is_prone
+                    )
+                    if (cand["x"], cand["y"]) in reach_map and _is_free(cand, occ):
+                        candidates.append({"type": "move", "actor_id": actor_id, "to": cand})
+                    else:
+                        valid_dests = sorted(
+                            xy
+                            for xy in reach_map.keys()
+                            if xy != (ox, oy) and _is_free({"x": xy[0], "y": xy[1]}, occ)
+                        )
+                        if valid_dests:
+                            nx, ny = self._rng.choice(valid_dests)
+                            candidates.append({"type": "move", "actor_id": actor_id, "to": {"x": nx, "y": ny}})
 
-        # 3. PC weapon attacks (strictly in reach/range).
+        # 3. PC weapon attacks (strictly in reach/range & line of sight).
         can_attack = bool(res.get("action")) or int(res.get("attacks_remaining", 0)) > 0
         if can_attack and enemies:
             for wp in self_data.get("weapons") or []:
                 _, max_r, _ = _weapon_max_range(wp)
-                in_r = [e for e in enemies if distance_ft(self_pos, e["position"]) <= max_r]
+                in_r = [
+                    e
+                    for e in enemies
+                    if distance_ft(self_pos, e["position"]) <= max_r
+                    and has_line_of_sight(self_pos, e["position"], terrain)
+                ]
                 if in_r:
                     tgt = self._rng.choice(in_r)
                     candidates.append(
@@ -1149,12 +1293,17 @@ class RandomDriver:
                         }
                     )
 
-        # 4. Monster actions (only available non-recharging actions).
+        # 4. Monster actions (only available non-recharging actions in range & line of sight).
         if res.get("action") and enemies:
             m_actions = _available_monster_actions(observation)
             for act in m_actions:
                 max_r, _, is_save_aoe = _monster_action_range(act, self_data.get("monster_actions") or m_actions)
-                in_r = [e for e in enemies if distance_ft(self_pos, e["position"]) <= max_r]
+                in_r = [
+                    e
+                    for e in enemies
+                    if distance_ft(self_pos, e["position"]) <= max_r
+                    and has_line_of_sight(self_pos, e["position"], terrain)
+                ]
                 if not in_r:
                     continue
                 if is_save_aoe:
@@ -1191,26 +1340,53 @@ class RandomDriver:
             if action_type == "reaction":
                 continue  # reaction spells (Shield) are cast by the engine when triggered (#33)
 
-            # Teleport spell requires valid destination within max_distance_ft.
+            # Teleport spell requires valid destination within max_distance_ft, bounds, off wall, and LoS.
             buffs = list(sp_rec.get("buffs") or [])
             tp_buff = next((b for b in buffs if b.get("kind") == "teleport"), None)
             if tp_buff is not None:
+                occ = _occupied_squares(observation)
                 max_d = int(tp_buff.get("max_distance_ft", 30))
-                step_d = min(15, max_d)
-                sp_intent["destination"] = {"x": int(self_pos["x"]) - step_d, "y": int(self_pos["y"])}
-                sp_intent["target_ids"] = [actor_id]
-                candidates.append(sp_intent)
+                tp_dest = _best_kite_position(
+                    self_pos,
+                    max_d,
+                    enemies,
+                    allies,
+                    occupied=occ,
+                    bounds=bounds,
+                    terrain=terrain,
+                    is_teleport=True,
+                )
+                if tp_dest is None:
+                    ox, oy = int(self_pos["x"]), int(self_pos["y"])
+                    for dx_t, dy_t in ((-15, 0), (15, 0), (0, -15), (0, 15), (-10, 0), (10, 0), (-5, 0), (5, 0)):
+                        cand = {"x": ox + dx_t, "y": oy + dy_t}
+                        if (
+                            distance_ft(self_pos, cand) <= max_d
+                            and _is_free(cand, occ)
+                            and in_bounds(cand, bounds)
+                            and not is_wall(cand, terrain)
+                            and has_line_of_sight(self_pos, cand, terrain)
+                        ):
+                            tp_dest = cand
+                            break
+                if tp_dest is not None:
+                    sp_intent["destination"] = tp_dest
+                    sp_intent["target_ids"] = [actor_id]
+                    candidates.append(sp_intent)
                 continue
 
             resolution = str(sp_rec.get("resolution") or "utility").lower()
             if resolution in ("attack", "save", "auto_hit"):
-                if not enemies:
+                los_enemies = [e for e in enemies if has_line_of_sight(self_pos, e["position"], terrain)]
+                if not los_enemies:
                     continue
-                tgt = self._rng.choice(enemies)
+                tgt = self._rng.choice(los_enemies)
                 sp_intent["target_ids"] = [str(tgt["id"])]
                 candidates.append(sp_intent)
             elif sp_rec.get("healing") or sp_rec.get("buffs"):
-                pool_ids = [actor_id] + [str(a["id"]) for a in allies]
+                pool_ids = [actor_id] + [
+                    str(a["id"]) for a in allies if has_line_of_sight(self_pos, a["position"], terrain)
+                ]
                 sp_intent["target_ids"] = [self._rng.choice(pool_ids)]
                 candidates.append(sp_intent)
 
@@ -1260,6 +1436,9 @@ class GreedyDriver:
         rem_move = int(self_data.get("movement_remaining_ft", legal.get("movement_remaining_ft", 0)))
         speed = int(self_data.get("speed_ft", 30))
         caster_level = int(self_data.get("level", 1))
+        bounds, terrain = _obs_bounds_terrain(observation)
+        is_prone = "prone" in conds
+        los_enemies = [e for e in enemies if has_line_of_sight(self_pos, e["position"], terrain)]
 
         if observation.get("retry_feedback") or not enemies:
             return AgentDecision(
@@ -1303,9 +1482,9 @@ class GreedyDriver:
             eff_range = _spell_effective_range_ft(sp_slug, sp_rec)
 
             if aoe:
-                # Greedy ignores friendly fire and immunities, maximizing raw enemy targets hit.
+                # Greedy ignores friendly fire and immunities, maximizing raw enemy targets hit (within LoS).
                 hit_targets = _aoe_targets_for_spell(
-                    sp_slug, sp_rec, self_pos, enemies, [], avoid_friendlies=False
+                    sp_slug, sp_rec, self_pos, los_enemies, [], avoid_friendlies=False
                 )
                 if hit_targets:
                     total_raw = per_tgt_dmg * len(hit_targets)
@@ -1334,7 +1513,7 @@ class GreedyDriver:
                     tie = (10.0 if sp_slug == "fireball" else 0.0) + eff_range * 0.01 - idx * 0.001
                     options.append((per_tgt_dmg, False, tie, max(5, eff_range), intent, f"spell:{sp_slug}"))
             else:
-                in_r = [e for e in enemies if distance_ft(self_pos, e["position"]) <= max(5, eff_range)]
+                in_r = [e for e in los_enemies if distance_ft(self_pos, e["position"]) <= max(5, eff_range)]
                 if in_r:
                     tgt = min(in_r, key=lambda e: (distance_ft(self_pos, e["position"]), str(e["id"])))
                     intent = {
@@ -1366,7 +1545,7 @@ class GreedyDriver:
             for wp in self_data.get("weapons") or []:
                 raw_dmg = _weapon_expected_damage(wp)
                 _, max_r, _ = _weapon_max_range(wp)
-                in_r = [e for e in enemies if distance_ft(self_pos, e["position"]) <= max_r]
+                in_r = [e for e in los_enemies if distance_ft(self_pos, e["position"]) <= max_r]
                 if in_r:
                     tgt = min(in_r, key=lambda e: (distance_ft(self_pos, e["position"]), str(e["id"])))
                     intent = {
@@ -1395,7 +1574,7 @@ class GreedyDriver:
                     continue
                 max_r, _, is_save_aoe = _monster_action_range(act, all_m)
                 if is_save_aoe:
-                    hit = _cone_aoe_targets(self_pos, enemies, [], size_ft=max_r, avoid_friendlies=False)
+                    hit = _cone_aoe_targets(self_pos, los_enemies, [], size_ft=max_r, avoid_friendlies=False)
                     if hit:
                         intent = {
                             "type": "attack",
@@ -1414,7 +1593,7 @@ class GreedyDriver:
                         }
                         options.append((per_dmg, False, 1.0, max_r, intent, f"monster:{act['name']}"))
                 else:
-                    in_r = [e for e in enemies if distance_ft(self_pos, e["position"]) <= max_r]
+                    in_r = [e for e in los_enemies if distance_ft(self_pos, e["position"]) <= max_r]
                     if in_r:
                         tgt = min(in_r, key=lambda e: (distance_ft(self_pos, e["position"]), str(e["id"])))
                         intent = {
@@ -1452,12 +1631,21 @@ class GreedyDriver:
                 table_talk=None,
             )
 
-        # Best raw damage option is currently out of range: move toward nearest enemy if possible.
-        crawl_mult = 2 if "prone" in conds else 1
-        max_step = rem_move // crawl_mult
-        if max_step >= 5 and speed > 0 and "frightened" not in conds:
+        # Best raw damage option is currently out of range or blocked by wall: move toward nearest enemy.
+        crawl_mult = 2 if is_prone else 1
+        max_step = rem_move if (bounds is not None or terrain is not None) else (rem_move // crawl_mult)
+        if rem_move >= 5 * crawl_mult and speed > 0 and "frightened" not in conds:
             nearest = min(enemies, key=lambda e: (distance_ft(self_pos, e["position"]), str(e["id"])))
-            dest = _step_toward(self_pos, nearest["position"], max_step, desired_dist_ft=max(5, min(best_range, 5)), occupied=_occupied_squares(observation))
+            dest = _step_toward(
+                self_pos,
+                nearest["position"],
+                max_step,
+                desired_dist_ft=max(5, min(best_range, 5)),
+                occupied=_occupied_squares(observation),
+                bounds=bounds,
+                terrain=terrain,
+                is_prone=is_prone,
+            )
             if dest != self_pos:
                 return AgentDecision(
                     intent={"type": "move", "actor_id": actor_id, "to": dest},
@@ -1575,6 +1763,8 @@ class HeuristicTacticalDriver:
         allies = _conscious_allies(observation)
         downed = _downed_allies(observation)
         is_party = side == "party"
+        bounds, terrain = _obs_bounds_terrain(observation)
+        is_prone = "prone" in conds
 
         turn_key = (round_num, actor_id)
         if res.get("action") and int(res.get("attacks_remaining", 0)) == 0 and self._nick_used_turn == turn_key:
@@ -1627,6 +1817,8 @@ class HeuristicTacticalDriver:
                 conds=conds,
                 enemies=enemies,
                 allies=allies,
+                bounds=bounds,
+                terrain=terrain,
             )
 
         # ------------------------------------------------------------------
@@ -1655,6 +1847,8 @@ class HeuristicTacticalDriver:
                 conds=conds,
                 is_party=is_party,
                 occupied=_occupied_squares(observation),
+                bounds=bounds,
+                terrain=terrain,
             )
             if revival is not None:
                 return revival
@@ -1681,6 +1875,9 @@ class HeuristicTacticalDriver:
                     preferred_range_ft=35,
                     spread_from_allies=self._has_breath_enemy(enemies),
                     occupied=_occupied_squares(observation),
+                    bounds=bounds,
+                    terrain=terrain,
+                    is_teleport=True,
                 )
                 if dest is not None and dest != self_pos:
                     return AgentDecision(
@@ -1705,6 +1902,7 @@ class HeuristicTacticalDriver:
             slots=slots,
             spell_recs=spell_recs,
             is_party=is_party,
+            terrain=terrain,
         )
         if triage is not None:
             return triage
@@ -1719,7 +1917,12 @@ class HeuristicTacticalDriver:
                 "bless", spell_recs["bless"], self_data, slots, allow_reaction=False
             )
             if can_bless:
-                bless_pool = [a for a in allies if distance_ft(self_pos, a["position"]) <= 30]
+                bless_pool = [
+                    a
+                    for a in allies
+                    if distance_ft(self_pos, a["position"]) <= 30
+                    and has_line_of_sight(self_pos, a["position"], terrain)
+                ]
                 # Prioritize Fighters/Rogues/attackers, then casters, then self.
                 def _bless_rank(member: dict[str, Any]) -> tuple[int, int]:
                     m_name = str(member.get("name") or "").lower()
@@ -1759,6 +1962,7 @@ class HeuristicTacticalDriver:
             allies=allies,
             slots=slots,
             spell_recs=spell_recs,
+            terrain=terrain,
         )
 
         # 3g. Wizard `mage-armor` if unarmored and not active, but only while no offensive spell can reach an
@@ -1816,6 +2020,9 @@ class HeuristicTacticalDriver:
                     preferred_range_ft=35,
                     spread_from_allies=has_breath,
                     occupied=_occupied_squares(observation),
+                    bounds=bounds,
+                    terrain=terrain,
+                    is_prone=is_prone,
                 )
                 if kite_dest is not None and kite_dest != self_pos:
                     self._moved_turn = turn_key
@@ -1831,7 +2038,16 @@ class HeuristicTacticalDriver:
             # Check if we need to move closer first for a short-range spell like burning-hands/shatter.
             if not best_spell_plan["in_range"] and rem_move >= 5 and speed > 0 and "frightened" not in conds:
                 tgt_pos = best_spell_plan["anchor_pos"]
-                dest = _step_toward(self_pos, tgt_pos, rem_move, desired_dist_ft=best_spell_plan["desired_dist"], occupied=_occupied_squares(observation))
+                dest = _step_toward(
+                    self_pos,
+                    tgt_pos,
+                    rem_move,
+                    desired_dist_ft=best_spell_plan["desired_dist"],
+                    occupied=_occupied_squares(observation),
+                    bounds=bounds,
+                    terrain=terrain,
+                    is_prone=is_prone,
+                )
                 if dest != self_pos:
                     return AgentDecision(
                         intent={"type": "move", "actor_id": actor_id, "to": dest},
@@ -1868,6 +2084,8 @@ class HeuristicTacticalDriver:
             turn_key=turn_key,
             is_party=is_party,
             occupied=_occupied_squares(observation),
+            bounds=bounds,
+            terrain=terrain,
         )
         if weapon_decision is not None:
             return weapon_decision
@@ -1891,6 +2109,9 @@ class HeuristicTacticalDriver:
                 preferred_range_ft=35,
                 spread_from_allies=True,
                 occupied=_occupied_squares(observation),
+                bounds=bounds,
+                terrain=terrain,
+                is_prone=is_prone,
             )
             if spread_dest is not None and spread_dest != self_pos:
                 self._moved_turn = turn_key
@@ -1898,6 +2119,34 @@ class HeuristicTacticalDriver:
                     intent={"type": "move", "actor_id": actor_id, "to": spread_dest},
                     rationale="Spreading >= 20 ft from allies to deny multi-target breath cones.",
                     table_talk="Spreading out—don't bunch up for Fire Breath!" if is_party else None,
+                )
+
+        # 3k2. If caster/ranged still has action & movement but walls blocked LoS to all enemies, reposition!
+        if (
+            res.get("action")
+            and rem_move >= 5
+            and speed > 0
+            and "frightened" not in conds
+            and self._moved_turn != turn_key
+            and terrain is not None
+        ):
+            nearest = min(enemies, key=lambda e: distance_ft(self_pos, e["position"]))
+            dest = _step_toward(
+                self_pos,
+                nearest["position"],
+                rem_move,
+                desired_dist_ft=25 if is_caster else 5,
+                occupied=_occupied_squares(observation),
+                bounds=bounds,
+                terrain=terrain,
+                is_prone=is_prone,
+            )
+            if dest != self_pos:
+                self._moved_turn = turn_key
+                return AgentDecision(
+                    intent={"type": "move", "actor_id": actor_id, "to": dest},
+                    rationale=f"Repositioning around terrain for line of sight to {nearest['name']}.",
+                    table_talk=None,
                 )
 
         # 3l. Fallback Action if Action still unused (Dash if out of reach, else Help/Dodge)
@@ -1940,11 +2189,15 @@ class HeuristicTacticalDriver:
         conds: set[str],
         is_party: bool,
         occupied: set[tuple[int, int]] | None = None,
+        bounds: dict[str, int] | None = None,
+        terrain: dict[str, Any] | None = None,
     ) -> AgentDecision | None:
         # Sort downed allies by closest first.
         downed_sorted = sorted(downed, key=lambda a: (distance_ft(self_pos, a["position"]), str(a["id"])))
         target = downed_sorted[0]
         dist = distance_ft(self_pos, target["position"])
+        is_prone = "prone" in conds
+        has_los = has_line_of_sight(self_pos, target["position"], terrain)
 
         # 1. Bonus Action: mass-healing-word (if >=2 allies hurt/downed) or healing-word (60 ft!)
         for sp_slug in ("mass-healing-word", "healing-word"):
@@ -1957,12 +2210,13 @@ class HeuristicTacticalDriver:
             can_cast, _, slot_lvl = _can_cast_spell_now(sp_slug, spell_recs[sp_slug], self_data, slots)
             if not can_cast:
                 continue
-            if dist <= 60:
+            if dist <= 60 and has_los:
                 if sp_slug == "mass-healing-word":
                     heal_ids = [
                         str(a["id"])
                         for a in (downed_sorted + [x for x in allies if int(x.get("hp", 1)) < int(x.get("hp_max", 1))])
                         if distance_ft(self_pos, a["position"]) <= 60
+                        and has_line_of_sight(self_pos, a["position"], terrain)
                     ][:6]
                 else:
                     heal_ids = [str(target["id"])]
@@ -1978,7 +2232,16 @@ class HeuristicTacticalDriver:
                     table_talk=f"Get back up, {target['name']}! Casting {sp_slug}!" if is_party else None,
                 )
             if rem_move >= 5 and speed > 0 and "frightened" not in conds:
-                dest = _step_toward(self_pos, target["position"], rem_move, desired_dist_ft=60, occupied=occupied)
+                dest = _step_toward(
+                    self_pos,
+                    target["position"],
+                    rem_move,
+                    desired_dist_ft=60,
+                    occupied=occupied,
+                    bounds=bounds,
+                    terrain=terrain,
+                    is_prone=is_prone,
+                )
                 if dest != self_pos:
                     return AgentDecision(
                         intent={"type": "move", "actor_id": actor_id, "to": dest},
@@ -1989,8 +2252,13 @@ class HeuristicTacticalDriver:
         # 2. Action: aid (30 ft, heals 5 HP) or cure-wounds (5 ft touch)
         if "aid" in spell_recs:
             can_aid, _, aid_slot = _can_cast_spell_now("aid", spell_recs["aid"], self_data, slots)
-            if can_aid and dist <= 30:
-                tids = [str(a["id"]) for a in downed_sorted if distance_ft(self_pos, a["position"]) <= 30][:3]
+            if can_aid and dist <= 30 and has_los:
+                tids = [
+                    str(a["id"])
+                    for a in downed_sorted
+                    if distance_ft(self_pos, a["position"]) <= 30
+                    and has_line_of_sight(self_pos, a["position"], terrain)
+                ][:3]
                 return AgentDecision(
                     intent={
                         "type": "cast_spell",
@@ -2006,7 +2274,7 @@ class HeuristicTacticalDriver:
         if "cure-wounds" in spell_recs:
             can_cw, _, cw_slot = _can_cast_spell_now("cure-wounds", spell_recs["cure-wounds"], self_data, slots)
             if can_cw:
-                if dist <= 5:
+                if dist <= 5 and has_los:
                     return AgentDecision(
                         intent={
                             "type": "cast_spell",
@@ -2019,7 +2287,16 @@ class HeuristicTacticalDriver:
                         table_talk=f"Healing {target['name']} with Cure Wounds—stand up!" if is_party else None,
                     )
                 if rem_move >= 5 and speed > 0 and "frightened" not in conds:
-                    dest = _step_toward(self_pos, target["position"], rem_move, desired_dist_ft=5, occupied=occupied)
+                    dest = _step_toward(
+                        self_pos,
+                        target["position"],
+                        rem_move,
+                        desired_dist_ft=5,
+                        occupied=occupied,
+                        bounds=bounds,
+                        terrain=terrain,
+                        is_prone=is_prone,
+                    )
                     if dest != self_pos:
                         return AgentDecision(
                             intent={"type": "move", "actor_id": actor_id, "to": dest},
@@ -2038,6 +2315,7 @@ class HeuristicTacticalDriver:
         slots: dict[int, int],
         spell_recs: dict[str, dict[str, Any]],
         is_party: bool,
+        terrain: dict[str, Any] | None = None,
     ) -> AgentDecision | None:
         if "healing-word" not in spell_recs and "mass-healing-word" not in spell_recs:
             return None
@@ -2050,6 +2328,7 @@ class HeuristicTacticalDriver:
             a
             for a in allies
             if distance_ft(self_pos, a["position"]) <= 60
+            and has_line_of_sight(self_pos, a["position"], terrain)
             and int(a.get("hp", 1)) <= int(max(1, a.get("hp_max", 1)) * 0.40)
         ]
         # Also consider self if critically low.
@@ -2108,6 +2387,7 @@ class HeuristicTacticalDriver:
         allies: list[dict[str, Any]],
         slots: dict[int, int],
         spell_recs: dict[str, dict[str, Any]],
+        terrain: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         res = self_data.get("turn_resources") or {}
         if not res.get("action") and not res.get("bonus_action"):
@@ -2121,6 +2401,7 @@ class HeuristicTacticalDriver:
         friendlies = [{"id": actor_id, "position": self_pos}] + list(allies)
         has_heal_role = "healing-word" in spell_recs or "cure-wounds" in spell_recs
         total_slots = sum(slots.values())
+        los_enemies = [e for e in enemies if has_line_of_sight(self_pos, e["position"], terrain)]
 
         skipped_immune_fire = False
         best_plan: dict[str, Any] | None = None
@@ -2150,9 +2431,9 @@ class HeuristicTacticalDriver:
             is_ranged_atk = resolution == "attack" and str(sp_rec.get("attack_kind") or "ranged").lower() != "melee"
 
             if aoe:
-                # Strictly exclude friendlies AND any enemy immune to this spell's damage!
+                # Strictly exclude friendlies, out-of-LoS targets, AND any enemy immune to this spell's damage!
                 non_immune_enemies = []
-                for e in enemies:
+                for e in los_enemies:
                     dmg_e, hits_imm = _spell_expected_damage_per_target(
                         sp_slug,
                         sp_rec,
@@ -2218,7 +2499,7 @@ class HeuristicTacticalDriver:
             else:
                 # Single-target or multi-projectile spell.
                 adj_hostile = any(distance_ft(self_pos, e["position"]) <= 5 for e in enemies)
-                for e in enemies:
+                for e in los_enemies:
                     dist = distance_ft(self_pos, e["position"])
                     dmg_e, hits_imm = _spell_expected_damage_per_target(
                         sp_slug,
@@ -2239,18 +2520,21 @@ class HeuristicTacticalDriver:
                     if not in_r:
                         continue
 
-                    # Account for accuracy / auto-hit / disadvantage.
+                    # Account for accuracy / auto-hit / disadvantage / cover.
+                    _, cov_b = compute_cover(self_pos, e["position"], terrain)
                     if resolution == "auto_hit":
                         hit_prob = 1.0
                     elif resolution == "attack":
-                        hit_prob = 0.65
+                        hit_prob = max(0.20, 0.65 - 0.05 * cov_b)
                         if is_ranged_atk and adj_hostile:
-                            hit_prob = 0.42
+                            hit_prob = max(0.15, hit_prob - 0.23)
                         if sp_slug == "chill-touch" and dist > 5:
                             hit_prob = 0.40
                     else:
+                        save_ab = strip_prefix(str((sp_rec.get("save") or {}).get("ability") or "dex"))
                         save_on_succ = str((sp_rec.get("save") or {}).get("on_success") or "none").lower()
-                        hit_prob = 0.78 if save_on_succ == "half" else 0.58
+                        base_p = 0.78 if save_on_succ == "half" else 0.58
+                        hit_prob = max(0.30, base_p - (0.04 * cov_b if save_ab == "dex" else 0.0))
 
                     eff_dmg = dmg_e * hit_prob
                     bonus = 0.0
@@ -2312,10 +2596,13 @@ class HeuristicTacticalDriver:
         turn_key: tuple[int, str],
         is_party: bool,
         occupied: set[tuple[int, int]] | None = None,
+        bounds: dict[str, int] | None = None,
+        terrain: dict[str, Any] | None = None,
     ) -> AgentDecision | None:
         weapons = list(self_data.get("weapons") or [])
         if not weapons:
             return None
+        is_prone = "prone" in conds
 
         # Check Rogue / Dual-Wield off-hand Nick attack AFTER main Light weapon attack!
         nick_used = bool(res.get("nick_used")) or (self._nick_used_turn == turn_key)
@@ -2337,7 +2624,7 @@ class HeuristicTacticalDriver:
                     if w.get("mastery") == "nick" and w.get("mastery_active") and "light" in (w.get("properties") or [])
                 )
                 _, max_r, _ = _weapon_max_range(nick_wp)
-                valid_t = self._non_immune_weapon_targets(nick_wp, enemies, self_pos, max_r)
+                valid_t = self._non_immune_weapon_targets(nick_wp, enemies, self_pos, max_r, terrain=terrain)
                 if valid_t:
                     tgt = max(valid_t, key=lambda e: self._target_priority(e, self_pos))
                     self._nick_used_turn = turn_key
@@ -2357,7 +2644,7 @@ class HeuristicTacticalDriver:
                 light_wps = [w for w in weapons if "light" in (w.get("properties") or [])]
                 for lw in light_wps:
                     _, max_r, _ = _weapon_max_range(lw)
-                    valid_t = self._non_immune_weapon_targets(lw, enemies, self_pos, max_r)
+                    valid_t = self._non_immune_weapon_targets(lw, enemies, self_pos, max_r, terrain=terrain)
                     if valid_t:
                         tgt = max(valid_t, key=lambda e: self._target_priority(e, self_pos))
                         return AgentDecision(
@@ -2388,13 +2675,26 @@ class HeuristicTacticalDriver:
         ranked_enemies = sorted(enemies, key=lambda e: self._target_priority(e, self_pos), reverse=True)
         top_target = ranked_enemies[0]
 
-        # If we are a melee/skirmisher PC and no enemy is within 5 ft, move into 5 ft if reachable!
-        in_melee = [e for e in ranked_enemies if distance_ft(self_pos, e["position"]) <= 5]
+        # If we are a melee/skirmisher PC and no enemy is within 5 ft (and LoS), move into 5 ft if reachable!
+        in_melee = [
+            e
+            for e in ranked_enemies
+            if distance_ft(self_pos, e["position"]) <= 5 and has_line_of_sight(self_pos, e["position"], terrain)
+        ]
         if not in_melee and melee_wps and rem_move >= 5 and speed > 0 and "frightened" not in conds:
             # Prefer a priority target we can actually reach within remaining movement!
             reachable = [e for e in ranked_enemies if distance_ft(self_pos, e["position"]) - 5 <= rem_move]
             move_target = reachable[0] if reachable else top_target
-            dest = _step_toward(self_pos, move_target["position"], rem_move, desired_dist_ft=5, occupied=occupied)
+            dest = _step_toward(
+                self_pos,
+                move_target["position"],
+                rem_move,
+                desired_dist_ft=5,
+                occupied=occupied,
+                bounds=bounds,
+                terrain=terrain,
+                is_prone=is_prone,
+            )
             if dest != self_pos:
                 return AgentDecision(
                     intent={"type": "move", "actor_id": actor_id, "to": dest},
@@ -2433,7 +2733,7 @@ class HeuristicTacticalDriver:
             best_pair: tuple[float, dict[str, Any], dict[str, Any]] | None = None
             for wp in ranged_wps:
                 norm_r, max_r, _ = _weapon_max_range(wp)
-                valid_t = self._non_immune_weapon_targets(wp, ranked_enemies, self_pos, max_r)
+                valid_t = self._non_immune_weapon_targets(wp, ranked_enemies, self_pos, max_r, terrain=terrain)
                 for e in valid_t:
                     dist = distance_ft(self_pos, e["position"])
                     imm, res_d, vuln_d = _monster_defense_profile(e, self._rules)
@@ -2441,6 +2741,9 @@ class HeuristicTacticalDriver:
                     dmg = _weapon_expected_damage(wp) * mult
                     if dist > norm_r:
                         dmg *= 0.65
+                    _, cov_b = compute_cover(self_pos, e["position"], terrain)
+                    if cov_b > 0:
+                        dmg *= max(0.5, 1.0 - 0.08 * cov_b)
                     if wp.get("mastery_active") and wp.get("mastery") in ("vex", "slow"):
                         dmg += 1.5
                     sc_val = dmg + self._target_priority(e, self_pos, prefer_melee_dist=False) * 0.25
@@ -2469,11 +2772,15 @@ class HeuristicTacticalDriver:
         enemies: list[dict[str, Any]],
         self_pos: dict[str, int],
         max_range: int,
+        *,
+        terrain: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         dtype = strip_prefix(str(weapon.get("damage_type") or "bludgeoning"))
         out: list[dict[str, Any]] = []
         for e in enemies:
             if distance_ft(self_pos, e["position"]) > max_range:
+                continue
+            if not has_line_of_sight(self_pos, e["position"], terrain):
                 continue
             imm, _, _ = _monster_defense_profile(e, self._rules)
             if dtype in imm:
@@ -2537,6 +2844,8 @@ class HeuristicTacticalDriver:
         conds: set[str],
         enemies: list[dict[str, Any]],
         allies: list[dict[str, Any]],
+        bounds: dict[str, int] | None = None,
+        terrain: dict[str, Any] | None = None,
     ) -> AgentDecision:
         if not res.get("action"):
             return AgentDecision(
@@ -2555,6 +2864,7 @@ class HeuristicTacticalDriver:
                 table_talk=None,
             )
 
+        is_prone = "prone" in conds
         friendlies = [{"id": actor_id, "position": self_pos}] + list(allies)
         ranked_enemies = sorted(enemies, key=lambda e: self._target_priority(e, self_pos), reverse=True)
 
@@ -2575,17 +2885,28 @@ class HeuristicTacticalDriver:
             ]
             if not valid_e:
                 continue
-            cur_hit = _cone_aoe_targets(self_pos, valid_e, friendlies, size_ft=cone_size, avoid_friendlies=True)
+            valid_los_e = [e for e in valid_e if has_line_of_sight(self_pos, e["position"], terrain)]
+            cur_hit = _cone_aoe_targets(self_pos, valid_los_e, friendlies, size_ft=cone_size, avoid_friendlies=True)
 
             # Can we move within rem_move to hit MORE targets with the 15-ft cone?
             if rem_move >= 5 and speed > 0 and "frightened" not in conds and len(cur_hit) < min(2, len(valid_e)):
                 best_pos: dict[str, int] | None = None
                 best_cnt = len(cur_hit)
                 for e in valid_e:
-                    cand = _step_toward(self_pos, e["position"], rem_move, desired_dist_ft=5, occupied=_occupied_squares(observation))
+                    cand = _step_toward(
+                        self_pos,
+                        e["position"],
+                        rem_move,
+                        desired_dist_ft=5,
+                        occupied=_occupied_squares(observation),
+                        bounds=bounds,
+                        terrain=terrain,
+                        is_prone=is_prone,
+                    )
                     if cand == self_pos:
                         continue
-                    c_hit = _cone_aoe_targets(cand, valid_e, friendlies, size_ft=cone_size, avoid_friendlies=True)
+                    cand_los_e = [x for x in valid_e if has_line_of_sight(cand, x["position"], terrain)]
+                    c_hit = _cone_aoe_targets(cand, cand_los_e, friendlies, size_ft=cone_size, avoid_friendlies=True)
                     if len(c_hit) > best_cnt:
                         best_cnt = len(c_hit)
                         best_pos = cand
@@ -2633,7 +2954,11 @@ class HeuristicTacticalDriver:
         ]
 
         # 3. Ghoul / Ghast Claw vs Multiattack/Bite logic
-        in_melee = [e for e in ranked_enemies if distance_ft(self_pos, e["position"]) <= 5]
+        in_melee = [
+            e
+            for e in ranked_enemies
+            if distance_ft(self_pos, e["position"]) <= 5 and has_line_of_sight(self_pos, e["position"], terrain)
+        ]
         if in_melee:
             paralyzed_in_melee = [e for e in in_melee if "paralyzed" in _condition_set(e)]
             if paralyzed_in_melee:
@@ -2687,7 +3012,12 @@ class HeuristicTacticalDriver:
         if ranged_acts:
             for r_act in ranged_acts:
                 max_r, _, _ = _monster_action_range(r_act, all_actions)
-                in_r = [e for e in ranked_enemies if distance_ft(self_pos, e["position"]) <= max_r]
+                in_r = [
+                    e
+                    for e in ranked_enemies
+                    if distance_ft(self_pos, e["position"]) <= max_r
+                    and has_line_of_sight(self_pos, e["position"], terrain)
+                ]
                 if in_r:
                     tgt = in_r[0]
                     return AgentDecision(
@@ -2701,11 +3031,20 @@ class HeuristicTacticalDriver:
                         table_talk=None,
                     )
 
-        # 5. Melee monster out of reach: close to 5 ft of best reachable target!
+        # 5. Melee monster (or ranged monster blocked by walls) out of reach/LoS: move toward best target!
         if rem_move >= 5 and speed > 0 and "frightened" not in conds:
             reachable = [e for e in ranked_enemies if distance_ft(self_pos, e["position"]) - 5 <= rem_move]
             move_target = reachable[0] if reachable else ranked_enemies[0]
-            dest = _step_toward(self_pos, move_target["position"], rem_move, desired_dist_ft=5, occupied=_occupied_squares(observation))
+            dest = _step_toward(
+                self_pos,
+                move_target["position"],
+                rem_move,
+                desired_dist_ft=5,
+                occupied=_occupied_squares(observation),
+                bounds=bounds,
+                terrain=terrain,
+                is_prone=is_prone,
+            )
             if dest != self_pos:
                 return AgentDecision(
                     intent={"type": "move", "actor_id": actor_id, "to": dest},

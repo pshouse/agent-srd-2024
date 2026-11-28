@@ -9,7 +9,7 @@
  * and are only ever rendered with textContent.
  */
 
-import { tokenLabels } from "../lib/replay-model.js";
+import { tokenLabels, validateBounds, validateTerrain } from "../lib/replay-model.js";
 
 export const STATUSES = new Set(["ready", "running", "awaiting_input", "finished", "paused", "error"]);
 export const CATEGORIES = ["attack", "spell", "move", "tactical", "turn"];
@@ -114,6 +114,8 @@ function checkView(view) {
     }
   }
   if (!Array.isArray(view.table_talk) || !Array.isArray(view.recent_events)) out.push("view talk and events must be lists.");
+  if ("bounds" in view && view.bounds !== null) out.push(...validateBounds(view.bounds));
+  if ("terrain" in view && view.terrain !== null) out.push(...validateTerrain(view.terrain));
   return out;
 }
 
@@ -135,7 +137,13 @@ export function boardModel(view) {
   const labels = tokenLabels(rows.map((r) => r.name));
   const roster = new Map(rows.map((r, i) => [r.id, { id: r.id, name: r.name, side: r.side, hpMax: r.hpMax, ac: r.ac, label: labels[i] }]));
   const frame = { activeId: me.id, units: rows.map((r) => r.unit) };
-  return { roster, frame, bounds: boardBoundsFor(view) };
+  return {
+    roster,
+    frame,
+    bounds: boardBoundsFor(view),
+    battlefieldBounds: view.bounds || null,
+    terrain: view.terrain || null,
+  };
 }
 
 function unitOf(row, pos, hp, alive) {
@@ -164,10 +172,33 @@ export function boardBoundsFor(view) {
   let minY = Math.min(...pts.map((p) => p.y)) - PAD_FT;
   let maxX = Math.max(...pts.map((p) => p.x)) + PAD_FT;
   let maxY = Math.max(...pts.map((p) => p.y)) + PAD_FT;
-  minX = Math.min(minX, view.self.position.x - reach);
-  minY = Math.min(minY, view.self.position.y - reach);
-  maxX = Math.max(maxX, view.self.position.x + reach);
-  maxY = Math.max(maxY, view.self.position.y + reach);
+  const room = view.bounds || null;
+  if (room) {
+    minX = Math.min(minX, room.min_x - 5);
+    minY = Math.min(minY, room.min_y - 5);
+    maxX = Math.max(maxX, room.max_x + 5);
+    maxY = Math.max(maxY, room.max_y + 5);
+  } else {
+    minX = Math.min(minX, view.self.position.x - reach);
+    minY = Math.min(minY, view.self.position.y - reach);
+    maxX = Math.max(maxX, view.self.position.x + reach);
+    maxY = Math.max(maxY, view.self.position.y + reach);
+  }
+  const terrain = view.terrain || null;
+  if (terrain) {
+    for (const pair of [...(terrain.walls || []), ...(terrain.difficult_terrain || [])]) {
+      minX = Math.min(minX, pair[0] - 5);
+      minY = Math.min(minY, pair[1] - 5);
+      maxX = Math.max(maxX, pair[0] + 5);
+      maxY = Math.max(maxY, pair[1] + 5);
+    }
+    for (const c of terrain.cover || []) {
+      minX = Math.min(minX, c.x - 5);
+      minY = Math.min(minY, c.y - 5);
+      maxX = Math.max(maxX, c.x + 5);
+      maxY = Math.max(maxY, c.y + 5);
+    }
+  }
   const x = snap(minX);
   const y = snap(minY);
   return { x, y, w: snap(maxX) + 5 - x, h: snap(maxY) + 5 - y };
@@ -178,23 +209,77 @@ export function distanceFt(a, b) {
   return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 }
 
+function inRoomBounds(x, y, room) {
+  if (!room) return true;
+  return x >= room.min_x && x <= room.max_x && y >= room.min_y && y <= room.max_y;
+}
+
 /**
  * Squares the active combatant could walk to with its remaining movement,
- * inside the board, not counting occupied squares. This is a hint for the
- * highlight; the engine still validates every move.
+ * inside the board (and battlefield bounds / around walls & difficult terrain),
+ * not counting occupied squares. This is a hint for the highlight; the engine
+ * still validates every move.
  */
 export function reachableSquares(view, bounds) {
   const me = view.self;
   if (!me.resources || me.speed_ft <= 0) return [];
-  const cost = me.conditions.includes("prone") ? 2 : 1;
+  const isProne = me.conditions.includes("prone");
+  const baseCost = isProne ? 2 : 1;
   const budget = me.movement_remaining_ft;
-  if (budget < 5 * cost) return [];
+  if (budget < 5 * baseCost) return [];
   const taken = occupiedSquares(view);
+  const room = view.bounds || null;
+  const terrain = view.terrain || null;
+  const walls = new Set((terrain && terrain.walls ? terrain.walls : []).map(([wx, wy]) => `${wx},${wy}`));
+  const diff = new Set((terrain && terrain.difficult_terrain ? terrain.difficult_terrain : []).map(([dx, dy]) => `${dx},${dy}`));
+
+  if (walls.size > 0 || diff.size > 0) {
+    const sx = snap(me.position.x);
+    const sy = snap(me.position.y);
+    const dist = new Map([[`${sx},${sy}`, 0]]);
+    const queue = [{ x: sx, y: sy, cost: 0 }];
+    while (queue.length) {
+      queue.sort((a, b) => a.cost - b.cost);
+      const cur = queue.shift();
+      const key = `${cur.x},${cur.y}`;
+      if (cur.cost > dist.get(key)) continue;
+      for (const stepX of [-5, 0, 5]) {
+        for (const stepY of [-5, 0, 5]) {
+          if (stepX === 0 && stepY === 0) continue;
+          const nx = cur.x + stepX;
+          const ny = cur.y + stepY;
+          if (nx < bounds.x || nx >= bounds.x + bounds.w || ny < bounds.y || ny >= bounds.y + bounds.h) continue;
+          if (!inRoomBounds(nx, ny, room)) continue;
+          const nKey = `${nx},${ny}`;
+          if (walls.has(nKey)) continue;
+          if (stepX !== 0 && stepY !== 0 && (walls.has(`${cur.x + stepX},${cur.y}`) || walls.has(`${cur.x},${cur.y + stepY}`))) {
+            continue;
+          }
+          const stepMult = 1 + (isProne ? 1 : 0) + (diff.has(nKey) ? 1 : 0);
+          const nextCost = cur.cost + 5 * stepMult;
+          if (nextCost > budget) continue;
+          if (nextCost < (dist.get(nKey) ?? Infinity)) {
+            dist.set(nKey, nextCost);
+            queue.push({ x: nx, y: ny, cost: nextCost });
+          }
+        }
+      }
+    }
+    const out = [];
+    for (const key of dist.keys()) {
+      if (key === `${sx},${sy}` || taken.has(key)) continue;
+      const [x, y] = key.split(",").map(Number);
+      out.push({ x, y });
+    }
+    return out;
+  }
+
   const out = [];
   for (let x = bounds.x; x < bounds.x + bounds.w; x += 5) {
     for (let y = bounds.y; y < bounds.y + bounds.h; y += 5) {
+      if (!inRoomBounds(x, y, room)) continue;
       const d = distanceFt(me.position, { x, y });
-      if (d === 0 || d * cost > budget || taken.has(`${x},${y}`)) continue;
+      if (d === 0 || d * baseCost > budget || taken.has(`${x},${y}`)) continue;
       out.push({ x, y });
     }
   }
@@ -250,6 +335,12 @@ export function clickAction(view, menu, sq, reachable) {
   }
   if (reachable.some((r) => r.x === sq.x && r.y === sq.y)) {
     return { type: "move", body: { kind: "move", x: sq.x, y: sq.y } };
+  }
+  if (view.bounds && !inRoomBounds(sq.x, sq.y, view.bounds)) {
+    return { type: "none", reason: `(${sq.x}, ${sq.y}) is outside the battlefield bounds.` };
+  }
+  if (view.terrain && Array.isArray(view.terrain.walls) && view.terrain.walls.some(([wx, wy]) => wx === sq.x && wy === sq.y)) {
+    return { type: "none", reason: `(${sq.x}, ${sq.y}) is blocked by a wall.` };
   }
   return { type: "none", reason: `(${sq.x}, ${sq.y}) is out of your movement this turn.` };
 }

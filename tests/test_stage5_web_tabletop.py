@@ -243,12 +243,20 @@ class TestWebTabletopSecurity(unittest.TestCase):
             self.assertNotIn("hp", enemy)
             self.assertNotIn("ac", enemy)
             self.assertNotIn("hp_max", enemy)
+        # Out-of-bounds move is rejected with a bounds error.
         status, data = self.live.api("POST", "/api/action", {"kind": "move", "x": 200, "y": 0})
         self.assertEqual(status, 422)
         self.assertFalse(data["ok"])
-        self.assertIn("Insufficient movement", data["error"])
+        self.assertIn("outside battlefield bounds", data["error"])
         self.assertEqual(data["state"]["status"], "awaiting_input")
         self.assertNotIn(self.live.token, json.dumps(data))
+        # In-bounds move exceeding movement budget is rejected with Insufficient movement.
+        status2, data2 = self.live.api("POST", "/api/action", {"kind": "move", "x": 45, "y": 0})
+        self.assertEqual(status2, 422)
+        self.assertFalse(data2["ok"])
+        self.assertIn("Insufficient movement", data2["error"])
+        self.assertEqual(data2["state"]["status"], "awaiting_input")
+        self.assertNotIn(self.live.token, json.dumps(data2))
 
 
 class TestWebTabletopPlay(unittest.TestCase):

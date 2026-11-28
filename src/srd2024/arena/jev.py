@@ -20,7 +20,13 @@ import json
 import os
 from typing import Any
 
-from srd2024.engine.combat import distance_ft, spell_target_allowed
+from srd2024.engine.combat import (
+    compute_cover,
+    distance_ft,
+    has_line_of_sight,
+    movement_path_cost,
+    spell_target_allowed,
+)
 from srd2024.engine.store import RulesStore
 
 from .agents import (
@@ -36,6 +42,7 @@ from .agents import (
     _conscious_allies,
     _downed_allies,
     _ensure_rules,
+    _obs_bounds_terrain,
     _reject_control_chars_in_secret,
     _spell_aoe_spec,
     _spell_effective_range_ft,
@@ -93,6 +100,7 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
     enemies = _alive_enemies(observation)
     allies = _conscious_allies(observation)
     downed = _downed_allies(observation)
+    bounds, terrain = _obs_bounds_terrain(observation)
     out: list[tuple[str, str, dict[str, Any]]] = []
     seen: set[str] = set()
 
@@ -119,18 +127,22 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
             d = distance_ft(pos, e["position"])
             if d > long_r:
                 continue
+            if not has_line_of_sight(pos, e["position"], terrain):
+                continue
+            cov_kind, cov_b = compute_cover(pos, e["position"], terrain)
+            cov_txt = f" ({cov_kind.replace('_', '-')} cover: +{cov_b} AC)" if (cov_b > 0 and cov_kind) else ""
             far = " at long range (Disadvantage)" if d > normal else ""
             if can_attack:
                 add(
                     f"attack {e['id']} with {slug}",
-                    f"Weapon attack on {_enemy_label(e, pos)} with {w.get('name', slug)} ({dmg}{mastery}){far}.",
+                    f"Weapon attack on {_enemy_label(e, pos)} with {w.get('name', slug)} ({dmg}{mastery}){far}{cov_txt}.",
                     {"type": "attack", "actor_id": actor_id, "target_id": e["id"], "weapon": slug, "offhand": False},
                 )
             if can_offhand and "light" in (w.get("properties") or []) and d <= normal:
                 add(
                     f"off-hand attack {e['id']} with {slug}",
                     f"Extra Light-weapon (off-hand) attack on {_enemy_label(e, pos)} with {w.get('name', slug)} "
-                    f"({dmg}{mastery}). Once per turn.",
+                    f"({dmg}{mastery}){cov_txt}. Once per turn.",
                     {"type": "attack", "actor_id": actor_id, "target_id": e["id"], "weapon": slug, "offhand": True},
                 )
 
@@ -143,6 +155,7 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
         if s and s not in spell_slugs:
             spell_slugs.append(s)
     friendlies = allies + [{"id": actor_id, "position": pos}]
+    los_enemies = [e for e in enemies if has_line_of_sight(pos, e["position"], terrain)]
     for slug in spell_slugs:
         rec = rules.get_spell(slug)
         if not isinstance(rec, dict) or str(rec.get("coverage") or "narrative") == "narrative":
@@ -168,7 +181,21 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
 
         if mode == "self":
             if slug == "misty-step":
-                dest = _best_kite_position(pos, 30, enemies, allies, spread_from_allies=True, occupied=_occupied_squares(observation)) if enemies else None
+                dest = (
+                    _best_kite_position(
+                        pos,
+                        30,
+                        enemies,
+                        allies,
+                        spread_from_allies=True,
+                        occupied=_occupied_squares(observation),
+                        bounds=bounds,
+                        terrain=terrain,
+                        is_teleport=True,
+                    )
+                    if enemies
+                    else None
+                )
                 if dest:
                     add(
                         f"cast {slug} to ({dest['x']},{dest['y']})",
@@ -179,7 +206,7 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
                 add(f"cast {slug}", f"{head} on yourself.{conc}", {**base, "target_ids": [actor_id]})
             continue
         if _spell_aoe_spec(slug, rec) or mode == "aoe":
-            hit = _aoe_targets_for_spell(slug, rec, pos, enemies, friendlies, avoid_friendlies=True)
+            hit = _aoe_targets_for_spell(slug, rec, pos, los_enemies, friendlies, avoid_friendlies=True)
             if hit:
                 names = ", ".join(str(e["id"]) for e in hit)
                 add(
@@ -189,7 +216,12 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
                 )
             continue
         if heal:
-            pool = [a for a in downed + allies if distance_ft(pos, a["position"]) <= max(rng, 5)]
+            pool = [
+                a
+                for a in downed + allies
+                if distance_ft(pos, a["position"]) <= max(rng, 5)
+                and has_line_of_sight(pos, a["position"], terrain)
+            ]
             pool.append({**me, "id": actor_id})
             hurt = [a for a in pool if int(a.get("hp", 0)) < int(a.get("hp_max", 0) or 0)]
             for a in hurt:
@@ -205,15 +237,21 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
                 )
             continue
         if not dmg_types and not rec.get("save"):
-            # Buffs such as Bless: up to max_targets of the party in range, nearest first.
+            # Buffs such as Bless: up to max_targets of the party in range & LoS, nearest first.
             party = sorted(
-                [a for a in allies if distance_ft(pos, a["position"]) <= rng] + [{**me, "id": actor_id}],
+                [
+                    a
+                    for a in allies
+                    if distance_ft(pos, a["position"]) <= rng
+                    and has_line_of_sight(pos, a["position"], terrain)
+                ]
+                + [{**me, "id": actor_id}],
                 key=lambda a: (a["id"] != actor_id, distance_ft(pos, a["position"])),
             )[:max_t]
             ids = [a["id"] for a in party]
             add(f"cast {slug} on {'+'.join(ids)}", f"{head} on {', '.join(ids)}.{conc}", {**base, "target_ids": ids})
             continue
-        in_range = [e for e in enemies if distance_ft(pos, e["position"]) <= rng]
+        in_range = [e for e in los_enemies if distance_ft(pos, e["position"]) <= rng]
         # Hold Person (and any other type-restricted spell) is refused by the engine unless the
         # target's creature type is known and allowed. Keep those casts out of the Choice list.
         in_range = [e for e in in_range if spell_target_allowed(slug, rec, e, rules)]
@@ -232,13 +270,12 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
             )
 
     # Movement.
-    move_ft = int(legal.get("movement_remaining_ft", me.get("movement_remaining_ft", 0)) or 0)
+    raw_move_ft = int(legal.get("movement_remaining_ft", me.get("movement_remaining_ft", 0)) or 0)
     stand = bool(legal.get("can_stand_up"))
     conds = _conditions(me)
-    if stand:
-        move_ft -= int(me.get("speed_ft", 30) or 30) // 2  # standing up costs half your speed
-    elif "prone" in conds:
-        move_ft //= 2  # crawling costs double
+    rem_after_stand = raw_move_ft - (int(me.get("speed_ft", 30) or 30) // 2) if stand else raw_move_ft
+    crawling = ("prone" in conds) and not stand
+    move_budget = rem_after_stand if (bounds is not None or terrain is not None) else (rem_after_stand // 2 if crawling else rem_after_stand)
     fear_src = conds.get("frightened")
     # The observation names the condition but not its source, so when Frightened treat every enemy as one.
     fear_pos = [e["position"] for e in enemies if fear_src is not None and (not fear_src or e["id"] in fear_src)]
@@ -246,16 +283,29 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
     def fear_ok(dest: dict[str, int]) -> bool:
         return all(distance_ft(dest, fp) >= distance_ft(pos, fp) for fp in fear_pos)
 
+    def path_ok(dest: dict[str, int]) -> bool:
+        c, err = movement_path_cost(pos, dest, bounds, terrain, is_prone=crawling, max_cost=rem_after_stand)
+        return err is None and c is not None and c <= rem_after_stand
+
     if stand:
         add(
             "stand up",
             "Stand up from Prone (costs half your speed).",
             {"type": "move", "actor_id": actor_id, "to": dict(pos), "stand_up": True},
         )
-    if move_ft >= 5:
+    if rem_after_stand >= (10 if crawling else 5):
         for e in enemies:
-            dest = _step_toward(pos, e["position"], move_ft, desired_dist_ft=5, occupied=_occupied_squares(observation))
-            if dest != pos and fear_ok(dest):
+            dest = _step_toward(
+                pos,
+                e["position"],
+                move_budget,
+                desired_dist_ft=5,
+                occupied=_occupied_squares(observation),
+                bounds=bounds,
+                terrain=terrain,
+                is_prone=crawling,
+            )
+            if dest != pos and fear_ok(dest) and path_ok(dest):
                 close = distance_ft(dest, e["position"]) <= 5
                 add(
                     f"move toward {e['id']} to ({dest['x']},{dest['y']})",
@@ -264,16 +314,35 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
                     {"type": "move", "actor_id": actor_id, "to": dest, "stand_up": stand},
                 )
         for a in downed:
-            dest = _step_toward(pos, a["position"], move_ft, desired_dist_ft=5, occupied=_occupied_squares(observation))
-            if dest != pos and fear_ok(dest):
+            dest = _step_toward(
+                pos,
+                a["position"],
+                move_budget,
+                desired_dist_ft=5,
+                occupied=_occupied_squares(observation),
+                bounds=bounds,
+                terrain=terrain,
+                is_prone=crawling,
+            )
+            if dest != pos and fear_ok(dest) and path_ok(dest):
                 add(
                     f"move toward {a['id']} to ({dest['x']},{dest['y']})",
                     f"Move {distance_ft(pos, dest)} ft toward downed ally {_ally_label(a, pos)}.",
                     {"type": "move", "actor_id": actor_id, "to": dest, "stand_up": stand},
                 )
         if enemies:
-            dest = _best_kite_position(pos, move_ft, enemies, allies, spread_from_allies=True, occupied=_occupied_squares(observation))
-            if dest and dest != pos and fear_ok(dest):
+            dest = _best_kite_position(
+                pos,
+                move_budget,
+                enemies,
+                allies,
+                spread_from_allies=True,
+                occupied=_occupied_squares(observation),
+                bounds=bounds,
+                terrain=terrain,
+                is_prone=crawling,
+            )
+            if dest and dest != pos and fear_ok(dest) and path_ok(dest):
                 add(
                     f"move away to ({dest['x']},{dest['y']})",
                     f"Move {distance_ft(pos, dest)} ft to ({dest['x']},{dest['y']}): out of melee reach and at least "

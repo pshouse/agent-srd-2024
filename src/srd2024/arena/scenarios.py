@@ -15,12 +15,14 @@ from pathlib import Path
 from typing import Any
 
 from srd2024.engine.character import compile_character
+from srd2024.engine.combat import in_bounds, is_wall, validate_bounds, validate_terrain
 from srd2024.engine.store import RulesStore, strip_prefix
 
 BUILTIN_SCENARIO_IDS: tuple[str, ...] = (
     "goblin-ambush",
     "crypt-of-ghouls",
     "wyrmling-lair",
+    "ruined-keep",
 )
 
 # ----------------------------------------------------------------------
@@ -234,6 +236,7 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
             "spell-economy",
             "focus-fire",
         ],
+        "bounds": {"min_x": -10, "min_y": -10, "max_x": 45, "max_y": 30},
         "party": [
             {"id": "pc-bram", "spec": _SPEC_BRAM_L1, "position": {"x": 0, "y": 0}},
             {"id": "pc-talia", "spec": _SPEC_TALIA_L1, "position": {"x": 0, "y": 15}},
@@ -278,6 +281,7 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
             "concentration",
             "weapon-mastery",
         ],
+        "bounds": {"min_x": -15, "min_y": -15, "max_x": 55, "max_y": 40},
         "party": [
             {"id": "pc-aldric", "spec": _SPEC_ALDRIC_L5, "position": {"x": 0, "y": 5}},
             {"id": "pc-lyra", "spec": _SPEC_LYRA_L5, "position": {"x": 0, "y": 20}},
@@ -353,6 +357,7 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
             "weapon-mastery",
             "focus-fire",
         ],
+        "bounds": {"min_x": -15, "min_y": -15, "max_x": 65, "max_y": 50},
         "party": [
             {"id": "pc-aldric", "spec": _SPEC_ALDRIC_L5, "position": {"x": 0, "y": 0}},
             {"id": "pc-lyra", "spec": _SPEC_LYRA_L5, "position": {"x": 0, "y": 25}},
@@ -383,6 +388,90 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
                 "monster": "hell-hound",
                 "name": "Cinder Hound B",
                 "position": {"x": 50, "y": 30},
+            },
+        ],
+    },
+    "ruined-keep": {
+        "id": "ruined-keep",
+        "name": "Ruined Keep",
+        "description": (
+            "Tier 2 5e 2024 (SRD 5.2) tactical dungeon assault: four Level 5 adventurers breach "
+            "a bounded ruined gatehouse defended by an Animated Armor sentinel, a Bandit Captain, "
+            "two Hobgoblin marksmen, and a Skeleton archer across walls, chokepoint rubble "
+            "(difficult terrain), and half/three-quarters cover battlements."
+        ),
+        "tier": 2,
+        "party_level": 5,
+        "max_rounds": 14,
+        "tactical_themes": [
+            "battlefield-bounds",
+            "chokepoint-walls",
+            "line-of-sight",
+            "cover-tactics",
+            "difficult-terrain",
+        ],
+        "bounds": {"min_x": 0, "min_y": 0, "max_x": 50, "max_y": 35},
+        "terrain": {
+            "walls": [
+                [20, 5],
+                [20, 10],
+                [20, 25],
+                [20, 30],
+                [35, 10],
+                [35, 25],
+            ],
+            "difficult_terrain": [
+                [15, 5],
+                [15, 15],
+                [15, 20],
+                [20, 0],
+                [25, 15],
+                [25, 20],
+            ],
+            "cover": [
+                {"x": 10, "y": 10, "kind": "half"},
+                {"x": 10, "y": 25, "kind": "half"},
+                {"x": 30, "y": 5, "kind": "three_quarters"},
+                {"x": 30, "y": 15, "kind": "half"},
+                {"x": 30, "y": 30, "kind": "three_quarters"},
+            ],
+        },
+        "party": [
+            {"id": "pc-aldric", "spec": _SPEC_ALDRIC_L5, "position": {"x": 5, "y": 15}},
+            {"id": "pc-lyra", "spec": _SPEC_LYRA_L5, "position": {"x": 5, "y": 25}},
+            {"id": "pc-dorian", "spec": _SPEC_DORIAN_L5, "position": {"x": 5, "y": 10}},
+            {"id": "pc-kaelen", "spec": _SPEC_KAELEN_L5, "position": {"x": 10, "y": 20}},
+        ],
+        "enemies": [
+            {
+                "id": "armor-1",
+                "monster": "animated-armor",
+                "name": "Gatehouse Sentinel",
+                "position": {"x": 25, "y": 15},
+            },
+            {
+                "id": "captain-1",
+                "monster": "bandit-captain",
+                "name": "Keep Captain",
+                "position": {"x": 35, "y": 15},
+            },
+            {
+                "id": "hobgoblin-1",
+                "monster": "hobgoblin-warrior",
+                "name": "Keep Marksman A",
+                "position": {"x": 40, "y": 5},
+            },
+            {
+                "id": "hobgoblin-2",
+                "monster": "hobgoblin-warrior",
+                "name": "Keep Marksman B",
+                "position": {"x": 40, "y": 30},
+            },
+            {
+                "id": "skeleton-1",
+                "monster": "skeleton",
+                "name": "Wall Archer",
+                "position": {"x": 30, "y": 20},
             },
         ],
     },
@@ -574,7 +663,22 @@ def _compile_raw_scenario(
     if max_rounds < 1:
         raise ValueError(f"Scenario '{scenario_id}' max_rounds must be >= 1, got {max_rounds}.")
 
-    return {
+    bounds = validate_bounds(raw.get("bounds"))
+    terrain = validate_terrain(raw.get("terrain"))
+    for comb in combatants:
+        pos = comb["position"]
+        if not in_bounds(pos, bounds):
+            raise ValueError(
+                f"Combatant '{comb['id']}' in scenario '{scenario_id}' at ({pos['x']}, {pos['y']}) "
+                f"is outside bounds {bounds}."
+            )
+        if is_wall(pos, terrain):
+            raise ValueError(
+                f"Combatant '{comb['id']}' in scenario '{scenario_id}' at ({pos['x']}, {pos['y']}) "
+                f"cannot start on a wall."
+            )
+
+    compiled: dict[str, Any] = {
         "id": scenario_id,
         "name": str(raw.get("name") or scenario_id),
         "description": str(raw.get("description") or ""),
@@ -587,6 +691,11 @@ def _compile_raw_scenario(
         "enemy_ids": enemy_ids,
         "source": source,
     }
+    if bounds is not None:
+        compiled["bounds"] = bounds
+    if terrain is not None:
+        compiled["terrain"] = terrain
+    return compiled
 
 
 def load_scenario(
