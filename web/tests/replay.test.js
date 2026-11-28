@@ -29,7 +29,8 @@ const goblin = committed.find((c) => c.row.id === "2026-11-27-goblin-nl-1");
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 test("the replay index lists every committed trace and its copies match byte for byte", () => {
-  assert.ok(committed.length >= 5);
+  // #53 moved three arena-1 traces to legacy-engine/ (they stacked creatures on one square), leaving goblin-nl-1 and sonnet-goblin-10.
+  assert.ok(committed.length >= 2);
   assert.ok(goblin, "goblin-nl-1 is committed");
   const checked = validateReplayIndex(indexRaw);
   assert.equal(checked.ok, true, checked.errors.join("; "));
@@ -132,9 +133,16 @@ test("intermediate frames follow each action's state_diff", () => {
   assert.equal(replay.frames[4].activeId, "pc-talia");
 });
 
-test("shared squares in real traces are grouped, not dropped", () => {
+// Traces recorded before #53 (two creatures on one square) live in examples/sessions/legacy-engine/. They are no
+// longer in the replay index, but the viewer still has to load them through the file picker.
+const legacy = ["opus-crypt-2", "opus-wyrmling-8", "sonnet-wyrmling-7"].map((name) => ({
+  name,
+  trace: JSON.parse(readFileSync(new URL(`examples/sessions/legacy-engine/2026-11-27-arena-1.${name}.trace.json`, repo), "utf8")),
+}));
+
+test("shared squares in real (pre-#53) traces are grouped, not dropped", () => {
   let shared = 0;
-  for (const { trace } of committed) {
+  for (const { trace } of legacy) {
     const { replay } = buildReplay(trace);
     for (const frame of replay.frames) {
       const squares = occupancy(frame.units);
@@ -142,12 +150,12 @@ test("shared squares in real traces are grouped, not dropped", () => {
       shared += squares.filter((sq) => sq.ids.length > 1).length;
     }
   }
-  assert.ok(shared > 0, "expected at least one shared square across committed traces");
+  assert.ok(shared > 0, "expected at least one shared square across the pre-#53 traces");
 });
 
 test("violations land on the action they rejected", () => {
-  const wyrm = committed.find((c) => c.trace.violations.length > 0);
-  assert.ok(wyrm, "a committed trace has violations");
+  const wyrm = legacy.find((c) => c.trace.violations.length > 0);
+  assert.ok(wyrm, "a pre-#53 trace has violations");
   const { replay } = buildReplay(wyrm.trace);
   assert.deepEqual(replay.unattached, []);
   const lines = replay.steps.flatMap((s) => s.lines).filter((l) => l.kind === "violation");

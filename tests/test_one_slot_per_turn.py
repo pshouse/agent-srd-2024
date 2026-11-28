@@ -117,7 +117,9 @@ class TestOneSlotPerTurn(unittest.TestCase):
                                                  "slot_level": 1, "target_ids": [me["id"]]}, rationale="slot 2")
                 return self.inner.decide(obs)
 
-        t = run_match("crypt-of-ghouls", party_driver=DoubleCaster(), enemy_driver=HeuristicTacticalDriver(rules), rules=rules, seed=4)
+        # Seed 2: Dorian acts in round 1. (Seed 4 stopped working with #53: the ghouls now spread out and
+        # paralyze him before his first turn, so he never gets to try the double cast.)
+        t = run_match("crypt-of-ghouls", party_driver=DoubleCaster(), enemy_driver=HeuristicTacticalDriver(rules), rules=rules, seed=2)
         rejected = [v for v in t["violations"] if v["actor_id"] == "pc-dorian" and "one spell slot per turn" in v["error"]]
         self.assertEqual(len(rejected), 1)
         accepted = [a for a in t["actions"] if a["actor_id"] == "pc-dorian" and a["intent"].get("spell") == "healing-word"
