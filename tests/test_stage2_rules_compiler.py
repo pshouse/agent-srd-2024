@@ -384,7 +384,9 @@ class TestRulesCompletenessAndCoverage(unittest.TestCase):
         partial_cnt = sum(1 for s in spells.values() if s["coverage"] == "partial")
         narrative_cnt = sum(1 for s in spells.values() if s["coverage"] == "narrative")
 
-        self.assertGreaterEqual(full_cnt, 80, f"Expected >= 80 full spells, got {full_cnt}")
+        # 75, not 80: #51 regraded Acid Arrow, Ice Knife and Vitriolic Sphere to partial (their delayed or
+        # secondary damage isn't modeled), which left 78 full.
+        self.assertGreaterEqual(full_cnt, 75, f"Expected >= 75 full spells, got {full_cnt}")
         self.assertGreaterEqual(full_cnt + partial_cnt, 200, f"Expected >= 200 executable spells, got {full_cnt + partial_cnt}")
         self.assertGreaterEqual(narrative_cnt, 50, f"Expected >= 50 narrative spells (honesty check), got {narrative_cnt}")
 
