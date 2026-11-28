@@ -74,6 +74,8 @@ class TestMonsterTraits(unittest.TestCase):
         hold = {"type": "cast_spell", "actor_id": "wiz", "spell": "hold-monster", "slot_level": 5, "target_ids": ["dragon"]}
         for uses_left in (2, 1, 0, None):  # each save rolls a 1 and fails; the first three become successes
             st["combatants"]["wiz"]["turn_resources"]["action"] = True
+            # Each loop stands in for a new turn: one spell slot per turn (#52) would refuse a second cast.
+            st["combatants"]["wiz"]["turn_resources"].pop("slot_spent_this_turn", None)
             st["combatants"]["wiz"]["spellcasting"]["slots"]["5"] = 3
             st["combatants"]["wiz"]["concentration"] = None
             res = self._ok(step(st, hold, self.rules, roll_overrides=[1]))

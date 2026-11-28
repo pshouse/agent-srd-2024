@@ -1934,6 +1934,8 @@ def compute_legal_actions(state: dict[str, Any], rules: RulesStore) -> dict[str,
                 sp_lvl = int(sp_rec.get("level", 0))
                 if sp_lvl > 0 and not any(s >= sp_lvl for s in avail_slots):
                     continue
+                if sp_lvl > 0 and res.get("slot_spent_this_turn"):
+                    continue  # one spell slot per turn (#52)
                 atype = str(sp_rec.get("action_type") or "action")
                 if atype == "action" and res.get("action"):
                     spells.append(sp_slug)
@@ -2122,9 +2124,17 @@ def _maybe_reactive_shield(
     slot_level = next((lvl for lvl in sorted(int(k) for k, v in slots.items() if int(v) > 0) if lvl >= 1), None)
     if slot_level is None:
         return None
+    # One spell slot per turn (#52) also binds a Reaction on your own turn (e.g. hit by an Opportunity Attack
+    # while you move).
+    order = state.get("turn_order") or []
+    own_turn = bool(order) and order[int(state.get("active_index", 0)) % len(order)] == target_id
+    if own_turn and target["turn_resources"].get("slot_spent_this_turn"):
+        return None
 
     before = int(slots[str(slot_level)])
     slots[str(slot_level)] = before - 1
+    if own_turn:
+        target["turn_resources"]["slot_spent_this_turn"] = True
     tracker.slot_changes.append({"id": target_id, "slot_level": slot_level, "before": before, "after": before - 1})
     target["turn_resources"]["reaction"] = False
     target["active_effects"].append(
@@ -2812,6 +2822,16 @@ def step(
                     f"Slot level {slot_level} is below spell '{spell_slug}' base level {spell_level}.",
                     rules,
                 )
+            # SRD 5.2: on a turn you can expend only one spell slot to cast a spell (#52). Reactions on another
+            # creature's turn are a different turn, and cantrips spend no slot.
+            own_turn = actor_id == active_id
+            if own_turn and actor["turn_resources"].get("slot_spent_this_turn"):
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"{actor_id} has no more spell slots to spend this turn (one spell slot per turn); "
+                    "cast a cantrip or end the turn.",
+                    rules,
+                )
             slots_map = sc.setdefault("slots", {})
             before_cnt = int(slots_map.get(str(slot_level), 0))
             if before_cnt <= 0:
@@ -2821,6 +2841,8 @@ def step(
                     rules,
                 )
             slots_map[str(slot_level)] = before_cnt - 1
+            if own_turn:
+                actor["turn_resources"]["slot_spent_this_turn"] = True
             tracker.slot_changes.append(
                 {"id": actor_id, "slot_level": slot_level, "before": before_cnt, "after": before_cnt - 1}
             )
@@ -3758,6 +3780,7 @@ def step(
         ending_id = active_id
         ending_actor = s["combatants"][ending_id]
         cur_round = int(s["round"])
+        ending_actor["turn_resources"].pop("slot_spent_this_turn", None)  # #52: per turn only
 
         # 1. End-of-turn `save_ends` and `end_of_next_turn` conditions on ending actor.
         remaining_conds: list[Any] = []

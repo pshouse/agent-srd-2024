@@ -234,6 +234,8 @@ def _can_cast_spell_now(
     sp_lvl = int(spell_rec.get("level", 0))
     if sp_lvl == 0:
         return True, action_type, 0
+    if res.get("slot_spent_this_turn"):
+        return False, action_type, 0  # one spell slot per turn (#52); cantrips are still fine
     slot = _lowest_slot(slots, sp_lvl)
     if slot is None:
         return False, action_type, 0

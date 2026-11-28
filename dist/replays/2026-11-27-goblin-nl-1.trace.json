@@ -851,7 +851,8 @@
           "cleave_used": false,
           "nick_used": false,
           "disengaged": false,
-          "light_attack_made": false
+          "light_attack_made": false,
+          "slot_spent_this_turn": true
         },
         "death_saves": {
           "successes": 0,
@@ -2285,5 +2286,5 @@
       }
     }
   },
-  "digest": "d3d64f6101491a0a77bde2b82cf5bba9349e0a6a8a1713727213d644c11699e1"
+  "digest": "41e39df7f2d6417cac232d290d94fa6ece796004fa4219f74a9764819ec8d25d"
 }
