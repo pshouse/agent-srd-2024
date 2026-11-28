@@ -27,6 +27,7 @@ Fireball/Healing Word/Mass Healing Word/Bless/Shield/Mage Armor/Hold Person's pa
 from __future__ import annotations
 
 import collections
+import copy
 import json
 import re
 import sys
@@ -64,6 +65,7 @@ def audit(path: Path) -> None:
     side = {i: c["side"] for i, c in cs.items()}
     hp = {i: c["hp"] for i, c in cs.items()}
     hp_max = {i: c["hp_max"] for i, c in cs.items()}
+    temp_hp = {i: int(c.get("temp_hp", 0)) for i, c in cs.items()}
     conds: dict[str, set] = {i: set(c.get("conditions") or []) for i, c in cs.items()}
     conc: dict[str, str | None] = {i: None for i in cs}
     death = {i: [0, 0] for i in cs}  # successes, failures
@@ -162,10 +164,103 @@ def audit(path: Path) -> None:
     cheb = lambda a, b: max(abs(a["x"] - b["x"]), abs(a["y"] - b["y"]))
     fireball_raw = None
 
+    def _snapshot_state() -> dict:
+        return {
+            "hp": dict(hp),
+            "temp_hp": dict(temp_hp),
+            "conds": {k: set(v) for k, v in conds.items()},
+            "conc": dict(conc),
+            "death": {k: list(v) for k, v in death.items()},
+            "pending_par_end": dict(pending_par_end),
+            "par_sources": copy.deepcopy(par_sources),
+            "conc_freed": set(conc_freed),
+            "shield_on": dict(shield_on),
+            "base_ac": dict(base_ac),
+            "pos": {k: dict(v) for k, v in pos.items()},
+            "reaction": dict(reaction),
+            "disengaged": dict(disengaged),
+            "parry_bonus": dict(parry_bonus),
+            "aura_immune": {k: set(v) for k, v in aura_immune.items()},
+            "fireball_raw": fireball_raw,
+        }
+
+    def _restore_state(snap: dict) -> None:
+        nonlocal fireball_raw
+        hp.clear()
+        hp.update(snap["hp"])
+        temp_hp.clear()
+        temp_hp.update(snap["temp_hp"])
+        conds.clear()
+        conds.update({k: set(v) for k, v in snap["conds"].items()})
+        conc.clear()
+        conc.update(snap["conc"])
+        death.clear()
+        death.update({k: list(v) for k, v in snap["death"].items()})
+        pending_par_end.clear()
+        pending_par_end.update(snap["pending_par_end"])
+        par_sources.clear()
+        par_sources.update(copy.deepcopy(snap["par_sources"]))
+        conc_freed.clear()
+        conc_freed.update(snap["conc_freed"])
+        shield_on.clear()
+        shield_on.update(snap["shield_on"])
+        base_ac.clear()
+        base_ac.update(snap["base_ac"])
+        pos.clear()
+        pos.update({k: dict(v) for k, v in snap["pos"].items()})
+        reaction.clear()
+        reaction.update(snap["reaction"])
+        disengaged.clear()
+        disengaged.update(snap["disengaged"])
+        parry_bonus.clear()
+        parry_bonus.update(snap["parry_bonus"])
+        aura_immune.clear()
+        aura_immune.update({k: set(v) for k, v in snap["aura_immune"].items()})
+        fireball_raw = snap["fireball_raw"]
+
+    prev_action_state: tuple[dict, str | None, list[list[dict]]] | None = None
+
     for a in t["actions"]:
         where = (path.stem, a["seq"])
         intent = a["intent"]
         evs = a["events"]
+        # Heroic Inspiration reroll (#79): restore pre-miss running state (e.g. undoing Graze damage)
+        # before applying the reroll's events, and verify Bless/Bane bonus_dice were preserved (#85).
+        is_reroll = intent.get("type") == "reroll" or any(e.get("type") == "heroic_inspiration_spent" for e in evs)
+        if is_reroll:
+            if prev_action_state is not None:
+                prev_snap, prev_actor, prev_bonus_dice = prev_action_state
+                _restore_state(prev_snap)
+                spent_ev = next((e for e in evs if e.get("type") == "heroic_inspiration_spent"), None)
+                reroll_actor = (spent_ev or {}).get("actor_id") or intent.get("actor_id") or a.get("actor_id") or prev_actor
+                curr_bonus_dice = [
+                    e.get("bonus_dice") or []
+                    for e in evs
+                    if e.get("type") in ("attack_roll", "spell_attack_roll")
+                    and e.get("actor_id") == reroll_actor
+                    and not e.get("reaction")
+                ]
+                if prev_bonus_dice and curr_bonus_dice:
+                    for ridx, curr_b in enumerate(curr_bonus_dice):
+                        orig_b = prev_bonus_dice[ridx] if ridx < len(prev_bonus_dice) else None
+                        check(
+                            "Heroic Inspiration reroll preserves original bonus_dice",
+                            curr_b == orig_b,
+                            where,
+                            f"{reroll_actor} roll[{ridx}] bonus_dice {curr_b} != original {orig_b}",
+                        )
+            prev_action_state = None
+        else:
+            pre_snap = _snapshot_state()
+            actor_for_rolls = intent.get("actor_id") or a.get("actor_id")
+            action_bonus_dice = [
+                copy.deepcopy(e.get("bonus_dice") or [])
+                for e in evs
+                if e.get("type") in ("attack_roll", "spell_attack_roll")
+                and e.get("actor_id") == actor_for_rolls
+                and not e.get("reaction")
+            ]
+            prev_action_state = (pre_snap, actor_for_rolls, action_bonus_dice)
         last_attack = None
         attacks_this_action = 0
         for idx, e in enumerate(evs):
@@ -301,6 +396,15 @@ def audit(path: Path) -> None:
                         check("concentration DC = max(10, half damage)", sv["dc"] == min(30, max(10, e["total_damage"] // 2)) and sv["ability"] == "con", where,
                               f"dc {sv['dc']} for {e['total_damage']} damage")
                 check("hp_before matches running HP", e["hp_before"] == hp[tgt], where, f"{tgt} {e['hp_before']} vs {hp[tgt]}")
+                if "temp_hp_absorbed" in e:
+                    exp_absorbed = min(temp_hp[tgt], e["total_damage"])
+                    check(
+                        "temp_hp_absorbed matches running temp HP",
+                        e["temp_hp_absorbed"] == exp_absorbed,
+                        where,
+                        f"{tgt} absorbed {e['temp_hp_absorbed']} vs expected {exp_absorbed} (temp_hp={temp_hp[tgt]})",
+                    )
+                    temp_hp[tgt] = max(0, temp_hp[tgt] - int(e["temp_hp_absorbed"]))
                 if e.get("undead_fortitude"):
                     check("Undead Fortitude leaves exactly 1 HP after a passed save", e["hp_after"] == 1 and any(
                         x["type"] == "saving_throw" and x.get("reason") == "Undead Fortitude" and x["success"] for x in evs[:idx]),
@@ -348,6 +452,10 @@ def audit(path: Path) -> None:
                         check("3 failures -> dies", any(x["type"] == "combatant_died" and x["combatant_id"] == who for x in evs[idx + 1: idx + 4]), where, who)
                     if s >= 3:
                         check("3 successes -> stable", any(x["type"] == "pc_stabilized" and x["combatant_id"] == who for x in evs[idx + 1: idx + 4]), where, who)
+
+            if ty == "temp_hp_applied":
+                tgt = e["target_id"]
+                temp_hp[tgt] = int(e["temp_hp_after"]) if "temp_hp_after" in e else max(temp_hp[tgt], int(e.get("amount", 0)))
 
             if ty == "healing_applied":
                 tgt = e["target_id"]

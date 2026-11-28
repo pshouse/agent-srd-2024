@@ -319,3 +319,118 @@ export function statusText(state) {
       return "Session error";
   }
 }
+
+/** Stable identifier for the active human turn (`"<round>:<actor_id>"`), or null if no view. */
+export function turnKey(stateOrView) {
+  const view = isObj(stateOrView) && "view" in stateOrView ? stateOrView.view : stateOrView;
+  if (!isObj(view) || !isObj(view.self) || !isStr(view.self.id) || !isInt(view.round)) return null;
+  return `${view.round}:${view.self.id}`;
+}
+
+const STOP_HOOK_RE = /dropped|move ends|stopped|opportunity attack|incapacitated|blocked|occupied|bounds/i;
+
+function moveStopReason(actionOutcome, incomingLog) {
+  if (isObj(actionOutcome) && isStr(actionOutcome.reason) && actionOutcome.reason.trim()) {
+    return actionOutcome.reason.trim();
+  }
+  const hooks = [];
+  if (isObj(actionOutcome) && Array.isArray(actionOutcome.narrative_hooks)) {
+    for (const h of actionOutcome.narrative_hooks) {
+      if (isStr(h) && h.trim()) hooks.push(h.trim());
+    }
+  }
+  if (Array.isArray(incomingLog)) {
+    for (const line of incomingLog) {
+      const text = isObj(line) && isStr(line.text) ? line.text.trim() : isStr(line) ? line.trim() : "";
+      if (!text) continue;
+      if (text.startsWith("* ")) hooks.push(text.slice(2).trim());
+    }
+  }
+  const matched = hooks.find((h) => STOP_HOOK_RE.test(h));
+  if (matched) return matched;
+  if (isObj(actionOutcome) && Array.isArray(actionOutcome.events)) {
+    const oa = actionOutcome.events.find((e) => isObj(e) && e.type === "opportunity_attack");
+    if (oa) return "stopped by an Opportunity Attack.";
+  }
+  return "";
+}
+
+/**
+ * Compute the next clickNote text after a state refresh (#83).
+ *
+ * - Clears on new turn (round or active seat changed), terminal state, or action error.
+ * - Replaces "Moving to (x, y)…" with the resolved move outcome ("Moved to (x, y)." or
+ *   "Move stopped at (x, y): ...") based on `actionOutcome.state_diff.position_changes`,
+ *   `actionOutcome.events`, or the updated `nextState.view.self.position`.
+ * - Clears any stale note after any other action completes.
+ *
+ * @param {{
+ *   prevState?: object | null,
+ *   nextState?: object | null,
+ *   currentNote?: string,
+ *   pendingMove?: { actorId?: string, from?: { x: number, y: number }, to: { x: number, y: number } } | null,
+ *   incomingLog?: Array<{ seq?: number, text: string } | string>,
+ *   actionError?: string | null,
+ *   actionOutcome?: { events?: object[], state_diff?: { position_changes?: object[] }, narrative_hooks?: string[], reason?: string } | null,
+ *   afterAction?: boolean,
+ * }} opts
+ * @returns {string}
+ */
+export function resolveClickNote({
+  prevState = null,
+  nextState = null,
+  currentNote = "",
+  pendingMove = null,
+  incomingLog = [],
+  actionError = null,
+  actionOutcome = null,
+  afterAction = false,
+} = {}) {
+  if (!isObj(nextState)) return "";
+  if (nextState.status === "finished" || nextState.status === "paused" || nextState.status === "error") {
+    return "";
+  }
+  const prevTurn = turnKey(prevState);
+  const nextTurn = turnKey(nextState);
+  if (prevTurn && nextTurn && prevTurn !== nextTurn) return "";
+  if (actionError) return "";
+
+  const decisionChanged = isObj(prevState) && prevState.decision !== nextState.decision;
+  const actionResolved = Boolean(afterAction || actionOutcome || decisionChanged || nextState.status !== "running");
+
+  if (isObj(pendingMove) && isPos(pendingMove.to) && actionResolved) {
+    let resolvedPos = null;
+    if (isObj(actionOutcome?.state_diff) && Array.isArray(actionOutcome.state_diff.position_changes)) {
+      const changes = actionOutcome.state_diff.position_changes;
+      const match = changes.find(
+        (c) => isObj(c) && (!pendingMove.actorId || c.id === pendingMove.actorId) && isPos(c.after),
+      );
+      if (match) resolvedPos = match.after;
+      else if (isPos(pendingMove.from)) resolvedPos = pendingMove.from;
+      else if (isPos(nextState.view?.self?.position)) resolvedPos = nextState.view.self.position;
+    } else if (Array.isArray(actionOutcome?.events)) {
+      const movedEv = actionOutcome.events.find(
+        (e) => isObj(e) && e.type === "moved" && (!pendingMove.actorId || e.actor_id === pendingMove.actorId) && isPos(e.to_pos),
+      );
+      if (movedEv) resolvedPos = movedEv.to_pos;
+      else if (isPos(pendingMove.from)) resolvedPos = pendingMove.from;
+      else if (isPos(nextState.view?.self?.position)) resolvedPos = nextState.view.self.position;
+    } else if (isPos(nextState.view?.self?.position)) {
+      resolvedPos = nextState.view.self.position;
+    } else if (isPos(pendingMove.from)) {
+      resolvedPos = pendingMove.from;
+    }
+
+    if (!resolvedPos) return "";
+    if (resolvedPos.x === pendingMove.to.x && resolvedPos.y === pendingMove.to.y) {
+      return `Moved to (${resolvedPos.x}, ${resolvedPos.y}).`;
+    }
+    const reason = moveStopReason(actionOutcome, incomingLog);
+    return reason
+      ? `Move stopped at (${resolvedPos.x}, ${resolvedPos.y}): ${reason}`
+      : `Move stopped at (${resolvedPos.x}, ${resolvedPos.y}).`;
+  }
+
+  if (afterAction || decisionChanged || nextState.status === "running") return "";
+  return isStr(currentNote) ? currentNote : "";
+}
