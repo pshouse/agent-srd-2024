@@ -2876,7 +2876,22 @@ def step(
                     )
 
         # Default self-targeting for self buff/reaction spells like shield/mage-armor/false-life/misty-step.
-        if not target_ids and str(spell.get("range_kind") or "").lower() == "self":
+        # A harmful Self-range spell (attack or save resolution: Burning Hands, Thunderwave, Spirit Guardians,
+        # Produce Flame, ...) starts at the caster and affects others, so the caster is never its target (#67).
+        # An area spell with nobody else in it is still a legal cast and affects no one (e.g. Spirit Guardians up
+        # before enemies arrive). A single-target one with no target is refused, like Fire Bolt with no target.
+        self_range = str(spell.get("range_kind") or "").lower() == "self"
+        harmful_self_area = False
+        if self_range and str(spell.get("resolution") or "").lower() in ("attack", "save"):
+            target_ids = [t for t in target_ids if t != actor_id]
+            harmful_self_area = str((spell.get("targeting") or {}).get("mode") or "") == "aoe"
+            if not target_ids and not harmful_self_area:
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"'{spell_slug}' needs a target other than its caster.",
+                    rules,
+                )
+        elif not target_ids and self_range:
             target_ids = [actor_id]
 
         # Charmed check for harmful spells.
@@ -3279,6 +3294,9 @@ def step(
                             )
 
         # 6. Saving throw spells (`fireball`, `lightning-bolt`, `sacred-flame`, `hold-person`, `bane`, `vicious-mockery`).
+        elif resolution == "save" and harmful_self_area and not target_ids:
+            # A Self-origin area with no one else in it (#67): legal, and nothing to roll.
+            tracker.hook(f"{actor['name']} casts {spell_name}; no other creature is in its area.")
         elif resolution == "save":
             if not target_ids:
                 return _invalid(copy.deepcopy(state), f"Spell '{spell_slug}' requires at least one target.", rules)
