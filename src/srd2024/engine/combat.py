@@ -29,6 +29,96 @@ from .store import RulesStore, strip_prefix
 
 ABILITY_KEYS: tuple[str, ...] = ("str", "dex", "con", "int", "wis", "cha")
 
+# Single canonical state-shape schema version (#66, #95, M6.3A).
+# Re-exported by srd2024.arena.runner and srd2024.arena.
+STATE_SHAPE_VERSION: int = 3
+
+_ACTION_SURGE_MAGIC_BAN_ERROR = "Action Surge cannot be used to take the Magic action (5e 2024 SRD 5.2)."
+
+
+def _fresh_turn_resources(state_shape_version: int) -> dict[str, Any]:
+    res: dict[str, Any] = {
+        "action": True,
+        "bonus_action": True,
+        "reaction": True,
+        "attacks_remaining": 0,
+        "cleave_used": False,
+        "nick_used": False,
+        "disengaged": False,
+        "light_attack_made": False,
+    }
+    if state_shape_version >= 3:
+        res["surge_action"] = False
+        res["action_surge_used_this_turn"] = False
+        res["sneak_attack_used"] = False
+    return res
+
+
+def _derive_class_resources_max(class_slug: str, level: int) -> dict[str, dict[str, Any]]:
+    """Fallback deterministic class resource caps when statblock omits `class_resources_max`."""
+    cls = strip_prefix(class_slug)
+    lvl = max(1, int(level))
+    out: dict[str, dict[str, Any]] = {}
+    if cls == "fighter":
+        sw_max = 4 if lvl >= 10 else (3 if lvl >= 4 else 2)
+        out["second_wind"] = {"max": sw_max, "recharge": "short_rest_one"}
+        if lvl >= 2:
+            out["action_surge"] = {"max": 2 if lvl >= 17 else 1, "recharge": "short_rest_all"}
+    elif cls == "paladin":
+        out["lay_on_hands"] = {"max": 5 * lvl, "recharge": "long_rest"}
+        if lvl >= 3:
+            out["channel_divinity"] = {"max": 3 if lvl >= 11 else 2, "recharge": "short_rest_one"}
+    elif cls == "cleric":
+        if lvl >= 2:
+            out["channel_divinity"] = {"max": 4 if lvl >= 18 else (3 if lvl >= 6 else 2), "recharge": "short_rest_one"}
+    elif cls == "wizard":
+        out["arcane_recovery"] = {
+            "max": 1,
+            "budget_levels": (lvl + 1) // 2,
+            "max_slot_level": 5,
+            "recharge": "long_rest",
+        }
+    return out
+
+
+def _has_sneak_attack(combatant: dict[str, Any]) -> bool:
+    feats = {strip_prefix(str(f)) for f in (combatant.get("features") or [])}
+    if "rogue-sneak-attack" in feats:
+        return True
+    return combatant.get("kind") == "pc" and strip_prefix(str(combatant.get("source_id") or "")) == "rogue"
+
+
+def _has_non_incapacitated_ally_within_5ft(
+    state: dict[str, Any],
+    attacker: dict[str, Any],
+    target: dict[str, Any],
+    rules: RulesStore,
+) -> bool:
+    attacker_id = attacker.get("id")
+    attacker_side = attacker.get("side")
+    for ally in state["combatants"].values():
+        if (
+            ally.get("id") != attacker_id
+            and ally.get("side") == attacker_side
+            and ally.get("alive") is True
+            and int(ally.get("hp", 0)) > 0
+            and not _has_modifier_flag(ally, "cannot_act", rules)
+            and distance_ft(ally["position"], target["position"]) <= 5
+        ):
+            return True
+    return False
+
+
+def _consume_non_magic_action(res: dict[str, Any]) -> bool:
+    """Consume regular Action first, otherwise Action Surge's `surge_action`."""
+    if res.get("action"):
+        res["action"] = False
+        return True
+    if res.get("surge_action"):
+        res["surge_action"] = False
+        return True
+    return False
+
 # SRD 5.2 spells that name a creature type. Hold Person: "Choose a Humanoid".
 # A target is legal only when its type is known and listed. Unknown types fail closed
 # (the cast is refused): a missing stat block, a blank creature_type, or a monster id
@@ -904,6 +994,8 @@ class _StepTracker:
         condition_changes: list[dict[str, Any]] = []
         position_changes: list[dict[str, Any]] = []
         effect_changes: list[dict[str, Any]] = []
+        resource_changes: list[dict[str, Any]] = []
+        ssv3 = int(after_state.get("state_shape_version", 1)) >= 3
 
         for cid in sorted(after_c.keys()):
             a = after_c[cid]
@@ -939,6 +1031,14 @@ class _StepTracker:
             removed_e = [e.get("kind") for e in b.get("active_effects", []) if (e.get("id") or e.get("kind")) not in a_effs]
             if added_e or removed_e:
                 effect_changes.append({"id": cid, "added": added_e, "removed": removed_e})
+            if ssv3:
+                b_cr = b.get("class_resources") or {}
+                a_cr = a.get("class_resources") or {}
+                for rname in sorted(set(b_cr.keys()) | set(a_cr.keys())):
+                    b_rem = int((b_cr.get(rname) or {}).get("remaining", 0))
+                    a_rem = int((a_cr.get(rname) or {}).get("remaining", 0))
+                    if b_rem != a_rem:
+                        resource_changes.append({"id": cid, "resource": rname, "before": b_rem, "after": a_rem})
 
         turn_changed = bool(
             self.before_snapshot
@@ -948,7 +1048,7 @@ class _StepTracker:
             )
         )
 
-        return {
+        diff: dict[str, Any] = {
             "hp_changes": hp_changes,
             "condition_changes": condition_changes,
             "position_changes": position_changes,
@@ -956,6 +1056,9 @@ class _StepTracker:
             "effect_changes": effect_changes,
             "turn_changed": turn_changed,
         }
+        if ssv3:
+            diff["resource_changes"] = resource_changes
+        return diff
 
 
 # ----------------------------------------------------------------------
@@ -1362,7 +1465,7 @@ def _apply_damage_parts(
 # ----------------------------------------------------------------------
 
 
-def _build_pc_combatant(entry: dict[str, Any]) -> dict[str, Any]:
+def _build_pc_combatant(entry: dict[str, Any], *, state_shape_version: int = STATE_SHAPE_VERSION) -> dict[str, Any]:
     sb = entry["statblock"]
     cid = str(entry["id"])
     side = str(entry.get("side") or "party")
@@ -1370,22 +1473,53 @@ def _build_pc_combatant(entry: dict[str, Any]) -> dict[str, Any]:
     hp_max = int(sb["hp_max"])
     hp = int(entry.get("hp", hp_max))
     speed = int(sb.get("speed_ft", 30))
+    level = int(sb.get("level", 1))
     spellcasting = copy.deepcopy(sb.get("spellcasting"))
+    slots_max: dict[str, int] = {}
     if isinstance(spellcasting, dict) and isinstance(spellcasting.get("slots"), dict):
         spellcasting["slots"] = {str(k): int(v) for k, v in spellcasting["slots"].items()}
+        raw_slots_max = entry.get("slots_max")
+        if isinstance(raw_slots_max, dict):
+            slots_max = {str(k): max(0, int(v)) for k, v in raw_slots_max.items()}
+        else:
+            slots_max = dict(spellcasting["slots"])
+        # Optional carryover spell slot override (used by M6.3B between dungeon rooms).
+        raw_slots_override = entry.get("slots")
+        if isinstance(raw_slots_override, dict):
+            merged_slots: dict[str, int] = {}
+            for k in sorted(set(slots_max.keys()) | {str(x) for x in raw_slots_override.keys()}, key=lambda s: int(s) if s.isdigit() else 99):
+                if k in raw_slots_override:
+                    val = max(0, int(raw_slots_override[k]))
+                    if k in slots_max:
+                        val = min(slots_max[k], val)
+                    merged_slots[k] = val
+                elif k in spellcasting["slots"]:
+                    merged_slots[k] = int(spellcasting["slots"][k])
+            spellcasting["slots"] = merged_slots
 
     ac_breakdown = str(sb.get("ac_breakdown") or "")
     wearing_armor = bool(ac_breakdown) and not ac_breakdown.startswith("Unarmored") and "Unarmored Defense" not in ac_breakdown
     traits = {strip_prefix(t) for t in (sb.get("traits") or [])}
     heroic_inspiration = bool(entry.get("heroic_inspiration", "resourceful" in traits))
 
-    return {
+    raw_ds = entry.get("death_saves")
+    if isinstance(raw_ds, dict):
+        death_saves = {
+            "successes": max(0, min(3, int(raw_ds.get("successes", 0)))),
+            "failures": max(0, min(3, int(raw_ds.get("failures", 0)))),
+        }
+    else:
+        death_saves = {"successes": 0, "failures": 0}
+
+    alive = bool(entry["alive"]) if "alive" in entry else (hp > 0)
+
+    comb: dict[str, Any] = {
         "id": cid,
         "name": str(entry.get("name") or sb.get("name") or cid),
         "side": side,
         "kind": "pc",
         "source_id": str(sb.get("class") or "classes:fighter"),
-        "level": int(sb.get("level", 1)),
+        "level": level,
         "size": str(sb.get("size") or "Medium"),
         "position": {"x": int(pos["x"]), "y": int(pos["y"])},
         "hp": hp,
@@ -1411,25 +1545,80 @@ def _build_pc_combatant(entry: dict[str, Any]) -> dict[str, Any]:
         "heroic_inspiration": heroic_inspiration,
         "extra_attacks": int(sb.get("extra_attacks", 1)),
         "feats": list(sb.get("feats", [])),
-        "turn_resources": {
-            "action": True,
-            "bonus_action": True,
-            "reaction": True,
-            "attacks_remaining": 0,
-            "cleave_used": False,
-            "nick_used": False,
-            "disengaged": False,
-            "light_attack_made": False,
-        },
-        "death_saves": {"successes": 0, "failures": 0},
-        "alive": hp > 0,
+        "turn_resources": _fresh_turn_resources(state_shape_version),
+        "death_saves": death_saves,
+        "alive": alive,
         "weapons": copy.deepcopy(sb.get("weapon_profiles", [])),
         "monster_actions": [],
         "spellcasting": spellcasting,
     }
 
+    if state_shape_version >= 3:
+        hit_die = int(sb.get("hit_die", 8))
+        raw_hd = entry.get("hit_dice")
+        if isinstance(raw_hd, dict):
+            hd_max = max(1, int(raw_hd.get("max", level)))
+            hd_rem = max(0, min(hd_max, int(raw_hd.get("remaining", hd_max))))
+            hd_die = int(raw_hd.get("die", hit_die))
+        elif isinstance(raw_hd, int) and not isinstance(raw_hd, bool):
+            hd_max = level
+            hd_rem = max(0, min(hd_max, int(raw_hd)))
+            hd_die = hit_die
+        else:
+            hd_max = level
+            hd_rem = level
+            hd_die = hit_die
 
-def _build_monster_combatant(entry: dict[str, Any], rules: RulesStore) -> dict[str, Any]:
+        raw_crm = sb.get("class_resources_max")
+        if not isinstance(raw_crm, dict):
+            raw_crm = _derive_class_resources_max(str(sb.get("class") or ""), level)
+        class_resources: dict[str, dict[str, Any]] = {}
+        for rname, rcfg in sorted(raw_crm.items()):
+            if isinstance(rcfg, dict):
+                rmax = max(0, int(rcfg.get("max", 0)))
+                item = copy.deepcopy(rcfg)
+                item["max"] = rmax
+                item["remaining"] = rmax
+                class_resources[str(rname)] = item
+
+        raw_cr_override = entry.get("class_resources")
+        if isinstance(raw_cr_override, dict):
+            for rname, rval in raw_cr_override.items():
+                key = str(rname)
+                if key in class_resources:
+                    rmax = int(class_resources[key]["max"])
+                    rem_raw = rval.get("remaining", rmax) if isinstance(rval, dict) else rval
+                    class_resources[key]["remaining"] = max(0, min(rmax, int(rem_raw)))
+                elif isinstance(rval, dict) and "max" in rval:
+                    rmax = max(0, int(rval["max"]))
+                    rem = max(0, min(rmax, int(rval.get("remaining", rmax))))
+                    item = copy.deepcopy(rval)
+                    item["max"] = rmax
+                    item["remaining"] = rem
+                    class_resources[key] = item
+
+        features: list[str] = []
+        for f in sb.get("features") or []:
+            f_slug = strip_prefix(str(f))
+            if f_slug and f_slug not in features:
+                features.append(f_slug)
+
+        comb["subclass"] = sb.get("subclass")
+        comb["features"] = features
+        comb["hit_die"] = hit_die
+        comb["hit_dice"] = {"die": hd_die, "max": hd_max, "remaining": hd_rem}
+        comb["slots_max"] = slots_max
+        comb["class_resources"] = class_resources
+
+    return comb
+
+
+def _build_monster_combatant(
+    entry: dict[str, Any],
+    rules: RulesStore,
+    *,
+    state_shape_version: int = STATE_SHAPE_VERSION,
+) -> dict[str, Any]:
     m_slug = strip_prefix(entry["monster"])
     m_rec = rules.get_monster(m_slug)
     if m_rec is None:
@@ -1515,16 +1704,7 @@ def _build_monster_combatant(entry: dict[str, Any], rules: RulesStore) -> dict[s
         "heroic_inspiration": heroic_inspiration,
         "extra_attacks": 1,
         "feats": [],
-        "turn_resources": {
-            "action": True,
-            "bonus_action": True,
-            "reaction": True,
-            "attacks_remaining": 0,
-            "cleave_used": False,
-            "nick_used": False,
-            "disengaged": False,
-            "light_attack_made": False,
-        },
+        "turn_resources": _fresh_turn_resources(state_shape_version),
         "death_saves": {"successes": 0, "failures": 0},
         "alive": hp > 0,
         "weapons": [],
@@ -1795,6 +1975,7 @@ def _resolve_single_weapon_attack(
     cleave_target_id: str | None = None,
     advantage_override: bool = False,
     disadvantage_override: bool = False,
+    use_sneak_attack: bool = True,
 ) -> dict[str, Any]:
     attacker = state["combatants"][attacker_id]
     target = state["combatants"][target_id]
@@ -1936,6 +2117,46 @@ def _resolve_single_weapon_attack(
         raw_dmg_bonus = 0
     raw_dmg = max(0, int(dmg_roll["total"]) + raw_dmg_bonus)
 
+    # Rogue Sneak Attack (M6.3A, 5e 2024 SRD 5.2): once per turn (incl. off-turn Opportunity Attacks),
+    # Finesse or Ranged weapon, Advantage or non-incapacitated ally within 5 ft (without Disadvantage).
+    # Summed into raw_dmg before resistance math so resistance halves the combined total once.
+    sa_hook_text: str | None = None
+    if (
+        int(state.get("state_shape_version", 1)) >= 3
+        and use_sneak_attack
+        and _has_sneak_attack(attacker)
+        and not attacker["turn_resources"].get("sneak_attack_used", False)
+        and ("finesse" in props or w_range == "ranged")
+    ):
+        sa_trigger: str | None = None
+        sa_trigger_label: str = ""
+        if mode == "advantage":
+            sa_trigger = "advantage"
+            sa_trigger_label = "Advantage"
+        elif mode == "normal" and _has_non_incapacitated_ally_within_5ft(state, attacker, target, rules):
+            sa_trigger = "ally_within_5ft"
+            sa_trigger_label = "ally within 5 ft"
+        if sa_trigger is not None:
+            dice_count = (max(1, int(attacker.get("level", 1))) + 1) // 2
+            sa_dice_expr = f"{dice_count}d6"
+            sa_roll = rng.roll_dice_expr(sa_dice_expr, crit=crit)
+            sa_dmg = max(0, int(sa_roll["total"]))
+            attacker["turn_resources"]["sneak_attack_used"] = True
+            tracker.emit(
+                "sneak_attack_triggered",
+                actor_id=attacker_id,
+                target_id=target_id,
+                weapon=weapon["slug"],
+                dice=sa_dice_expr,
+                rolls=sa_roll["rolls"],
+                damage=sa_dmg,
+                damage_type=dmg_type,
+                crit=crit,
+                trigger=sa_trigger,
+            )
+            raw_dmg += sa_dmg
+            sa_hook_text = f"Sneak Attack ({sa_dice_expr}, {sa_trigger_label}) adds {sa_dmg} {dmg_type} damage!"
+
     hit_hook_idx = len(tracker.hooks)  # the hit line goes before any 0-HP line the damage causes (#62)
     eff_dmg = _apply_damage_parts(
         state,
@@ -1953,6 +2174,8 @@ def _resolve_single_weapon_attack(
         f"{attacker['name']} hits {target['name']} with {weapon['name']}{crit_txt} "
         f"({total_to_hit} vs AC {target_ac}{cover_txt}) for {eff_dmg} {dmg_type} damage.",
     )
+    if sa_hook_text is not None:
+        tracker.hooks.insert(hit_hook_idx + 1, sa_hook_text)
     # A smite (#6) can follow a melee hit on the attacker's own turn. Recorded only for casters who know one,
     # so nobody else's state changes. Cleared when turn_resources reset at the start of the next turn.
     if not is_ranged and _knows_on_hit_smite(attacker):
@@ -2517,9 +2740,10 @@ def _resolve_monster_action(
 
 
 def compute_legal_actions(state: dict[str, Any], rules: RulesStore) -> dict[str, Any]:
+    ssv3 = int(state.get("state_shape_version", 1)) >= 3
     turn_order = state.get("turn_order") or []
     if not turn_order or state.get("status") == "ended":
-        return {
+        ended_legal: dict[str, Any] = {
             "active_actor_id": None,
             "movement_remaining_ft": 0,
             "actions": [],
@@ -2530,22 +2754,29 @@ def compute_legal_actions(state: dict[str, Any], rules: RulesStore) -> dict[str,
             "can_reroll": False,
             "reroll_hint": None,
         }
+        if ssv3:
+            ended_legal["class_features"] = []
+            ended_legal["surge_action_available"] = False
+            ended_legal["sneak_attack_available"] = False
+        return ended_legal
 
     active_idx = int(state.get("active_index", 0)) % len(turn_order)
     active_id = turn_order[active_idx]
     actor = state["combatants"][active_id]
     res = actor.get("turn_resources", {})
     incap = _has_modifier_flag(actor, "cannot_act", rules) or not actor.get("alive", True)
+    surge_avail = bool(res.get("surge_action")) if ssv3 else False
 
     actions: list[str] = []
     bonus_actions: list[str] = []
     weapons: list[str] = []
     spells: list[str] = []
+    class_features: list[str] = []
 
     if not incap:
-        if res.get("action") or int(res.get("attacks_remaining", 0)) > 0:
+        if res.get("action") or surge_avail or int(res.get("attacks_remaining", 0)) > 0:
             actions.append("attack")
-        if res.get("action"):
+        if res.get("action") or surge_avail:
             actions.extend(["dodge", "dash", "disengage", "help"])
         weapons = [w["slug"] for w in actor.get("weapons", [])]
         if not weapons and actor.get("monster_actions"):
@@ -2578,6 +2809,40 @@ def compute_legal_actions(state: dict[str, Any], rules: RulesStore) -> dict[str,
             if "offhand_attack" not in bonus_actions:
                 bonus_actions.append("offhand_attack")
 
+        if ssv3 and int(actor.get("hp", 0)) > 0:
+            actor_feats = {strip_prefix(str(f)) for f in (actor.get("features") or [])}
+            cr = actor.get("class_resources") or {}
+            if (
+                "fighter-second-wind" in actor_feats
+                and res.get("bonus_action")
+                and int((cr.get("second_wind") or {}).get("remaining", 0)) >= 1
+            ):
+                class_features.append("second_wind")
+                if "class_feature" not in bonus_actions:
+                    bonus_actions.append("class_feature")
+            if (
+                "fighter-action-surge" in actor_feats
+                and not res.get("action_surge_used_this_turn")
+                and int((cr.get("action_surge") or {}).get("remaining", 0)) >= 1
+            ):
+                class_features.append("action_surge")
+            if (
+                "paladin-lay-on-hands" in actor_feats
+                and res.get("bonus_action")
+                and int((cr.get("lay_on_hands") or {}).get("remaining", 0)) >= 1
+            ):
+                class_features.append("lay_on_hands")
+                if "class_feature" not in bonus_actions:
+                    bonus_actions.append("class_feature")
+            if (
+                "life-preserve-life" in actor_feats
+                and res.get("action")
+                and int((cr.get("channel_divinity") or {}).get("remaining", 0)) >= 1
+            ):
+                class_features.append("preserve_life")
+                if "class_feature" not in actions:
+                    actions.append("class_feature")
+
     pending = state.get("pending_reroll")
     can_reroll = bool(
         not incap
@@ -2598,7 +2863,7 @@ def compute_legal_actions(state: dict[str, Any], rules: RulesStore) -> dict[str,
             "target_ac": int(pending.get("target_ac", 0)),
         }
 
-    return {
+    out: dict[str, Any] = {
         "active_actor_id": active_id,
         "movement_remaining_ft": int(actor.get("movement_remaining_ft", 0)),
         "actions": actions,
@@ -2609,21 +2874,31 @@ def compute_legal_actions(state: dict[str, Any], rules: RulesStore) -> dict[str,
         "can_reroll": can_reroll,
         "reroll_hint": reroll_hint,
     }
+    if ssv3:
+        out["class_features"] = class_features
+        out["surge_action_available"] = surge_avail
+        out["sneak_attack_available"] = bool(
+            not incap and _has_sneak_attack(actor) and not res.get("sneak_attack_used", False)
+        )
+    return out
 
 
 def _invalid(state: dict[str, Any], message: str, rules: RulesStore) -> dict[str, Any]:
+    diff: dict[str, Any] = {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": False,
+    }
+    if isinstance(state, dict) and int(state.get("state_shape_version", 1)) >= 3:
+        diff["resource_changes"] = []
     return {
         "status": "invalid_intent",
         "error": message,
         "events": [],
-        "state_diff": {
-            "hp_changes": [],
-            "condition_changes": [],
-            "position_changes": [],
-            "slot_changes": [],
-            "effect_changes": [],
-            "turn_changed": False,
-        },
+        "state_diff": diff,
         "state": state,
         "legal_actions": compute_legal_actions(state, rules) if state else {},
         "narrative_hooks": [],
@@ -2932,6 +3207,15 @@ def step(
         if not isinstance(raw_combatants, list) or not raw_combatants:
             return _invalid({}, "start_encounter requires a non-empty 'combatants' list.", rules)
 
+        raw_ssv = intent.get("state_shape_version")
+        if raw_ssv is None:
+            ssv = STATE_SHAPE_VERSION
+        else:
+            parsed_ssv = _parse_int(raw_ssv, allow_str=False)
+            if parsed_ssv is None or parsed_ssv < 1:
+                return _invalid(safe_start, "start_encounter 'state_shape_version' must be a positive integer.", rules)
+            ssv = parsed_ssv
+
         try:
             bounds = validate_bounds(intent.get("bounds"))
             terrain = validate_terrain(intent.get("terrain"))
@@ -2951,9 +3235,9 @@ def step(
                 return _invalid({}, f"Duplicate combatant id '{cid}'.", rules)
             try:
                 if "statblock" in entry:
-                    comb = _build_pc_combatant(entry)
+                    comb = _build_pc_combatant(entry, state_shape_version=ssv)
                 elif "monster" in entry:
-                    comb = _build_monster_combatant(entry, rules)
+                    comb = _build_monster_combatant(entry, rules, state_shape_version=ssv)
                 else:
                     return _invalid({}, f"Combatant '{cid}' must provide either 'statblock' or 'monster'.", rules)
             except ValueError as exc:
@@ -3027,6 +3311,8 @@ def step(
             "pending_reroll": None,
             "combatants": combatants,
         }
+        if ssv >= 3:
+            new_state["state_shape_version"] = STATE_SHAPE_VERSION
         if bounds is not None:
             new_state["bounds"] = bounds
         if terrain is not None:
@@ -3272,9 +3558,8 @@ def step(
             m_action = _find_monster_action(actor, act_name)
             if m_action is None:
                 return _invalid(copy.deepcopy(state), f"Monster '{actor_id}' has no action '{act_name}'.", rules)
-            if not actor["turn_resources"].get("action"):
+            if not _consume_non_magic_action(actor["turn_resources"]):
                 return _invalid(copy.deepcopy(state), f"{actor_id} has no Action remaining this turn.", rules)
-            actor["turn_resources"]["action"] = False
             ok, err_msg = _resolve_monster_action(
                 s,
                 actor_id,
@@ -3391,6 +3676,9 @@ def step(
             elif res.get("action"):
                 res["action"] = False
                 res["attacks_remaining"] = max(0, int(actor.get("extra_attacks", 1)) - 1)
+            elif res.get("surge_action"):
+                res["surge_action"] = False
+                res["attacks_remaining"] = max(0, int(actor.get("extra_attacks", 1)) - 1)
             else:
                 return _invalid(copy.deepcopy(state), f"{actor_id} has no Action or Extra Attacks remaining.", rules)
             if "light" in props:
@@ -3411,6 +3699,7 @@ def step(
             cleave_target_id=intent.get("cleave_target_id"),
             advantage_override=adv_ovr,
             disadvantage_override=disadv_ovr,
+            use_sneak_attack=bool(intent.get("use_sneak_attack", True)),
         )
 
         s["rng"] = rng.to_dict()
@@ -3494,6 +3783,8 @@ def step(
                 res["bonus_action"] = False
             else:
                 if not res.get("action"):
+                    if res.get("surge_action"):
+                        return _invalid(copy.deepcopy(state), _ACTION_SURGE_MAGIC_BAN_ERROR, rules)
                     return _invalid(copy.deepcopy(state), f"{actor_id} has no Action remaining.", rules)
                 res["action"] = False
 
@@ -3860,7 +4151,7 @@ def step(
                 tracker.emit("teleported", actor_id=actor_id, spell=spell_slug, from_pos=old_pos, to_pos=to_pos)
                 tracker.hook(f"{actor['name']} teleports via {spell_name} to ({to_pos['x']}, {to_pos['y']}).")
 
-        # 2. Healing spells (cure-wounds, healing-word, heal).
+        # 2. Healing spells (cure-wounds, healing-word, mass-healing-word, mass-cure-wounds, heal, aid).
         healing_ir = spell.get("healing")
         if isinstance(healing_ir, dict):
             h_dice = healing_ir.get("dice")
@@ -3873,6 +4164,15 @@ def step(
             else:
                 heal_amt = h_flat + (spell_mod if add_mod else 0)
             heal_amt = max(0, heal_amt)
+
+            ssv3 = int(s.get("state_shape_version", 1)) >= 3
+            actor_feats = {strip_prefix(str(f)) for f in (actor.get("features") or [])}
+            dol_bonus = (
+                2 + slot_level
+                if (ssv3 and "life-disciple-of-life" in actor_feats and slot_level >= 1 and heal_amt > 0)
+                else 0
+            )
+            healed_other_living = False
 
             for tid in (target_ids or [actor_id]):
                 t = s["combatants"][tid]
@@ -3893,27 +4193,58 @@ def step(
                         f"{actor['name']} casts {spell_name}, but it has no effect on {t['name']} (dead)."
                     )
                     continue
+                total_heal = heal_amt + dol_bonus
                 revived = False
-                if hp_before == 0 and t.get("kind") == "pc" and heal_amt > 0:
+                if hp_before == 0 and t.get("kind") == "pc" and total_heal > 0:
                     # 2024 RAW: healing revives 0-HP living (unconscious) PC, removes unconscious, LEAVES prone!
                     _remove_condition(t, "unconscious")
                     t["death_saves"] = {"successes": 0, "failures": 0}
                     revived = True
-                t["hp"] = min(int(t["hp_max"]), hp_before + heal_amt)
+                t["hp"] = min(int(t["hp_max"]), hp_before + total_heal)
+                if tid != actor_id and total_heal > 0:
+                    healed_other_living = True
+                dol_fields = {"disciple_of_life_bonus": dol_bonus} if dol_bonus > 0 else {}
                 tracker.emit(
                     "healing_applied",
                     source_id=actor_id,
                     target_id=tid,
                     spell=spell_slug,
-                    amount=heal_amt,
+                    amount=total_heal,
                     hp_before=hp_before,
                     hp_after=t["hp"],
                     revived=revived,
+                    **dol_fields,
                 )
                 revive_note = " (regains consciousness, remains Prone)" if revived else ""
+                dol_note = f" (+{dol_bonus} Disciple of Life)" if dol_bonus > 0 else ""
                 tracker.hook(
-                    f"{actor['name']} casts {spell_name}, restoring {heal_amt} HP to {t['name']}{revive_note}."
+                    f"{actor['name']} casts {spell_name}, restoring {total_heal} HP to {t['name']}{revive_note}{dol_note}."
                 )
+
+            # Life Domain L6+ Blessed Healer: immediately self-heal 2 + slot_level when healing another living creature with a slot.
+            if (
+                ssv3
+                and "life-blessed-healer" in actor_feats
+                and slot_level >= 1
+                and actor.get("alive")
+                and healed_other_living
+            ):
+                bh_amt = 2 + slot_level
+                self_hp_before = int(actor["hp"])
+                actor["hp"] = min(int(actor["hp_max"]), self_hp_before + bh_amt)
+                tracker.emit(
+                    "healing_applied",
+                    source_id=actor_id,
+                    target_id=actor_id,
+                    feature="blessed_healer",
+                    spell=spell_slug,
+                    slot_level=slot_level,
+                    amount=bh_amt,
+                    hp_before=self_hp_before,
+                    hp_after=actor["hp"],
+                    revived=False,
+                )
+                tracker.hook(f"Blessed Healer restores {bh_amt} HP to {actor['name']}.")
 
         # 3. Temp HP spells (false-life).
         temp_hp_ir = spell.get("temp_hp")
@@ -4569,10 +4900,8 @@ def step(
             return _invalid(copy.deepcopy(state), f"{actor_id} is not alive.", rules)
         if _has_modifier_flag(actor, "cannot_act", rules):
             return _invalid(copy.deepcopy(state), f"{actor_id} is Incapacitated and cannot take actions.", rules)
-        if not actor["turn_resources"].get("action"):
+        if not _consume_non_magic_action(actor["turn_resources"]):
             return _invalid(copy.deepcopy(state), f"{actor_id} has no Action remaining this turn.", rules)
-
-        actor["turn_resources"]["action"] = False
 
         if intent_type == "dodge":
             actor["active_effects"].append(
@@ -4739,16 +5068,13 @@ def step(
             ]
 
         # 5. Refresh turn resources and movement.
-        new_actor["turn_resources"] = {
-            "action": True,
-            "bonus_action": True,
-            "reaction": True,
-            "attacks_remaining": 0,
-            "cleave_used": False,
-            "nick_used": False,
-            "disengaged": False,
-            "light_attack_made": False,
-        }
+        ssv = int(s.get("state_shape_version", 1))
+        if ssv >= 3:
+            # Sneak Attack is once per turn (including off-turn Opportunity Attacks), so reset for every combatant.
+            for comb in s["combatants"].values():
+                if isinstance(comb.get("turn_resources"), dict):
+                    comb["turn_resources"]["sneak_attack_used"] = False
+        new_actor["turn_resources"] = _fresh_turn_resources(ssv)
         new_actor["movement_remaining_ft"] = _effective_speed(new_actor, rules)
         tracker.emit("turn_started", actor_id=new_active_id, round=new_round)
         tracker.hook(f"Round {new_round}: {new_actor['name']}'s turn begins.")
@@ -4930,6 +5256,439 @@ def step(
             "state": final_state,
             "legal_actions": compute_legal_actions(final_state, rules),
             "narrative_hooks": merged_hooks,
+        }
+
+    # ------------------------------------------------------------------
+    # 8. `class_feature` (M6.3A Core 2024 SRD 5.2 Class Features)
+    # ------------------------------------------------------------------
+    if intent_type == "class_feature":
+        s["pending_reroll"] = None
+        if actor_id != active_id:
+            return _invalid(copy.deepcopy(state), f"It is {active_id}'s turn, not {actor_id}'s.", rules)
+        if not actor.get("alive") or int(actor.get("hp", 0)) <= 0:
+            return _invalid(copy.deepcopy(state), f"{actor_id} is not conscious and cannot use class features.", rules)
+        if _has_modifier_flag(actor, "cannot_act", rules):
+            return _invalid(copy.deepcopy(state), f"{actor_id} is Incapacitated and cannot use class features.", rules)
+
+        feature = str(intent.get("feature") or "").strip().lower()
+        if not feature:
+            return _invalid(copy.deepcopy(state), "class_feature intent requires a 'feature' field.", rules)
+
+        actor_feats = {strip_prefix(str(f)) for f in (actor.get("features") or [])}
+        res = actor["turn_resources"]
+        cr = actor.setdefault("class_resources", {})
+
+        # A. Fighter — Second Wind (Bonus Action, 1d10 + level, optional L5+ Tactical Shift move)
+        if feature == "second_wind":
+            if "fighter-second-wind" not in actor_feats:
+                return _invalid(copy.deepcopy(state), f"{actor_id} does not have the Second Wind feature.", rules)
+            if not res.get("bonus_action"):
+                return _invalid(copy.deepcopy(state), f"{actor_id} has no Bonus Action remaining for Second Wind.", rules)
+            sw_res = cr.get("second_wind")
+            if not isinstance(sw_res, dict) or int(sw_res.get("remaining", 0)) < 1:
+                return _invalid(copy.deepcopy(state), f"{actor_id} has no Second Wind uses remaining.", rules)
+
+            raw_move_to = intent.get("move_to")
+            parsed_move: dict[str, int] | None = None
+            shift_cost = 0
+            is_prone = "prone" in _effective_conditions(actor, rules)
+            if raw_move_to is not None:
+                if "fighter-tactical-shift" not in actor_feats:
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"{actor_id} requires Tactical Shift (Fighter level 5+) to move with Second Wind.",
+                        rules,
+                    )
+                parsed_move = _parse_point(raw_move_to)
+                if parsed_move is None:
+                    return _invalid(
+                        copy.deepcopy(state),
+                        "second_wind 'move_to' must be a dict with integer 'x' and 'y' coordinates.",
+                        rules,
+                    )
+                eff_speed = _effective_speed(actor, rules)
+                max_shift = eff_speed // 2
+                if eff_speed <= 0 or max_shift <= 0:
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"{actor_id} has 0 speed and cannot use Tactical Shift.",
+                        rules,
+                    )
+                if distance_ft(actor["position"], parsed_move) > 0:
+                    blocker_id = square_occupant(s, actor_id, parsed_move)
+                    if blocker_id is not None:
+                        blocker_name = str(s["combatants"][blocker_id].get("name") or blocker_id)
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"Tactical Shift destination ({parsed_move['x']}, {parsed_move['y']}) is occupied by {blocker_name}.",
+                            rules,
+                        )
+                    if "frightened" in _effective_conditions(actor, rules):
+                        for fe in _condition_entries_for(actor, "frightened"):
+                            fsrc_id = fe.get("source_id")
+                            if fsrc_id and fsrc_id in s["combatants"] and s["combatants"][fsrc_id].get("alive"):
+                                fpos = s["combatants"][fsrc_id]["position"]
+                                if distance_ft(parsed_move, fpos) < distance_ft(actor["position"], fpos):
+                                    return _invalid(
+                                        copy.deepcopy(state),
+                                        f"{actor_id} is Frightened of {fsrc_id} and cannot move closer to it.",
+                                        rules,
+                                    )
+                    move_cost, path_err = movement_path_cost(
+                        actor["position"],
+                        parsed_move,
+                        s.get("bounds"),
+                        s.get("terrain"),
+                        is_prone=is_prone,
+                        max_cost=max_shift,
+                    )
+                    if path_err is not None or move_cost is None or move_cost > max_shift:
+                        return _invalid(
+                            copy.deepcopy(state),
+                            path_err
+                            or f"Tactical Shift destination ({parsed_move['x']}, {parsed_move['y']}) exceeds half speed ({max_shift} ft).",
+                            rules,
+                        )
+                    shift_cost = move_cost
+
+            res["bonus_action"] = False
+            sw_res["remaining"] = int(sw_res["remaining"]) - 1
+            sw_roll = rng.roll_dice_expr("1d10", crit=False)
+            lvl_bonus = int(actor.get("level", 1))
+            heal_amt = int(sw_roll["total"]) + lvl_bonus
+            hp_before = int(actor["hp"])
+            actor["hp"] = min(int(actor["hp_max"]), hp_before + heal_amt)
+
+            tracker.emit(
+                "class_feature_used",
+                actor_id=actor_id,
+                feature="second_wind",
+                uses_left=sw_res["remaining"],
+                dice="1d10",
+                roll=int(sw_roll["total"]),
+                level_bonus=lvl_bonus,
+            )
+            tracker.emit(
+                "healing_applied",
+                source_id=actor_id,
+                target_id=actor_id,
+                feature="second_wind",
+                amount=heal_amt,
+                hp_before=hp_before,
+                hp_after=actor["hp"],
+                revived=False,
+            )
+            hook_txt = f"{actor['name']} uses Second Wind (Bonus Action), regaining {heal_amt} HP."
+            if parsed_move is not None and distance_ft(actor["position"], parsed_move) > 0:
+                old_pos = copy.deepcopy(actor["position"])
+                shift_dist = distance_ft(old_pos, parsed_move)
+                actor["position"] = parsed_move
+                tracker.emit(
+                    "moved",
+                    actor_id=actor_id,
+                    from_pos=old_pos,
+                    to_pos=parsed_move,
+                    distance_ft=shift_dist,
+                    movement_cost_ft=shift_cost,
+                    crawled=is_prone,
+                    tactical_shift=True,
+                    provokes_oa=False,
+                )
+                hook_txt += (
+                    f" Tactical Shift: moves to ({parsed_move['x']}, {parsed_move['y']}) "
+                    "without provoking Opportunity Attacks."
+                )
+            tracker.hook(hook_txt)
+
+        # B. Fighter — Action Surge (Free 1/turn, extra non-Magic action)
+        elif feature == "action_surge":
+            if "fighter-action-surge" not in actor_feats:
+                return _invalid(copy.deepcopy(state), f"{actor_id} does not have the Action Surge feature.", rules)
+            if res.get("action_surge_used_this_turn"):
+                return _invalid(copy.deepcopy(state), f"{actor_id} has already used Action Surge this turn.", rules)
+            as_res = cr.get("action_surge")
+            if not isinstance(as_res, dict) or int(as_res.get("remaining", 0)) < 1:
+                return _invalid(copy.deepcopy(state), f"{actor_id} has no Action Surge uses remaining.", rules)
+
+            as_res["remaining"] = int(as_res["remaining"]) - 1
+            res["action_surge_used_this_turn"] = True
+            res["surge_action"] = True
+            tracker.emit(
+                "class_feature_used",
+                actor_id=actor_id,
+                feature="action_surge",
+                uses_left=as_res["remaining"],
+            )
+            tracker.hook(f"{actor['name']} activates Action Surge, gaining one extra non-Magic action this turn!")
+
+        # C. Paladin — Lay on Hands (2024 Bonus Action, 5*level LR pool, Touch <= 5 ft, SRD 5.2 RAW no creature-type ban)
+        elif feature == "lay_on_hands":
+            if "paladin-lay-on-hands" not in actor_feats:
+                return _invalid(copy.deepcopy(state), f"{actor_id} does not have the Lay on Hands feature.", rules)
+            if not res.get("bonus_action"):
+                return _invalid(copy.deepcopy(state), f"{actor_id} has no Bonus Action remaining for Lay on Hands.", rules)
+            loh_res = cr.get("lay_on_hands")
+            pool_rem = int(loh_res.get("remaining", 0)) if isinstance(loh_res, dict) else 0
+            if pool_rem < 1:
+                return _invalid(copy.deepcopy(state), f"{actor_id} has no Lay on Hands HP remaining.", rules)
+
+            mode = str(intent.get("mode") or "heal").strip().lower()
+            if mode not in ("heal", "cure_poison"):
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"Lay on Hands 'mode' must be 'heal' or 'cure_poison', got {mode!r}.",
+                    rules,
+                )
+            target_id = str(intent.get("target_id") or actor_id)
+            if target_id not in s["combatants"]:
+                return _invalid(copy.deepcopy(state), f"Unknown Lay on Hands target '{target_id}'.", rules)
+            target = s["combatants"][target_id]
+            if not target.get("alive"):
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"Lay on Hands cannot affect dead target '{target_id}'.",
+                    rules,
+                )
+            dist = distance_ft(actor["position"], target["position"])
+            if dist > 5:
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"Target '{target_id}' is out of Touch range for Lay on Hands ({dist} ft > 5 ft).",
+                    rules,
+                )
+            if dist > 0 and not has_line_of_sight(actor["position"], target["position"], s.get("terrain")):
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"No line of sight to '{target_id}' for Lay on Hands: blocked by a wall.",
+                    rules,
+                )
+
+            if mode == "heal":
+                amt = _parse_int(intent.get("amount"), allow_str=False)
+                if amt is None or amt < 1 or amt > pool_rem:
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"Lay on Hands 'amount' must be an integer between 1 and {pool_rem}.",
+                        rules,
+                    )
+                res["bonus_action"] = False
+                loh_res["remaining"] = pool_rem - amt
+                hp_before = int(target["hp"])
+                revived = False
+                if hp_before == 0 and target.get("kind") == "pc" and amt > 0:
+                    _remove_condition(target, "unconscious")
+                    target["death_saves"] = {"successes": 0, "failures": 0}
+                    revived = True
+                target["hp"] = min(int(target["hp_max"]), hp_before + amt)
+                tracker.emit(
+                    "class_feature_used",
+                    actor_id=actor_id,
+                    feature="lay_on_hands",
+                    mode="heal",
+                    spent=amt,
+                    pool_left=loh_res["remaining"],
+                    target_id=target_id,
+                )
+                tracker.emit(
+                    "healing_applied",
+                    source_id=actor_id,
+                    target_id=target_id,
+                    feature="lay_on_hands",
+                    amount=amt,
+                    hp_before=hp_before,
+                    hp_after=target["hp"],
+                    revived=revived,
+                )
+                tracker.hook(
+                    f"{actor['name']} uses Lay on Hands on {target['name']}, restoring {amt} HP "
+                    f"({loh_res['remaining']} HP left in pool)."
+                )
+            else:
+                if pool_rem < 5:
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"Lay on Hands cure_poison requires 5 HP in pool (only {pool_rem} remaining).",
+                        rules,
+                    )
+                if "poisoned" not in _direct_condition_slugs(target):
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"Target '{target_id}' does not have the Poisoned condition.",
+                        rules,
+                    )
+                res["bonus_action"] = False
+                loh_res["remaining"] = pool_rem - 5
+                _remove_condition(target, "poisoned")
+                tracker.emit(
+                    "class_feature_used",
+                    actor_id=actor_id,
+                    feature="lay_on_hands",
+                    mode="cure_poison",
+                    spent=5,
+                    pool_left=loh_res["remaining"],
+                    target_id=target_id,
+                )
+                tracker.emit(
+                    "condition_ended",
+                    target_id=target_id,
+                    condition="poisoned",
+                    reason="lay_on_hands",
+                )
+                tracker.hook(
+                    f"{actor['name']} spends 5 HP of Lay on Hands to cure Poisoned on {target['name']} "
+                    f"({loh_res['remaining']} HP left in pool)."
+                )
+
+        # D. Cleric (Life Domain) — Channel Divinity: Preserve Life (Magic Action — blocked by Action Surge!)
+        elif feature == "preserve_life":
+            if "life-preserve-life" not in actor_feats:
+                return _invalid(copy.deepcopy(state), f"{actor_id} does not have the Preserve Life feature.", rules)
+            if not res.get("action"):
+                if res.get("surge_action"):
+                    return _invalid(copy.deepcopy(state), _ACTION_SURGE_MAGIC_BAN_ERROR, rules)
+                return _invalid(copy.deepcopy(state), f"{actor_id} has no Action remaining for Preserve Life.", rules)
+            cd_res = cr.get("channel_divinity")
+            if not isinstance(cd_res, dict) or int(cd_res.get("remaining", 0)) < 1:
+                return _invalid(copy.deepcopy(state), f"{actor_id} has no Channel Divinity uses remaining.", rules)
+
+            pool_max = 5 * int(actor.get("level", 1))
+            raw_allocs = intent.get("allocations")
+            raw_tids = intent.get("target_ids")
+            allocations: dict[str, int] = {}
+
+            def _validate_preserve_target(tid: str) -> tuple[dict[str, Any] | None, str | None]:
+                if tid not in s["combatants"]:
+                    return None, f"Unknown Preserve Life target '{tid}'."
+                t = s["combatants"][tid]
+                if not t.get("alive"):
+                    return None, f"Preserve Life cannot affect dead target '{tid}'."
+                dist_t = distance_ft(actor["position"], t["position"])
+                if dist_t > 30:
+                    return None, f"Preserve Life target '{tid}' is out of 30-ft range ({dist_t} ft > 30 ft)."
+                if tid != actor_id and not has_line_of_sight(actor["position"], t["position"], s.get("terrain")):
+                    return None, f"No line of sight to '{tid}' for Preserve Life: blocked by a wall."
+                half_max = int(t["hp_max"]) // 2
+                if int(t["hp"]) > half_max:
+                    return None, f"Preserve Life target '{tid}' is not Bloodied ({t['hp']}/{t['hp_max']} HP; half max is {half_max})."
+                return t, None
+
+            if raw_allocs is not None:
+                if not isinstance(raw_allocs, dict) or not raw_allocs:
+                    return _invalid(
+                        copy.deepcopy(state),
+                        "Preserve Life 'allocations' must be a non-empty mapping of target_id -> positive integer HP.",
+                        rules,
+                    )
+                for raw_tid, raw_amt in raw_allocs.items():
+                    tid = str(raw_tid)
+                    amt = _parse_int(raw_amt, allow_str=False)
+                    if amt is None or amt < 1:
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"Preserve Life allocation for '{tid}' must be an integer >= 1.",
+                            rules,
+                        )
+                    t, err = _validate_preserve_target(tid)
+                    if err is not None or t is None:
+                        return _invalid(copy.deepcopy(state), err or "Invalid Preserve Life target.", rules)
+                    cap = max(0, (int(t["hp_max"]) // 2) - int(t["hp"]))
+                    if amt > cap:
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"Preserve Life allocation {amt} for '{tid}' exceeds half-HP-max cap ({cap} HP).",
+                            rules,
+                        )
+                    allocations[tid] = amt
+                if sum(allocations.values()) > pool_max:
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"Preserve Life total allocation ({sum(allocations.values())} HP) exceeds pool maximum ({pool_max} HP).",
+                        rules,
+                    )
+            elif isinstance(raw_tids, (list, tuple)) and raw_tids:
+                dedup_tids = list(dict.fromkeys(str(x) for x in raw_tids))
+                for tid in dedup_tids:
+                    _, err = _validate_preserve_target(tid)
+                    if err is not None:
+                        return _invalid(copy.deepcopy(state), err, rules)
+                ordered_tids = sorted(
+                    dedup_tids,
+                    key=lambda tid: (int(s["combatants"][tid]["hp"]) / max(1, int(s["combatants"][tid]["hp_max"])), tid),
+                )
+                rem_pool = pool_max
+                for tid in ordered_tids:
+                    if rem_pool <= 0:
+                        break
+                    t = s["combatants"][tid]
+                    cap = max(0, (int(t["hp_max"]) // 2) - int(t["hp"]))
+                    give = min(rem_pool, cap)
+                    if give > 0:
+                        allocations[tid] = give
+                        rem_pool -= give
+                if not allocations:
+                    return _invalid(
+                        copy.deepcopy(state),
+                        "Preserve Life could not distribute any HP (all targets are already at half HP max).",
+                        rules,
+                    )
+            else:
+                return _invalid(
+                    copy.deepcopy(state),
+                    "Preserve Life requires either 'allocations' or 'target_ids'.",
+                    rules,
+                )
+
+            res["action"] = False
+            cd_res["remaining"] = int(cd_res["remaining"]) - 1
+            total_distributed = sum(allocations.values())
+            tracker.emit(
+                "class_feature_used",
+                actor_id=actor_id,
+                feature="preserve_life",
+                uses_left=cd_res["remaining"],
+                pool_max=pool_max,
+                total_distributed=total_distributed,
+                allocations=dict(allocations),
+            )
+            healed_names: list[str] = []
+            for tid, amt in allocations.items():
+                t = s["combatants"][tid]
+                hp_before = int(t["hp"])
+                revived = False
+                if hp_before == 0 and t.get("kind") == "pc" and amt > 0:
+                    _remove_condition(t, "unconscious")
+                    t["death_saves"] = {"successes": 0, "failures": 0}
+                    revived = True
+                t["hp"] = min(int(t["hp_max"]) // 2, hp_before + amt)
+                tracker.emit(
+                    "healing_applied",
+                    source_id=actor_id,
+                    target_id=tid,
+                    feature="preserve_life",
+                    amount=amt,
+                    hp_before=hp_before,
+                    hp_after=t["hp"],
+                    revived=revived,
+                )
+                healed_names.append(str(t["name"]))
+            tracker.hook(
+                f"{actor['name']} channels Preserve Life, distributing {total_distributed} HP among "
+                f"{', '.join(healed_names)}."
+            )
+
+        else:
+            return _invalid(copy.deepcopy(state), f"Unsupported class feature '{feature}'.", rules)
+
+        s["rng"] = rng.to_dict()
+        _update_encounter_status(s)
+        return {
+            "status": "ok",
+            "error": None,
+            "events": tracker.events,
+            "state_diff": tracker.build_diff(s),
+            "state": s,
+            "legal_actions": compute_legal_actions(s, rules),
+            "narrative_hooks": tracker.hooks,
         }
 
     return _invalid(copy.deepcopy(state), f"Unsupported intent type '{intent_type}'.", rules)

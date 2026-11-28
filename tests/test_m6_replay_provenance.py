@@ -23,10 +23,11 @@ from srd2024.arena import (
 from srd2024.engine.combat import step
 from srd2024.engine.store import RulesStore
 
-# Snapshots for STATE_SHAPE_VERSION == 2 (adds optional top-level `bounds` and `terrain` on EncounterState).
+# Snapshots for STATE_SHAPE_VERSION == 3 (adds top-level `state_shape_version` on EncounterState
+# and M6.3A PC class-feature fields: `class_resources`, `features`, `hit_die`, `hit_dice`, `slots_max`, `subclass`).
 # If EncounterState or combatant serialization fields change, bump STATE_SHAPE_VERSION
-# in src/srd2024/arena/runner.py and update these snapshots deliberately.
-EXPECTED_STATE_SHAPE_VERSION = 2
+# in src/srd2024/engine/combat.py (re-exported by runner.py) and update these snapshots deliberately.
+EXPECTED_STATE_SHAPE_VERSION = 3
 
 EXPECTED_ENCOUNTER_STATE_KEYS = [
     "active_index",
@@ -36,6 +37,7 @@ EXPECTED_ENCOUNTER_STATE_KEYS = [
     "rng",
     "round",
     "schema_version",
+    "state_shape_version",
     "status",
     "turn_order",
 ]
@@ -86,8 +88,14 @@ EXPECTED_BASE_COMBATANT_KEYS = [
 KNOWN_OPTIONAL_COMBATANT_KEYS = frozenset(
     {
         "aura_immune_to",
+        "class_resources",
+        "features",
+        "hit_die",
+        "hit_dice",
         "legendary_resistance_uses",
         "reaction_policy",
+        "slots_max",
+        "subclass",
         "traits_ir",
     }
 )

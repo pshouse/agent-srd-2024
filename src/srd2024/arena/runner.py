@@ -19,6 +19,7 @@ from typing import Any, Callable
 
 from srd2024 import __version__ as ENGINE_VERSION
 from srd2024.engine.combat import (
+    STATE_SHAPE_VERSION,
     _effective_ac,
     _effective_conditions,
     _effective_speed,
@@ -231,6 +232,11 @@ def build_observation(
         "damage_resistances": list(actor.get("damage_resistances") or []),
         "damage_immunities": list(actor.get("damage_immunities") or []),
         "death_saves": copy.deepcopy(actor.get("death_saves", {"successes": 0, "failures": 0})),
+        "subclass": actor.get("subclass"),
+        "features": list(actor.get("features") or []),
+        "hit_dice": copy.deepcopy(actor.get("hit_dice")),
+        "slots_max": copy.deepcopy(actor.get("slots_max") or {}),
+        "class_resources": copy.deepcopy(actor.get("class_resources") or {}),
     }
 
     # Determine actor melee reach for `in_reach_enemies`
@@ -399,6 +405,7 @@ _ARENA_INTENT_TYPES = frozenset(
         "move",
         "attack",
         "cast_spell",
+        "class_feature",
         "dodge",
         "dash",
         "disengage",
@@ -510,8 +517,7 @@ def _cannot_act(actor: dict[str, Any], rules: RulesStore) -> bool:
     return False
 
 
-# State-shape schema version (#66, bumped to 2 in #95 for optional top-level EncounterState `bounds`/`terrain`).
-STATE_SHAPE_VERSION: int = 2
+# State-shape schema version (#66, #95, bumped to 3 in M6.3A; canonical constant lives in combat.py).
 _RULES_DIGEST_CACHE: dict[tuple[str, int, int], str] = {}
 
 
@@ -692,6 +698,7 @@ def run_match(
     max_rounds: int | None = None,
     max_actions_per_turn: int = 6,
     max_retries_per_action: int = 2,
+    state_shape_version: int | None = None,
 ) -> dict[str, Any]:
     """Run a complete multi-turn 5e 2024 (SRD 5.2) arena match and return a MatchTranscript."""
     compiled = load_scenario(scenario, rules)
@@ -705,6 +712,8 @@ def run_match(
         "seed": int(seed),
         "combatants": copy.deepcopy(compiled["combatants"]),
     }
+    if state_shape_version is not None:
+        start_payload["state_shape_version"] = int(state_shape_version)
     if compiled.get("bounds") is not None:
         start_payload["bounds"] = copy.deepcopy(compiled["bounds"])
     if compiled.get("terrain") is not None:
@@ -1150,9 +1159,11 @@ def _combatant_to_start_entry(comb: dict[str, Any]) -> dict[str, Any]:
     statblock = {
         "name": comb["name"],
         "class": comb.get("source_id", "classes:fighter"),
+        "subclass": comb.get("subclass"),
         "level": int(comb.get("level", 1)),
         "size": comb.get("size", "Medium"),
         "hp_max": int(comb["hp_max"]),
+        "hit_die": int(comb.get("hit_die", 8)),
         "ac": int(comb["ac"]),
         "ac_breakdown": ac_breakdown,
         "speed_ft": int(comb.get("speed_ft", 30)),
@@ -1166,11 +1177,18 @@ def _combatant_to_start_entry(comb: dict[str, Any]) -> dict[str, Any]:
         "damage_vulnerabilities": list(comb.get("damage_vulnerabilities", [])),
         "condition_immunities": list(comb.get("condition_immunities", [])),
         "extra_attacks": int(comb.get("extra_attacks", 1)),
+        "features": list(comb.get("features", [])),
         "feats": list(comb.get("feats", [])),
         "weapon_profiles": copy.deepcopy(comb.get("weapons", [])),
         "spellcasting": copy.deepcopy(comb.get("spellcasting")),
     }
-    return {
+    if isinstance(comb.get("class_resources"), dict):
+        statblock["class_resources_max"] = {
+            k: {rk: rv for rk, rv in v.items() if rk != "remaining"}
+            for k, v in comb["class_resources"].items()
+            if isinstance(v, dict)
+        }
+    entry: dict[str, Any] = {
         "id": comb["id"],
         "name": comb["name"],
         "side": comb["side"],
@@ -1182,6 +1200,19 @@ def _combatant_to_start_entry(comb: dict[str, Any]) -> dict[str, Any]:
         "conditions": copy.deepcopy(comb.get("conditions", [])),
         "heroic_inspiration": bool(comb.get("heroic_inspiration", False)),
     }
+    if isinstance(comb.get("death_saves"), dict):
+        entry["death_saves"] = copy.deepcopy(comb["death_saves"])
+    if "alive" in comb:
+        entry["alive"] = bool(comb["alive"])
+    if isinstance(comb.get("slots_max"), dict) and comb["slots_max"]:
+        entry["slots_max"] = copy.deepcopy(comb["slots_max"])
+    if isinstance(comb.get("spellcasting"), dict) and isinstance(comb["spellcasting"].get("slots"), dict):
+        entry["slots"] = copy.deepcopy(comb["spellcasting"]["slots"])
+    if isinstance(comb.get("hit_dice"), dict):
+        entry["hit_dice"] = copy.deepcopy(comb["hit_dice"])
+    if isinstance(comb.get("class_resources"), dict):
+        entry["class_resources"] = copy.deepcopy(comb["class_resources"])
+    return entry
 
 
 def _builtin_lineup_matches(scenario_id: str, transcript: dict[str, Any]) -> bool:
@@ -1313,6 +1344,19 @@ def replay_match(
     party_replay = ReplayDriver(transcript, side="party")
     enemy_replay = ReplayDriver(transcript, side="enemy")
 
+    init_ssv = (transcript.get("initial_state") or {}).get("state_shape_version")
+    if isinstance(init_ssv, int) and not isinstance(init_ssv, bool):
+        replay_ssv = init_ssv
+    else:
+        raw_rec_ssv = transcript.get("state_shape_version")
+        if raw_rec_ssv is None:
+            replay_ssv = 1
+        else:
+            try:
+                replay_ssv = int(raw_rec_ssv)
+            except (TypeError, ValueError):
+                replay_ssv = STATE_SHAPE_VERSION
+
     replayed = run_match(
         scenario_input,
         party_driver=party_replay,
@@ -1322,6 +1366,7 @@ def replay_match(
         max_rounds=max_rounds,
         max_actions_per_turn=max_actions,
         max_retries_per_action=max_retries,
+        state_shape_version=replay_ssv,
     )
 
     expected_orig_digest = compute_transcript_digest(transcript)

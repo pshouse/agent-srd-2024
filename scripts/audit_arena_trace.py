@@ -66,7 +66,14 @@ def audit(path: Path) -> None:
     hp = {i: c["hp"] for i, c in cs.items()}
     hp_max = {i: c["hp_max"] for i, c in cs.items()}
     temp_hp = {i: int(c.get("temp_hp", 0)) for i, c in cs.items()}
-    conds: dict[str, set] = {i: set(c.get("conditions") or []) for i, c in cs.items()}
+    conds: dict[str, set] = {
+        i: {
+            (x.get("condition") if isinstance(x, dict) else str(x))
+            for x in (c.get("conditions") or [])
+            if (x.get("condition") if isinstance(x, dict) else str(x))
+        }
+        for i, c in cs.items()
+    }
     conc: dict[str, str | None] = {i: None for i in cs}
     death = {i: [0, 0] for i in cs}  # successes, failures
     # Ghoul Claw (and other on-hit riders) only. Hold Person is tracked separately, below.
@@ -164,6 +171,41 @@ def audit(path: Path) -> None:
     cheb = lambda a, b: max(abs(a["x"] - b["x"]), abs(a["y"] - b["y"]))
     fireball_raw = None
 
+    # M6.3A tracking state & helpers (standalone; zero engine imports).
+    trace_ssv = int(
+        t.get("state_shape_version")
+        or (t.get("initial_state") or {}).get("state_shape_version")
+        or 1
+    )
+    bonus_action_spells = {
+        "healing-word",
+        "mass-healing-word",
+        "misty-step",
+        "shield-of-faith",
+        "divine-smite",
+        "shining-smite",
+        "expeditious-retreat",
+        "hex",
+        "hunters-mark",
+        "magic-weapon",
+        "sanctuary",
+        "spiritual-weapon",
+        "zephyr-strike",
+    }
+    cls_slug = lambda cid: str(cs[cid].get("source_id") or "").split(":")[-1]
+    lvl_of = lambda cid: int(cs[cid].get("level") or 1)
+    sub_slug = lambda cid: str(cs[cid].get("subclass") or "").split(":")[-1]
+    feats_of = lambda cid: {str(f).split(":")[-1] for f in (cs[cid].get("features") or [])}
+
+    sw_uses_spent: dict[str, int] = collections.Counter()
+    loh_spent: dict[str, int] = collections.Counter()
+    sa_used_turn: set[str] = set()
+    pending_sa_dmg: dict[tuple[str, str], int] = {}
+    turn_bonus_used: dict[str, bool] = {i: False for i in cs}
+    turn_surge_count: dict[str, int] = {i: 0 for i in cs}
+    turn_magic_actions: dict[str, int] = {i: 0 for i in cs}
+    turn_non_magic_actions: dict[str, int] = {i: 0 for i in cs}
+
     def _snapshot_state() -> dict:
         return {
             "hp": dict(hp),
@@ -182,6 +224,14 @@ def audit(path: Path) -> None:
             "parry_bonus": dict(parry_bonus),
             "aura_immune": {k: set(v) for k, v in aura_immune.items()},
             "fireball_raw": fireball_raw,
+            "sw_uses_spent": dict(sw_uses_spent),
+            "loh_spent": dict(loh_spent),
+            "sa_used_turn": set(sa_used_turn),
+            "pending_sa_dmg": dict(pending_sa_dmg),
+            "turn_bonus_used": dict(turn_bonus_used),
+            "turn_surge_count": dict(turn_surge_count),
+            "turn_magic_actions": dict(turn_magic_actions),
+            "turn_non_magic_actions": dict(turn_non_magic_actions),
         }
 
     def _restore_state(snap: dict) -> None:
@@ -217,6 +267,22 @@ def audit(path: Path) -> None:
         aura_immune.clear()
         aura_immune.update({k: set(v) for k, v in snap["aura_immune"].items()})
         fireball_raw = snap["fireball_raw"]
+        sw_uses_spent.clear()
+        sw_uses_spent.update(snap["sw_uses_spent"])
+        loh_spent.clear()
+        loh_spent.update(snap["loh_spent"])
+        sa_used_turn.clear()
+        sa_used_turn.update(snap["sa_used_turn"])
+        pending_sa_dmg.clear()
+        pending_sa_dmg.update(snap["pending_sa_dmg"])
+        turn_bonus_used.clear()
+        turn_bonus_used.update(snap["turn_bonus_used"])
+        turn_surge_count.clear()
+        turn_surge_count.update(snap["turn_surge_count"])
+        turn_magic_actions.clear()
+        turn_magic_actions.update(snap["turn_magic_actions"])
+        turn_non_magic_actions.clear()
+        turn_non_magic_actions.update(snap["turn_non_magic_actions"])
 
     prev_action_state: tuple[dict, str | None, list[list[dict]]] | None = None
 
@@ -268,9 +334,14 @@ def audit(path: Path) -> None:
 
             if ty == "turn_started":
                 fireball_raw = None
-                reaction[e["actor_id"]] = True
-                disengaged[e["actor_id"]] = False
+                sa_used_turn.clear()
                 who = e["actor_id"]
+                reaction[who] = True
+                disengaged[who] = False
+                turn_bonus_used[who] = False
+                turn_surge_count[who] = 0
+                turn_magic_actions[who] = 0
+                turn_non_magic_actions[who] = 0
                 # The engine checks auras in turn order; two Ghasts make two "Stench" saves, matched in that order.
                 aura_saves = iter([x for x in evs[idx + 1:] if x["type"] == "saving_throw" and x["target_id"] == who
                                    and any(a and x.get("reason") == a.get("name") for a in auras.values())])
@@ -290,6 +361,7 @@ def audit(path: Path) -> None:
                     check("downed PC rolls a death save at the start of its turn", ds is not None, where, f"{who} at 0 HP, no death save")
             if ty == "turn_ended":
                 who = e["actor_id"]
+                sa_used_turn.clear()
                 if who in pending_par_end:
                     pending_par_end[who] -= 1
                     if pending_par_end[who] == 0:
@@ -313,10 +385,19 @@ def audit(path: Path) -> None:
                 check("nat20/nat1 flags", e.get("nat20", nat20) == nat20 and e.get("nat1", nat1) == nat1, where, str(e))
                 exp_hit = nat20 or (not nat1 and e["total"] >= e["target_ac"])
                 check("hit iff nat20 or (not nat1 and total >= AC)", e["hit"] == exp_hit, where, f"total {e['total']} vs AC {e['target_ac']} chosen {e['chosen']} hit={e['hit']}")
-                # Target AC: base (+5 while Shield is up)
-                base = base_ac[tgt] + parry_bonus.pop(tgt, 0)
-                check("target AC = sheet AC (+5 Shield, + Parry)", e["target_ac"] in (base, base + 5) and (e["target_ac"] == base + 5) == shield_on[tgt], where,
-                      f"{tgt} AC {e['target_ac']} base {base} shield={shield_on[tgt]}")
+                # Target AC: base (+5 while Shield is up, + Parry, + Cover #97)
+                cover_ac = int(e.get("cover_ac_bonus") or 0)
+                if e.get("cover"):
+                    exp_cov = 2 if e["cover"] == "half" else 5 if e["cover"] == "three_quarters" else 0
+                    check(
+                        "cover AC bonus matches cover kind (+2 half, +5 three-quarters)",
+                        cover_ac == exp_cov,
+                        where,
+                        str(e),
+                    )
+                base = base_ac[tgt] + parry_bonus.pop(tgt, 0) + cover_ac
+                check("target AC = sheet AC (+5 Shield, + Parry, + Cover)", e["target_ac"] in (base, base + 5) and (e["target_ac"] == base + 5) == shield_on[tgt], where,
+                      f"{tgt} AC {e['target_ac']} base {base} (cover +{cover_ac}) shield={shield_on[tgt]}")
                 # Attack bonus from the sheet
                 if ty == "attack_roll" and e.get("action") and e["action"] in mactions[e["actor_id"]]:
                     check("monster attack bonus = stat block", e["attack_bonus"] == mactions[e["actor_id"]][e["action"]]["attack_bonus"], where, str(e))
@@ -345,6 +426,135 @@ def audit(path: Path) -> None:
                     check("non-20 crit only vs paralyzed/unconscious in melee", bool(tconds & {"paralyzed", "unconscious"}) and melee, where, f"{tgt} {sorted(tconds)}")
                 last_attack = e
 
+            if ty == "sneak_attack_triggered":
+                cid, tgt = e["actor_id"], e["target_id"]
+                crit = bool(e.get("crit"))
+                level = lvl_of(cid)
+                dice_cnt = (level + 1) // 2
+                w = weapons[cid].get(e.get("weapon") or "")
+                qual_wpn = bool(
+                    w and ("finesse" in (w.get("properties") or []) or str(w.get("weapon_range") or "").lower() == "ranged")
+                )
+                lo_sa = dice_cnt * (2 if crit else 1)
+                hi_sa = 6 * dice_cnt * (2 if crit else 1)
+                ally_adj = any(
+                    aid != cid
+                    and side[aid] == side[cid]
+                    and hp[aid] > 0
+                    and not (conds[aid] & {"paralyzed", "unconscious", "incapacitated", "stunned", "petrified", "dead"})
+                    and cheb(pos[aid], pos[tgt]) <= 5
+                    for aid in cs
+                )
+                roll_ok = bool(
+                    last_attack
+                    and last_attack["actor_id"] == cid
+                    and last_attack["target_id"] == tgt
+                    and (last_attack["mode"] == "advantage" or (last_attack["mode"] == "normal" and ally_adj))
+                )
+                check(
+                    "Sneak Attack eligibility, scaling & 1/turn (incl. OA)",
+                    (cls_slug(cid) == "rogue" or "rogue-sneak-attack" in feats_of(cid))
+                    and qual_wpn
+                    and e.get("dice") == f"{dice_cnt}d6"
+                    and lo_sa <= int(e.get("damage", -1)) <= hi_sa
+                    and roll_ok
+                    and cid not in sa_used_turn,
+                    where,
+                    f"{cid} -> {tgt} lvl={level} dice={e.get('dice')} dmg={e.get('damage')} crit={crit} qual_wpn={qual_wpn} roll_ok={roll_ok} already_used={cid in sa_used_turn}",
+                )
+                sa_used_turn.add(cid)
+                pending_sa_dmg[(cid, tgt)] = int(e.get("damage", 0))
+
+            if ty == "class_feature_used":
+                cid = e["actor_id"]
+                feat = str(e.get("feature") or "")
+                level = lvl_of(cid)
+                if feat == "second_wind":
+                    max_sw = 4 if level >= 10 else (3 if level >= 4 else 2)
+                    sw_uses_spent[cid] += 1
+                    heal_ev = next(
+                        (
+                            x for x in evs[idx + 1:]
+                            if x.get("type") == "healing_applied" and x.get("feature") == "second_wind"
+                        ),
+                        None,
+                    )
+                    check(
+                        "Second Wind formula, self-only, Bonus Action & pool",
+                        cls_slug(cid) == "fighter"
+                        and not turn_bonus_used[cid]
+                        and sw_uses_spent[cid] <= max_sw
+                        and heal_ev is not None
+                        and heal_ev.get("source_id") == cid
+                        and heal_ev.get("target_id") == cid
+                        and (1 + level) <= int(heal_ev.get("amount", 0)) <= (10 + level),
+                        where,
+                        f"{cid} lvl={level} uses={sw_uses_spent[cid]}/{max_sw} bonus_used={turn_bonus_used[cid]} heal={heal_ev}",
+                    )
+                    turn_bonus_used[cid] = True
+                elif feat == "action_surge":
+                    check(
+                        "Action Surge Fighter L2+ & 1/turn limit",
+                        cls_slug(cid) == "fighter" and level >= 2 and turn_surge_count[cid] == 0,
+                        where,
+                        f"{cid} lvl={level} surge_count={turn_surge_count[cid]}",
+                    )
+                    turn_surge_count[cid] += 1
+                elif feat == "lay_on_hands":
+                    tgt = e["target_id"]
+                    mode = str(e.get("mode") or "heal")
+                    spent = int(e.get("spent", 0))
+                    loh_spent[cid] += spent
+                    poison_ok = True
+                    if mode == "cure_poison":
+                        poison_ok = spent == 5 and any(
+                            x.get("type") == "condition_ended"
+                            and x.get("target_id") == tgt
+                            and x.get("condition") == "poisoned"
+                            for x in evs[idx + 1:]
+                        )
+                    check(
+                        "Lay on Hands pool, Touch range & SRD 5.2 RAW",
+                        (cls_slug(cid) == "paladin" or "paladin-lay-on-hands" in feats_of(cid))
+                        and cheb(pos[cid], pos[tgt]) <= 5
+                        and loh_spent[cid] <= 5 * level
+                        and not turn_bonus_used[cid]
+                        and poison_ok,
+                        where,
+                        f"{cid} -> {tgt} dist={cheb(pos[cid], pos[tgt])} spent={loh_spent[cid]}/{5 * level} mode={mode}",
+                    )
+                    turn_bonus_used[cid] = True
+                elif feat == "preserve_life":
+                    turn_magic_actions[cid] += 1
+                    check(
+                        "Action Surge cannot be used for Magic actions",
+                        turn_magic_actions[cid] <= 1,
+                        where,
+                        f"{cid} took {turn_magic_actions[cid]} Magic actions on one turn (preserve_life)",
+                    )
+                    pl_heals = [
+                        x for x in evs[idx + 1:]
+                        if x.get("type") == "healing_applied"
+                        and x.get("feature") == "preserve_life"
+                        and x.get("source_id") == cid
+                    ]
+                    targets_ok = bool(pl_heals) and all(
+                        cheb(pos[cid], pos[h["target_id"]]) <= 30
+                        and int(h["hp_before"]) <= hp_max[h["target_id"]] // 2
+                        and int(h["hp_after"]) <= hp_max[h["target_id"]] // 2
+                        for h in pl_heals
+                    )
+                    check(
+                        "Preserve Life Bloodied, 30-ft range, pool & half-max cap",
+                        cls_slug(cid) == "cleric"
+                        and level >= 3
+                        and (sub_slug(cid) == "life-domain" or "life-preserve-life" in feats_of(cid))
+                        and int(e.get("total_distributed", 0)) <= 5 * level
+                        and targets_ok,
+                        where,
+                        f"{cid} lvl={level} dist={e.get('total_distributed')}/{5 * level} heals={pl_heals}",
+                    )
+
             if ty == "damage_applied":
                 tgt = e["target_id"]
                 for part in e["breakdown"]:
@@ -372,9 +582,10 @@ def audit(path: Path) -> None:
                         lo, hi = dice_range(dice, crit)
                         lo2, hi2 = (dice_range(w["versatile_dice"], crit) if w.get("versatile_dice") else (lo, hi))
                         b = w["damage_bonus"]
-                        raw = e["breakdown"][0]["raw"]
+                        sa_sub = pending_sa_dmg.pop((last_attack["actor_id"], tgt), 0)
+                        raw = e["breakdown"][0]["raw"] - sa_sub
                         check("PC weapon damage within dice + mod", min(lo, lo2) + b <= raw <= max(hi, hi2) + b or raw == max(1, raw), where,
-                              f"{last_attack['actor_id']} {w['slug']} raw {raw} not in [{min(lo, lo2) + b},{max(hi, hi2) + b}] crit={crit}")
+                              f"{last_attack['actor_id']} {w['slug']} raw {raw} (sa={sa_sub}) not in [{min(lo, lo2) + b},{max(hi, hi2) + b}] crit={crit}")
                     last_attack = None
                 # Fireball: one roll for everyone, half on a successful save
                 if intent.get("spell") == "fireball" and e.get("source_id") == intent["actor_id"]:
@@ -469,8 +680,29 @@ def audit(path: Path) -> None:
             if ty == "saving_throw":
                 tgt = e["target_id"]
                 b = sum(x.get("delta", 0) for x in e.get("bonus_dice") or [])
+                cover_save = int(e.get("cover_save_bonus") or 0)
+                if e.get("cover_ignored"):
+                    check(
+                        "cover-ignoring spell applies +0 cover save bonus",
+                        cover_save == 0 and e.get("reason") in ("sacred-flame",),
+                        where,
+                        str(e),
+                    )
+                elif e.get("cover"):
+                    exp_cov = 2 if e["cover"] == "half" else 5 if e["cover"] == "three_quarters" else 0
+                    check(
+                        "cover DEX save bonus matches cover kind (+2 half, +5 three-quarters)",
+                        e.get("ability") == "dex" and cover_save == exp_cov,
+                        where,
+                        str(e),
+                    )
                 if not e.get("auto_fail"):
-                    check("save total = d20 + mod + extra dice - exhaustion", e["total"] == e["chosen"] + e["modifier"] + b - e.get("exhaustion_penalty", 0), where, str(e))
+                    check(
+                        "save total = d20 + mod + extra dice + cover - exhaustion",
+                        e["total"] == e["chosen"] + e["modifier"] + b + cover_save - e.get("exhaustion_penalty", 0),
+                        where,
+                        str(e),
+                    )
                     if e.get("legendary_resistance"):
                         check("Legendary Resistance only turns a failed save into a success", e["success"] and e["total"] < e["dc"]
                               and any(x["type"] == "legendary_resistance_used" and x["target_id"] == tgt for x in evs[idx + 1: idx + 3]),
@@ -503,13 +735,14 @@ def audit(path: Path) -> None:
                 reaction[rid] = False
             if ty == "moved":
                 mover, frm, to = e["actor_id"], e["from_pos"], e["to_pos"]
-                expected = sorted(r for r in cs if r != mover and side[r] != side[mover] and can_react(r)
-                                  and reach(r) and cheb(pos[r], frm) <= reach(r) < cheb(pos[r], to) and not disengaged[mover])
-                # Reactions already resolved in this step (they come before "moved"); reactors that spent theirs
-                got = sorted({x["actor_id"] for x in evs[:idx] if x["type"] == "opportunity_attack" and x["target_id"] == mover})
-                pending = [r for r in expected if r not in got]
-                check("leaving a hostile's reach without Disengage draws its opportunity attack", not pending, where,
-                      f"{mover} {frm}->{to}: no attack from {pending}")
+                if e.get("provokes_oa") is not False and not e.get("tactical_shift"):
+                    expected = sorted(r for r in cs if r != mover and side[r] != side[mover] and can_react(r)
+                                      and reach(r) and cheb(pos[r], frm) <= reach(r) < cheb(pos[r], to) and not disengaged[mover])
+                    # Reactions already resolved in this step (they come before "moved"); reactors that spent theirs
+                    got = sorted({x["actor_id"] for x in evs[:idx] if x["type"] == "opportunity_attack" and x["target_id"] == mover})
+                    pending = [r for r in expected if r not in got]
+                    check("leaving a hostile's reach without Disengage draws its opportunity attack", not pending, where,
+                          f"{mover} {frm}->{to}: no attack from {pending}")
                 pos[mover] = dict(to)
             if ty == "teleported":
                 pos[e["actor_id"]] = dict(e["to_pos"])
@@ -545,6 +778,71 @@ def audit(path: Path) -> None:
                 # spell all emit this event. Hold Person paralysis ends with it even when the trace
                 # has no condition_ended (the engine clears those conditions inside _drop_concentration).
                 _end_concentration_paralysis(e["actor_id"], e.get("spell"))
+            if ty == "spell_cast":
+                sp_caster = e["actor_id"]
+                sp_slug = str(e.get("spell") or "")
+                sp_slot = int(e.get("slot_level") or 0)
+                if not e.get("as_reaction") and not e.get("reaction") and sp_caster == a.get("actor_id"):
+                    if sp_slug in bonus_action_spells:
+                        turn_bonus_used[sp_caster] = True
+                    else:
+                        turn_magic_actions[sp_caster] += 1
+                        if turn_surge_count[sp_caster] > 0 or turn_magic_actions[sp_caster] > 1:
+                            check(
+                                "Action Surge cannot be used for Magic actions",
+                                turn_magic_actions[sp_caster] <= 1,
+                                where,
+                                f"{sp_caster} cast Action spell '{sp_slug}' as Magic action #{turn_magic_actions[sp_caster]} this turn",
+                            )
+                # M6.3A Rules 6 & 7: Disciple of Life (#34) & Blessed Healer (Life Domain Cleric L3+/L6+).
+                is_life_cleric = (
+                    cls_slug(sp_caster) == "cleric"
+                    and (
+                        sub_slug(sp_caster) == "life-domain"
+                        or "life-disciple-of-life" in feats_of(sp_caster)
+                    )
+                )
+                living_spell_heals = [
+                    x for x in evs[idx + 1:]
+                    if x.get("type") == "healing_applied"
+                    and x.get("source_id") == sp_caster
+                    and x.get("spell") == sp_slug
+                    and not x.get("feature")
+                    and x.get("reason") != "target_dead"
+                    and int(x.get("amount", 0)) > 0
+                ]
+                has_m63a_life_context = trace_ssv >= 3 or "life-disciple-of-life" in feats_of(sp_caster) or any(
+                    "disciple_of_life_bonus" in x for x in living_spell_heals
+                )
+                if is_life_cleric and lvl_of(sp_caster) >= 3 and sp_slot >= 1 and living_spell_heals and has_m63a_life_context:
+                    exp_bonus = 2 + sp_slot
+                    for h in living_spell_heals:
+                        check(
+                            "Disciple of Life adds 2 + slot_level to slot healing spells",
+                            h.get("disciple_of_life_bonus") == exp_bonus,
+                            where,
+                            f"{sp_caster} {sp_slug} L{sp_slot} -> {h.get('target_id')} bonus={h.get('disciple_of_life_bonus')} expected={exp_bonus}",
+                        )
+                    healed_other = any(h.get("target_id") != sp_caster for h in living_spell_heals)
+                    has_bh_feat = lvl_of(sp_caster) >= 6 and (
+                        "life-blessed-healer" in feats_of(sp_caster) or (trace_ssv >= 3 and sub_slug(sp_caster) == "life-domain")
+                    )
+                    if has_bh_feat and healed_other and hp[sp_caster] > 0 and "dead" not in conds[sp_caster]:
+                        bh_ev = next(
+                            (
+                                x for x in evs[idx + 1:]
+                                if x.get("type") == "healing_applied"
+                                and x.get("feature") == "blessed_healer"
+                                and x.get("target_id") == sp_caster
+                            ),
+                            None,
+                        )
+                        check(
+                            "Blessed Healer self-heals 2 + slot_level when healing another living creature",
+                            bh_ev is not None and int(bh_ev.get("amount", 0)) == exp_bonus,
+                            where,
+                            f"{sp_caster} {sp_slug} L{sp_slot} blessed_healer={bh_ev} expected={exp_bonus}",
+                        )
             if ty == "spell_cast" and e["spell"] == "mage-armor":
                 for tid in e.get("target_ids") or [e["actor_id"]]:
                     if not cs[tid].get("wearing_armor"):
@@ -592,10 +890,12 @@ def audit(path: Path) -> None:
                       hit_trigger or mm_trigger,
                       where, f"{caster} cast Shield in {a['actor_id']}'s action, trigger={trigger}")
                 if trigger == "hit_by_attack" and nxt is not None:
+                    nxt_cov = int(nxt.get("cover_ac_bonus") or 0)
+                    eff_base = base_ac[caster] + nxt_cov
                     check("Shield only when +5 AC turns the hit into a miss",
-                          not nxt.get("nat20") and base_ac[caster] <= nxt["total"] < base_ac[caster] + 5 and not nxt["hit"]
-                          and nxt["target_ac"] == base_ac[caster] + 5,
-                          where, f"{caster}: total {nxt['total']} vs base AC {base_ac[caster]}, hit={nxt['hit']}")
+                          not nxt.get("nat20") and eff_base <= nxt["total"] < eff_base + 5 and not nxt["hit"]
+                          and nxt["target_ac"] in (base_ac[caster] + 5, eff_base + 5),
+                          where, f"{caster}: total {nxt['total']} vs eff_base AC {eff_base}, hit={nxt['hit']}")
                 elif trigger == "targeted_by_magic_missile":
                     # No attack roll and no +5 test: the darts are stopped, so none of them deal damage.
                     landed = any(

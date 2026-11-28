@@ -1176,11 +1176,13 @@ def build_system_prompt() -> str:
         '- attack (PC weapon): {"type":"attack","actor_id":"<id>","target_id":"<id>","weapon":"<slug>","offhand":<bool>}\n'
         '- attack (monster action): {"type":"attack","actor_id":"<id>","action":"<Action Name>","target_ids":["<id>",...]}\n'
         '- cast_spell: {"type":"cast_spell","actor_id":"<id>","spell":"<slug>","slot_level":<int>,"target_ids":["<id>",...],"destination":{"x":<int>,"y":<int>}}\n'
+        '- class_feature: {"type":"class_feature","actor_id":"<id>","feature":"second_wind"|"action_surge"|"lay_on_hands"|"preserve_life",...}\n'
         '- dodge / dash / disengage: {"type":"dodge"|"dash"|"disengage","actor_id":"<id>"}\n'
         '- help: {"type":"help","actor_id":"<id>","target_id":"<enemy_id>","ally_id":"<ally_id>"}\n'
         '- end_turn: {"type":"end_turn","actor_id":"<id>"}\n\n'
         "Tactical rules:\n"
-        "- Respect turn_resources (action, bonus_action, reaction, attacks_remaining), spell slots, and ranges.\n"
+        "- Respect turn_resources (action, surge_action, bonus_action, reaction, attacks_remaining), spell slots, class_resources, and ranges.\n"
+        "- Action Surge grants one extra non-Magic action (cannot be used for cast_spell or preserve_life); Rogue Sneak Attack triggers automatically once per turn on Finesse/Ranged hits with Advantage or an adjacent ally.\n"
         "- Grid uses 5-ft squares with Chebyshev distance max(|dx|,|dy|).\n"
         "- When observation.bounds or observation.terrain is present: stay within bounds, avoid wall tiles (they block movement, teleport, and Line of Sight), account for 2x movement cost entering difficult_terrain, and use half (+2 AC/DEX save) or three_quarters (+5 AC/DEX save) cover.\n"
         "- Avoid damage types enemies are immune to, never hit allies with AoE, revive 0-HP allies, and use Weapon Masteries.\n"
@@ -1853,6 +1855,8 @@ class HeuristicTacticalDriver:
             if rec is not None:
                 spell_recs[sp_slug] = rec
 
+        legal_cf = set(legal.get("class_features") or [])
+
         # 3a. 0-HP Ally Revival (HIGHEST PC PRIORITY!)
         if downed:
             revival = self._decide_revival(
@@ -1870,6 +1874,7 @@ class HeuristicTacticalDriver:
                 occupied=_occupied_squares(observation),
                 bounds=bounds,
                 terrain=terrain,
+                legal_cf=legal_cf,
             )
             if revival is not None:
                 return revival
@@ -1914,7 +1919,7 @@ class HeuristicTacticalDriver:
                         table_talk="Misty Stepping clear of melee range!" if is_party else None,
                     )
 
-        # 3d. Bonus Action Triage Healing for critically wounded conscious ally (<= 40% HP)
+        # 3d. Bonus Action Triage Healing & Defensive Class Features (Second Wind, Lay on Hands, Preserve Life)
         triage = self._decide_triage_heal(
             actor_id=actor_id,
             self_pos=self_pos,
@@ -1924,6 +1929,7 @@ class HeuristicTacticalDriver:
             spell_recs=spell_recs,
             is_party=is_party,
             terrain=terrain,
+            legal_cf=legal_cf,
         )
         if triage is not None:
             return triage
@@ -2111,6 +2117,27 @@ class HeuristicTacticalDriver:
         if weapon_decision is not None:
             return weapon_decision
 
+        # 3j2. Fighter Action Surge: activate for a second Attack action when regular Action is spent & foe in range!
+        if (
+            "action_surge" in legal_cf
+            and not res.get("action")
+            and not res.get("surge_action")
+            and int(res.get("attacks_remaining", 0)) == 0
+            and self_data.get("weapons")
+        ):
+            can_hit_now = False
+            for wp in self_data.get("weapons") or []:
+                _, max_r, _ = _weapon_max_range(wp)
+                if self._non_immune_weapon_targets(wp, enemies, self_pos, max_r, terrain=terrain):
+                    can_hit_now = True
+                    break
+            if can_hit_now:
+                return AgentDecision(
+                    intent={"type": "class_feature", "actor_id": actor_id, "feature": "action_surge"},
+                    rationale="Activating Action Surge for an additional Attack action while enemies are in range.",
+                    table_talk="Action Surge—pressing the assault!" if is_party else None,
+                )
+
         # 3k. Post-action spacing vs breath weapons (e.g., caster spreading >= 20 ft from allies)
         if (
             is_caster
@@ -2170,8 +2197,8 @@ class HeuristicTacticalDriver:
                     table_talk=None,
                 )
 
-        # 3l. Fallback Action if Action still unused (Dash if out of reach, else Help/Dodge)
-        if res.get("action"):
+        # 3l. Fallback Action if Action or Surge Action still unused (Dash if out of reach, else Help/Dodge)
+        if res.get("action") or res.get("surge_action"):
             nearest = min(enemies, key=lambda e: distance_ft(self_pos, e["position"]))
             if distance_ft(self_pos, nearest["position"]) > 5 and speed > 0 and "frightened" not in conds:
                 return AgentDecision(
@@ -2212,6 +2239,7 @@ class HeuristicTacticalDriver:
         occupied: set[tuple[int, int]] | None = None,
         bounds: dict[str, int] | None = None,
         terrain: dict[str, Any] | None = None,
+        legal_cf: set[str] | None = None,
     ) -> AgentDecision | None:
         # Sort downed allies by closest first.
         downed_sorted = sorted(downed, key=lambda a: (distance_ft(self_pos, a["position"]), str(a["id"])))
@@ -2219,6 +2247,44 @@ class HeuristicTacticalDriver:
         dist = distance_ft(self_pos, target["position"])
         is_prone = "prone" in conds
         has_los = has_line_of_sight(self_pos, target["position"], terrain)
+        cf_set = legal_cf or set()
+        cr = self_data.get("class_resources") or {}
+
+        # 0. Paladin Bonus Action Lay on Hands revival (Touch <= 5 ft, or move to Touch).
+        if "lay_on_hands" in cf_set:
+            loh_rem = int((cr.get("lay_on_hands") or {}).get("remaining", 0))
+            if loh_rem >= 1:
+                if dist <= 5 and has_los:
+                    amt = min(loh_rem, max(5, min(10, loh_rem)))
+                    return AgentDecision(
+                        intent={
+                            "type": "class_feature",
+                            "actor_id": actor_id,
+                            "feature": "lay_on_hands",
+                            "mode": "heal",
+                            "target_id": str(target["id"]),
+                            "amount": amt,
+                        },
+                        rationale=f"Reviving 0-HP ally {target['name']} with Bonus Action Lay on Hands ({amt} HP).",
+                        table_talk=f"Laying hands on {target['name']}—get back in the fight!" if is_party else None,
+                    )
+                if rem_move >= 5 and speed > 0 and "frightened" not in conds and dist - 5 <= rem_move:
+                    dest = _step_toward(
+                        self_pos,
+                        target["position"],
+                        rem_move,
+                        desired_dist_ft=5,
+                        occupied=occupied,
+                        bounds=bounds,
+                        terrain=terrain,
+                        is_prone=is_prone,
+                    )
+                    if dest != self_pos:
+                        return AgentDecision(
+                            intent={"type": "move", "actor_id": actor_id, "to": dest},
+                            rationale=f"Moving into Touch range to revive {target['name']} with Lay on Hands.",
+                            table_talk=f"Moving to reach {target['name']}!" if is_party else None,
+                        )
 
         # 1. Bonus Action: mass-healing-word (if >=2 allies hurt/downed) or healing-word (60 ft!)
         for sp_slug in ("mass-healing-word", "healing-word"):
@@ -2269,6 +2335,28 @@ class HeuristicTacticalDriver:
                         rationale=f"Moving into 60-ft range to revive {target['name']} with {sp_slug}.",
                         table_talk=f"Moving to reach {target['name']}!" if is_party else None,
                     )
+
+        # 1.5 Life Domain Cleric Channel Divinity: Preserve Life (30 ft, heals downed & Bloodied allies up to half max)
+        if "preserve_life" in cf_set:
+            pl_targets = [
+                str(a["id"])
+                for a in downed_sorted + [
+                    x for x in allies if int(x.get("hp", 1)) < int(x.get("hp_max", 1)) // 2
+                ]
+                if distance_ft(self_pos, a["position"]) <= 30
+                and has_line_of_sight(self_pos, a["position"], terrain)
+            ]
+            if pl_targets:
+                return AgentDecision(
+                    intent={
+                        "type": "class_feature",
+                        "actor_id": actor_id,
+                        "feature": "preserve_life",
+                        "target_ids": list(dict.fromkeys(pl_targets)),
+                    },
+                    rationale=f"Channeling Preserve Life to revive/stabilize {len(pl_targets)} Bloodied ally/allies.",
+                    table_talk="Channeling Preserve Life—rise and hold the line!" if is_party else None,
+                )
 
         # 2. Action: aid (30 ft, heals 5 HP) or cure-wounds (5 ft touch)
         if "aid" in spell_recs:
@@ -2337,7 +2425,87 @@ class HeuristicTacticalDriver:
         spell_recs: dict[str, dict[str, Any]],
         is_party: bool,
         terrain: dict[str, Any] | None = None,
+        legal_cf: set[str] | None = None,
     ) -> AgentDecision | None:
+        cf_set = legal_cf or set()
+        cr = self_data.get("class_resources") or {}
+        self_hp = int(self_data.get("hp", 1))
+        self_max = max(1, int(self_data.get("hp_max", 1)))
+
+        # Fighter Bonus Action Second Wind when wounded (<= 65% HP).
+        if "second_wind" in cf_set and self_hp <= int(self_max * 0.65) and self_hp < self_max:
+            return AgentDecision(
+                intent={"type": "class_feature", "actor_id": actor_id, "feature": "second_wind"},
+                rationale=f"Using Bonus Action Second Wind at {self_hp}/{self_max} HP.",
+                table_talk="Catching my Second Wind!" if is_party else None,
+            )
+
+        # Paladin Bonus Action Lay on Hands triage (<= 50% HP or Poisoned within 5 ft).
+        if "lay_on_hands" in cf_set:
+            loh_rem = int((cr.get("lay_on_hands") or {}).get("remaining", 0))
+            touch_pool = [
+                a
+                for a in allies
+                if distance_ft(self_pos, a["position"]) <= 5 and has_line_of_sight(self_pos, a["position"], terrain)
+            ] + [{**self_data, "id": actor_id, "position": self_pos}]
+            crit_touch = [
+                a for a in touch_pool if int(a.get("hp", 1)) <= int(max(1, a.get("hp_max", 1)) * 0.50) and int(a.get("hp", 1)) < int(a.get("hp_max", 1))
+            ]
+            if crit_touch and loh_rem >= 1:
+                crit_touch.sort(key=lambda a: int(a["hp"]) / max(1, int(a["hp_max"])))
+                tgt = crit_touch[0]
+                amt = min(loh_rem, max(1, int(tgt["hp_max"]) - int(tgt["hp"])))
+                return AgentDecision(
+                    intent={
+                        "type": "class_feature",
+                        "actor_id": actor_id,
+                        "feature": "lay_on_hands",
+                        "mode": "heal",
+                        "target_id": str(tgt["id"]),
+                        "amount": amt,
+                    },
+                    rationale=f"Using Bonus Action Lay on Hands on {tgt['name']} for {amt} HP.",
+                    table_talk=f"Lay on Hands for {tgt['name']}!" if is_party else None,
+                )
+            if loh_rem >= 5:
+                for a in touch_pool:
+                    if "poisoned" in _condition_set(a):
+                        return AgentDecision(
+                            intent={
+                                "type": "class_feature",
+                                "actor_id": actor_id,
+                                "feature": "lay_on_hands",
+                                "mode": "cure_poison",
+                                "target_id": str(a["id"]),
+                            },
+                            rationale=f"Using Lay on Hands (5 HP) to cure Poisoned on {a['name']}.",
+                            table_talk=f"Cleansing poison from {a['name']}!" if is_party else None,
+                        )
+
+        # Life Domain Cleric Preserve Life when >=2 Bloodied allies (or 1 critically Bloodied <= 35%) within 30 ft + LoS.
+        if "preserve_life" in cf_set:
+            bloodied_pool = [
+                a
+                for a in allies
+                if distance_ft(self_pos, a["position"]) <= 30
+                and has_line_of_sight(self_pos, a["position"], terrain)
+                and int(a.get("hp", 1)) < int(a.get("hp_max", 1)) // 2
+            ]
+            if self_hp < self_max // 2:
+                bloodied_pool.append({"id": actor_id, "name": self_data.get("name", actor_id), "hp": self_hp, "hp_max": self_max, "position": self_pos})
+            if len(bloodied_pool) >= 2 or any(int(a["hp"]) <= int(max(1, a["hp_max"]) * 0.35) for a in bloodied_pool):
+                tids = [str(a["id"]) for a in bloodied_pool]
+                return AgentDecision(
+                    intent={
+                        "type": "class_feature",
+                        "actor_id": actor_id,
+                        "feature": "preserve_life",
+                        "target_ids": tids,
+                    },
+                    rationale=f"Channeling Preserve Life across {len(tids)} Bloodied allies.",
+                    table_talk="Preserve Life—restoring the wounded!" if is_party else None,
+                )
+
         if "healing-word" not in spell_recs and "mass-healing-word" not in spell_recs:
             return None
         total_slots = sum(slots.values())
@@ -2353,8 +2521,6 @@ class HeuristicTacticalDriver:
             and int(a.get("hp", 1)) <= int(max(1, a.get("hp_max", 1)) * 0.40)
         ]
         # Also consider self if critically low.
-        self_hp = int(self_data.get("hp", 1))
-        self_max = max(1, int(self_data.get("hp_max", 1)))
         if self_hp <= int(self_max * 0.35):
             hurt.append({"id": actor_id, "name": self_data.get("name", actor_id), "hp": self_hp, "hp_max": self_max, "position": self_pos})
         if not hurt:
@@ -2635,7 +2801,11 @@ class HeuristicTacticalDriver:
             w.get("mastery") == "nick" and w.get("mastery_active") and "light" in (w.get("properties") or [])
             for w in weapons
         )
-        can_main_attack = bool(res.get("action")) or int(res.get("attacks_remaining", 0)) > 0
+        can_main_attack = (
+            bool(res.get("action"))
+            or bool(res.get("surge_action"))
+            or int(res.get("attacks_remaining", 0)) > 0
+        )
 
         # If main attack(s) are spent and we made a Light attack, execute Nick off-hand (or Bonus Action off-hand)!
         if not can_main_attack and light_made:
