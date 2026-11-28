@@ -156,6 +156,11 @@ Both `./bin/srd-arena <subcommand>` and `./bin/srd arena <subcommand>` support i
   --out-json /tmp/arena-bench.json
 ```
 
+`bench` prints one progress line per finished match to stderr, with an elapsed time and a rough ETA:
+`[bench 7/90] anthropic:claude-opus-5-5 crypt-of-ghouls seed 7: party in 4 rounds, composite 81.20, 0 violations | 18m02s elapsed, ETA 3h33m`.
+stdout keeps only the report. Add `--matches-jsonl PATH` to append each match summary as soon as it finishes, so a
+long LLM bench keeps its finished matches if it's stopped. `--quiet` turns the progress lines off.
+
 ### 2. Evaluate Live LLM Drivers (Zero External SDKs — Pure Stdlib `urllib.request`)
 
 The value of `--api-key-env` (or the provider's default key variable) is sent only to `--api-base`. Use `https` except on loopback (`127.0.0.1`, `localhost`, `::1`). Redirects are refused, and these calls ignore `HTTP_PROXY` / `HTTPS_PROXY`. Put the key in a dedicated variable, not a general cloud secret.

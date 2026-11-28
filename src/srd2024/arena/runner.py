@@ -15,7 +15,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from srd2024.engine.combat import (
     _effective_ac,
@@ -1193,8 +1193,14 @@ def run_benchmark(
     max_actions_per_turn: int = 6,
     max_retries_per_action: int = 2,
     include_traces: bool = False,
+    on_match: Callable[[dict[str, Any], int, int], None] | None = None,
 ) -> dict[str, Any]:
-    """Run all (contender x scenario x seed) matches and return a deterministic BenchmarkReport."""
+    """Run all (contender x scenario x seed) matches and return a deterministic BenchmarkReport.
+
+    `on_match(summary, done, total)` is called after each match finishes, with that match's summary row (the same
+    dict that lands in `report["matches"]`). The CLI uses it for progress lines and incremental JSONL output, so
+    a long LLM bench shows where it is and keeps finished matches if it's interrupted. It doesn't affect results.
+    """
     scenario_list = list(BUILTIN_SCENARIO_IDS) if scenarios is None else list(scenarios)
     contender_list = (
         ["heuristic-tactical", "greedy", "random"] if contenders is None else list(contenders)
@@ -1207,6 +1213,7 @@ def run_benchmark(
 
     all_match_summaries: list[dict[str, Any]] = []
     leaderboard_rows: list[dict[str, Any]] = []
+    total_matches = len(contender_list) * len(compiled_scenarios) * len(seed_list)
 
     for contender in contender_list:
         label, driver_str = _contender_label_and_driver(contender)
@@ -1296,6 +1303,8 @@ def run_benchmark(
                 if include_traces:
                     match_summary["transcript"] = transcript
                 all_match_summaries.append(match_summary)
+                if on_match is not None:
+                    on_match(match_summary, len(all_match_summaries), total_matches)
 
             by_scenario[sc_id] = {
                 "wins": sc_wins,
