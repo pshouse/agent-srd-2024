@@ -107,6 +107,7 @@ class TestGeminiKeyDoesNotLeak(unittest.TestCase):
         error_body = json.dumps({"error": f"upstream {_FAKE_KEY}"}).encode("utf-8")
         with _ScriptedServer(status=500, body=error_body) as srv:
             driver = GeminiDriver(model="gemini-test", api_base=srv.base_url, api_key=_FAKE_KEY)
+            driver._sleep = lambda _s: None  # 500 is retried with backoff; don't wait in tests
             transcript = run_match(
                 "goblin-ambush",
                 party_driver=driver,
@@ -132,6 +133,7 @@ class TestGeminiKeyDoesNotLeak(unittest.TestCase):
     def test_http_500_message_has_no_url_or_body(self) -> None:
         with _ScriptedServer(status=500, body=f"leak {_FAKE_KEY}".encode()) as srv:
             driver = GeminiDriver(model="gemini-test", api_base=srv.base_url, api_key=_FAKE_KEY)
+            driver._sleep = lambda _s: None
             with self.assertRaises(RuntimeError) as ctx:
                 driver.decide(_obs())
             text = str(ctx.exception)

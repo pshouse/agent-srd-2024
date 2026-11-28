@@ -388,7 +388,8 @@ class TestStage3LiveLLMDriversOverLocalHTTP(unittest.TestCase):
             self.assertEqual(dec.intent["weapon"], "longsword")
             self.assertEqual(dec.rationale, "Apply Sap mastery.")
             self.assertEqual(dec.table_talk, "Engaging Goblin Scout A!")
-            self.assertEqual(dec.usage, {"prompt_tokens": 111, "completion_tokens": 29, "total_tokens": 140})
+            self.assertEqual(dec.usage, {"prompt_tokens": 111, "completion_tokens": 29, "total_tokens": 140,
+                                         "reasoning_tokens": 0, "billable_output_tokens": 29})
 
             self.assertEqual(len(srv.requests), 1)
             req = srv.requests[0]
@@ -435,7 +436,8 @@ class TestStage3LiveLLMDriversOverLocalHTTP(unittest.TestCase):
             dec = driver.decide(self._sample_observation())
             self.assertEqual(dec.intent, {"type": "dodge", "actor_id": "pc-bram"})
             self.assertEqual(dec.table_talk, "Holding line!")
-            self.assertEqual(dec.usage, {"prompt_tokens": 200, "completion_tokens": 45, "total_tokens": 245})
+            self.assertEqual(dec.usage, {"prompt_tokens": 200, "completion_tokens": 45, "total_tokens": 245,
+                                         "billable_output_tokens": 45})
 
             self.assertEqual(len(srv.requests), 1)
             req = srv.requests[0]
@@ -529,7 +531,8 @@ class TestStage3LiveLLMDriversOverLocalHTTP(unittest.TestCase):
             dec = driver.decide(self._sample_observation())
             self.assertEqual(dec.intent["type"], "attack")
             self.assertEqual(dec.rationale, "Press melee advantage.")
-            self.assertEqual(dec.usage, {"prompt_tokens": 150, "completion_tokens": 35, "total_tokens": 185})
+            self.assertEqual(dec.usage, {"prompt_tokens": 150, "completion_tokens": 35, "total_tokens": 185,
+                                         "reasoning_tokens": 0, "billable_output_tokens": 35})
 
             self.assertEqual(len(srv.requests), 1)
             req = srv.requests[0]
@@ -550,9 +553,12 @@ class TestStage3LiveLLMDriversOverLocalHTTP(unittest.TestCase):
                 GeminiDriver(model="m", api_base=srv.base_url, api_key="k"),
             ):
                 with self.subTest(driver=drv.name, case="http_500"):
+                    drv._sleep = lambda _s: None  # 500 is retried with backoff; don't wait in tests
+                    before = len(srv.requests)
                     with self.assertRaises(RuntimeError) as ctx:
                         drv.decide(self._sample_observation())
                     self.assertIn("500", str(ctx.exception))
+                    self.assertEqual(len(srv.requests) - before, drv.MAX_ATTEMPTS)
 
             # Non-JSON model text -> ValueError from extract_decision_json
             srv.set_response(

@@ -161,6 +161,30 @@ Both `./bin/srd-arena <subcommand>` and `./bin/srd arena <subcommand>` support i
 stdout keeps only the report. Add `--matches-jsonl PATH` to append each match summary as soon as it finishes, so a
 long LLM bench keeps its finished matches if it's stopped. `--quiet` turns the progress lines off.
 
+Paid LLM contenders can be capped so spend can't go over:
+```sh
+bin/srd-arena bench ... --budget-usd 150 --budget-ledger runs/ledger.jsonl --budget-ledger-init   # first process
+bin/srd-arena bench ... --budget-usd 150 --budget-ledger runs/ledger.jsonl                        # the others
+```
+- Before each paid match starts, its per-match limit is reserved in the shared ledger, under a lock. The limit is
+  set per model (jev $1, sol/grok $8, astra $15, neon $20), or by `--budget-match-usd` for all of them.
+  The reservation succeeds only if spent plus reserved plus the new reservation stays within the cap.
+- Every API attempt is checked first against its worst case: input bounded by the request's size, output by its
+  `max_tokens` cap. A match that would pass its limit is stopped before the call.
+- When the match ends, finished or stopped, its reservation settles to the metered cost.
+- Usage that's missing, unreported or invalid, unparseable replies, timeouts and 5xx retries are charged at the
+  worst case. No call is ever charged more than its worst case, and no match more than its reservation.
+- The ledger fails closed. A missing, corrupt or truncated file, a negative amount or a different cap stops paid work.
+- Prices come from `src/srd2024/arena/budget.py`; override them with `--price MODEL=IN/OUT` (USD per million tokens).
+
+A contender stops cleanly, with its finished matches kept and listed under "Stopped Contenders", if:
+- its provider reports no credits or quota (HTTP 402, or a quota or billing error), or
+- its API key is missing, or
+- it fails three decisions in a row even after retries (429, 5xx and timeouts are retried with backoff), or
+- the budget can't cover its next match.
+
+The other contenders keep running.
+
 ### 2. Evaluate Live LLM Drivers (Zero External SDKs — Pure Stdlib `urllib.request`)
 
 The value of `--api-key-env` (or the provider's default key variable) is sent only to `--api-base`. Use `https` except on loopback (`127.0.0.1`, `localhost`, `::1`). Redirects are refused, and these calls ignore `HTTP_PROXY` / `HTTPS_PROXY`. Put the key in a dedicated variable, not a general cloud secret.

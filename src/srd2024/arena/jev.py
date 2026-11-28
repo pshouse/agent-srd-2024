@@ -355,13 +355,11 @@ class JevDriver(BaseLLMDriver):
             return self._pick(retry=False)
         criteria = {name: desc for name, desc, _ in candidates}
         url, headers, payload = self._request(observation, criteria)
-        secret_values = [self._explicit_api_key or "", os.environ.get(self.api_key_env, "")]
-        try:
-            resp = self._transport(url, headers, payload, self.timeout_s)
-        except Exception as exc:
-            raise RuntimeError(scrub_secrets(str(exc) or "Jev request failed.", secret_values) or "Jev request failed.") from None
+        resp, bound = self._send(url, headers, payload)
         answer = (resp.get("answers") or {}).get(QUESTION_ID)
         if not isinstance(answer, dict) or not isinstance(answer.get("probabilities"), dict):
+            if self.meter is not None:
+                self.meter.charge_bound(bound)
             raise ValueError("Jev response missing answers.next_action.probabilities.")
         probs = answer["probabilities"]
         intents = {name: intent for name, _, intent in candidates}
@@ -374,5 +372,9 @@ class JevDriver(BaseLLMDriver):
         u = resp.get("usage") or {}
         inp = int(u.get("input_tokens", 0) or 0)
         out = int(u.get("output_tokens", 0) or 0)
-        self._usage = {"prompt_tokens": inp, "completion_tokens": out, "total_tokens": inp + out}
+        self._usage = {"prompt_tokens": inp, "completion_tokens": out, "total_tokens": inp + out,
+                       "billable_output_tokens": out}
+        if self.meter is not None:
+            self.meter.charge_usage(resp.get("usage") and {"prompt_tokens": u.get("input_tokens"),
+                                                           "billable_output_tokens": u.get("output_tokens", 0)}, bound)
         return self._pick(retry=False)

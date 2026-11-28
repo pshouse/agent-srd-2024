@@ -207,6 +207,8 @@ def execute_arena_bench(
     api_base: str | None = None,
     api_key_env: str | None = None,
     on_match: Any = None,
+    budget: Any = None,
+    on_abort: Any = None,
 ) -> dict[str, Any]:
     """Run a multi-seed / multi-scenario arena benchmark via `srd2024.arena`."""
     from srd2024.arena import run_benchmark
@@ -231,6 +233,8 @@ def execute_arena_bench(
         rules=rules,
         max_rounds=max_rounds,
         on_match=on_match,
+        budget=budget,
+        on_abort=on_abort,
     )
 
 
@@ -247,6 +251,7 @@ def make_bench_progress(
     jsonl_path: Path | None = None,
     quiet: bool = False,
     clock: Any = None,
+    budget: Any = None,
 ) -> Any:
     """Build an `on_match` callback: a progress line per finished match, plus optional JSONL rows.
 
@@ -276,7 +281,9 @@ def make_bench_progress(
         out.write(
             f"[bench {done}/{total}] {summary['contender']} {summary['scenario_id']} seed {summary['seed']}: "
             f"{summary['winner']} in {summary['rounds']} rounds, composite {summary['composite_score']:.2f}, "
-            f"{summary['violations']} violations | {_fmt_duration(elapsed)} elapsed, ETA {_fmt_duration(eta)}\n"
+            f"{summary['violations']} violations | {_fmt_duration(elapsed)} elapsed, ETA {_fmt_duration(eta)}"
+            + (f" | committed ${budget.committed():.2f} of ${budget.cap_usd:.2f}" if budget is not None else "")
+            + "\n"
         )
         out.flush()
 
@@ -539,6 +546,42 @@ def add_arena_subcommands(
         action="store_true",
         help="Don't print per-match progress lines to stderr.",
     )
+    p_bench.add_argument(
+        "--budget-usd",
+        dest="budget_usd",
+        type=float,
+        default=None,
+        help="Spend cap in USD for paid LLM contenders, shared through --budget-ledger. Can't be exceeded.",
+    )
+    p_bench.add_argument(
+        "--budget-ledger",
+        dest="budget_ledger",
+        default=None,
+        help="JSONL spend ledger (required with --budget-usd). Share one path across parallel bench processes. "
+        "It must already exist (create it once with --budget-ledger-init).",
+    )
+    p_bench.add_argument(
+        "--budget-ledger-init",
+        dest="budget_ledger_init",
+        action="store_true",
+        help="Create --budget-ledger for --budget-usd. Refuses if the file already exists.",
+    )
+    p_bench.add_argument(
+        "--budget-match-usd",
+        dest="budget_match_usd",
+        type=float,
+        default=None,
+        help="Per-match spend limit for every paid contender, reserved before each match. A match that would "
+        "pass it is stopped. Default: per model (budget.MATCH_LIMITS_USD: jev $1, sol/grok $8, astra $15, "
+        "neon $20).",
+    )
+    p_bench.add_argument(
+        "--price",
+        dest="prices",
+        action="append",
+        default=None,
+        help="Price override MODEL=IN/OUT in USD per million tokens (repeatable), e.g. grok-4.7=2/6.",
+    )
 
     # 4. replay
     p_replay = subparsers.add_parser(
@@ -710,10 +753,33 @@ def run_arena_cli_command(
         scenarios = _parse_csv_list(args.scenarios)
         agents = _parse_csv_list(args.agents)
         seeds = _parse_seeds_arg(args.seeds)
+        budget = None
+        if getattr(args, "budget_usd", None) is not None:
+            from srd2024.arena.budget import BudgetLedger, parse_price
+
+            if not getattr(args, "budget_ledger", None):
+                raise ValueError("--budget-usd needs --budget-ledger PATH (share it across parallel benches).")
+            overrides = dict(parse_price(p) for p in (args.prices or []))
+            make = BudgetLedger.init if getattr(args, "budget_ledger_init", False) else BudgetLedger
+            budget = make(
+                args.budget_usd,
+                Path(args.budget_ledger).expanduser(),
+                match_limit_usd=args.budget_match_usd,
+                price_overrides=overrides,
+            )
         progress = make_bench_progress(
             jsonl_path=Path(args.matches_jsonl).expanduser() if getattr(args, "matches_jsonl", None) else None,
             quiet=bool(getattr(args, "quiet", False)),
+            budget=budget,
         )
+
+        def _on_abort(row: dict[str, Any]) -> None:
+            sys.stderr.write(
+                f"[bench] stopped {row['label']}: {row['reason']} after {row['matches_completed']}/"
+                f"{row['matches_planned']} matches ({row['message']}). Its finished matches are kept.\n"
+            )
+            sys.stderr.flush()
+
         report = execute_arena_bench(
             rules,
             scenarios=scenarios,
@@ -724,6 +790,8 @@ def run_arena_cli_command(
             api_base=args.api_base,
             api_key_env=args.api_key_env,
             on_match=progress,
+            budget=budget,
+            on_abort=_on_abort,
         )
         if args.out_json:
             out_path = Path(args.out_json).expanduser()
