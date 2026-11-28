@@ -444,12 +444,103 @@ class TestBudgetPieces(unittest.TestCase):
     def test_progress_line_shows_committed_spend(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             led = BudgetLedger.init(150, Path(tmp) / "l.jsonl")
-            led.settle(led.reserve({}), 12.345, {})
+            led.settle(led.reserve({}, 15.0), 12.345, {})
             out = io.StringIO()
             cb = make_bench_progress(stream=out, budget=led, clock=iter([0.0, 5.0]).__next__)
             cb({"contender": "c", "scenario_id": "s", "seed": 1, "winner": "enemy", "rounds": 1,
                 "composite_score": 1.0, "violations": 0}, 1, 2)
             self.assertIn("committed $12.35 of $150.00", out.getvalue())
+
+
+def _inflated_bench_worker(path: str, out: Any) -> None:
+    """One bench process whose provider over-reports usage (10M prompt tokens a call)."""
+    led = BudgetLedger(150.0, path, match_limit_usd=5.0)
+    paid = {"driver": "openai:gpt-6.2-astra", "api_key": "k", "http_transport": _Transport(prompt_tokens=10_000_000)}
+    rep = run_benchmark(scenarios=["goblin-ambush"], contenders=[paid], seeds=[1], rules=RulesStore(), budget=led)
+    out.put(len(rep["matches"]) + len(rep.get("aborted_contenders") or []))
+
+
+class TestR3ClampAndMissingUsage(unittest.TestCase):
+    def test_inflated_usage_in_parallel_cannot_pass_the_cap(self) -> None:
+        """CTO r2 repro: N=8 processes, $139 already spent, stub usage far above the bound. Must end <= $150."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ledger.jsonl"
+            led = _settled_ledger(path, 150.0, 139.0)
+            ctx = multiprocessing.get_context("fork")
+            q = ctx.Queue()
+            procs = [ctx.Process(target=_inflated_bench_worker, args=(str(path), q)) for _ in range(8)]
+            for pr in procs:
+                pr.start()
+            for pr in procs:
+                pr.join(timeout=60)
+            self.assertEqual(sum(q.get(timeout=5) for _ in procs), 8)
+            self.assertLessEqual(led.spent(), 150.0)
+            self.assertEqual(led.committed(), led.spent(), "every reservation settled")
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            racers = [r for r in rows if r["type"] == "settle" and r.get("contender") != "seed"]
+            self.assertTrue(racers and all(r["amount_usd"] <= 5.0 for r in racers))
+            self.assertTrue(any(r.get("clamped_charges", 0) > 0 for r in racers))
+
+    def test_clamp_and_settle_never_exceed_the_bound_or_reservation(self) -> None:
+        m = MatchMeter((8.0, 40.0), 5.0)
+        charged = m.charge_usage({"prompt_tokens": 10_000_000, "completion_tokens": 10}, 0.2)
+        self.assertEqual((charged, m.clamped_charges), (0.2, 1))
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "l.jsonl"
+            led = BudgetLedger.init(20.0, path, match_limit_usd=5.0)
+            rid = led.reserve({})
+            led.settle(rid, 999.0, {})
+            row = json.loads(path.read_text().splitlines()[-1])
+            self.assertEqual((row["amount_usd"], row["metered_usd"]), (5.0, 999.0))
+            self.assertEqual(led.spent(), 5.0)
+
+    def test_reply_without_usage_is_charged_the_worst_case_on_the_driver_path(self) -> None:
+        def no_usage(*_a):
+            reply = _chat("pc-bram")
+            reply.pop("usage")
+            return reply
+
+        for spec in ("openai:gpt-6.2-astra", "xai:grok-4.7"):
+            with self.subTest(spec=spec):
+                d = create_driver(spec, api_key="k", http_transport=no_usage)
+                price = (8.0, 40.0) if "astra" in spec else (2.0, 6.0)
+                d.meter = MatchMeter(price, 5.0)
+                dec = d.decide({"self": {"id": "pc-bram"}, "retry_feedback": None})
+                self.assertIs(dec.usage.get("usage_reported"), False)
+                self.assertEqual(d.meter.worst_case_charges, 1)
+                self.assertGreater(d.meter.spent_usd, 0)
+        with tempfile.TemporaryDirectory() as tmp:  # CTO repro: 2 calls with no usage, spent() must not be 0
+            led = BudgetLedger.init(50.0, Path(tmp) / "l.jsonl", match_limit_usd=5.0)
+            paid = {"driver": "openai:gpt-6.2-astra", "api_key": "k", "http_transport": no_usage}
+            run_benchmark(scenarios=["goblin-ambush"], contenders=[paid], seeds=[1], rules=RulesStore(), budget=led)
+            self.assertGreater(led.spent(), 0)
+
+    def test_gemini_and_anthropic_flag_missing_usage(self) -> None:
+        from srd2024.arena.agents import AnthropicDriver, GeminiDriver
+
+        g = GeminiDriver(model="gemini-4-neon", api_key="k")
+        _, gu = g._parse_response({"candidates": [{"content": {"parts": [{"text": "x"}]}, "finishReason": "STOP"}]})
+        self.assertIs(gu.get("usage_reported"), False)
+        a = AnthropicDriver(model="m", api_key="k")
+        _, au = a._parse_response({"content": [{"type": "text", "text": "x"}], "usage": {"input_tokens": 3}})
+        self.assertIs(au.get("usage_reported"), False)
+        _, ok = a._parse_response({"content": [{"type": "text", "text": "x"}], "usage": {"input_tokens": 3, "output_tokens": 4}})
+        self.assertNotIn("usage_reported", ok)
+
+    def test_per_provider_match_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            led = BudgetLedger.init(150.0, Path(tmp) / "l.jsonl")
+            self.assertEqual({s: led.limit_for(s) for s in ("typesafe:jev-1.14.0", "openai:gpt-6.2-sol", "xai:grok-4.7",
+                                                             "openai:gpt-6.2-astra", "gemini:gemini-4-neon")},
+                             {"typesafe:jev-1.14.0": 1.0, "openai:gpt-6.2-sol": 8.0, "xai:grok-4.7": 8.0,
+                              "openai:gpt-6.2-astra": 15.0, "gemini:gemini-4-neon": 20.0})
+            self.assertIsNone(led.limit_for("xai:grok-9"))
+            over = BudgetLedger(150.0, Path(tmp) / "l.jsonl", match_limit_usd=3.0)
+            self.assertEqual(over.limit_for("gemini:gemini-4-neon"), 3.0)
+            priced_only = BudgetLedger(150.0, Path(tmp) / "l.jsonl", price_overrides={"grok-9": (1.0, 1.0)})
+            with self.assertRaises(ValueError):  # priced, but no limit for it
+                run_benchmark(scenarios=["goblin-ambush"], contenders=["xai:grok-9"], seeds=[1], rules=RulesStore(),
+                              budget=priced_only)
 
 
 if __name__ == "__main__":

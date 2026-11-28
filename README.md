@@ -166,12 +166,14 @@ Paid LLM contenders can be capped so spend can't go over:
 bin/srd-arena bench ... --budget-usd 150 --budget-ledger runs/ledger.jsonl --budget-ledger-init   # first process
 bin/srd-arena bench ... --budget-usd 150 --budget-ledger runs/ledger.jsonl                        # the others
 ```
-- Before each paid match starts, its `--budget-match-usd` (default 5) is reserved in the shared ledger, under a lock.
+- Before each paid match starts, its per-match limit is reserved in the shared ledger, under a lock. The limit is
+  set per model (jev $1, sol/grok $8, astra $15, neon $20), or by `--budget-match-usd` for all of them.
   The reservation succeeds only if spent plus reserved plus the new reservation stays within the cap.
 - Every API attempt is checked first against its worst case: input bounded by the request's size, output by its
   `max_tokens` cap. A match that would pass its limit is stopped before the call.
 - When the match ends, finished or stopped, its reservation settles to the metered cost.
-- Usage that's missing or invalid, unparseable replies, timeouts and 5xx retries are charged at the worst case.
+- Usage that's missing, unreported or invalid, unparseable replies, timeouts and 5xx retries are charged at the
+  worst case. No call is ever charged more than its worst case, and no match more than its reservation.
 - The ledger fails closed. A missing, corrupt or truncated file, a negative amount or a different cap stops paid work.
 - Prices come from `src/srd2024/arena/budget.py`; override them with `--price MODEL=IN/OUT` (USD per million tokens).
 

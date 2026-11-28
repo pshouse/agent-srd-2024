@@ -1233,6 +1233,7 @@ def run_benchmark(
     aborted_contenders: list[dict[str, Any]] = []
     ledger_broken: str | None = None
     prices: dict[str, tuple[float, float]] = {}
+    limits: dict[str, float] = {}
     if budget is not None:
         for contender in contender_list:
             spec = contender if isinstance(contender, str) else str(_contender_label_and_driver(contender)[1])
@@ -1241,7 +1242,13 @@ def run_benchmark(
                 raise ValueError(
                     f"No price for paid contender {spec!r}; pass --price MODEL=IN/OUT (USD per million tokens)."
                 )
-            prices[_contender_label_and_driver(contender)[0]] = price
+            c_label = _contender_label_and_driver(contender)[0]
+            prices[c_label] = price
+            if price[0] > 0 or price[1] > 0:
+                limit = budget.limit_for(spec)
+                if limit is None:
+                    raise ValueError(f"No per-match limit for paid contender {spec!r}; pass --budget-match-usd.")
+                limits[c_label] = limit
 
     for contender in contender_list:
         label, driver_str = _contender_label_and_driver(contender)
@@ -1280,16 +1287,16 @@ def run_benchmark(
                         stop = ("ledger_error", ledger_broken)
                         break
                     try:
-                        rid = budget.reserve(meta)
+                        rid = budget.reserve(meta, limits[label])
                     except LedgerError as exc:
                         ledger_broken = str(exc)
                         stop = ("ledger_error", ledger_broken)
                         break
                     if rid is None:
                         stop = ("budget_cap", f"${budget.committed():.2f} of the ${budget.cap_usd:.2f} cap is spent or "
-                                              f"reserved; the next match needs ${budget.match_limit_usd:.2f}")
+                                              f"reserved; the next match needs ${limits[label]:.2f}")
                         break
-                    meter = MatchMeter(price, budget.match_limit_usd)
+                    meter = MatchMeter(price, limits[label])
                 p_drv = create_driver(contender, rules=rules, seed=seed)
                 if meter is not None:
                     p_drv.meter = meter
@@ -1316,7 +1323,8 @@ def run_benchmark(
                     if rid is not None and meter is not None:
                         try:
                             budget.settle(rid, meter.spent_usd, {**meta, "outcome": outcome, "calls": meter.calls,
-                                                                 "worst_case_charges": meter.worst_case_charges})
+                                                                 "worst_case_charges": meter.worst_case_charges,
+                                                                 "clamped_charges": meter.clamped_charges})
                         except LedgerError as exc:
                             ledger_broken = str(exc)
                             stop = stop or ("ledger_error", ledger_broken)
@@ -1372,7 +1380,9 @@ def run_benchmark(
                     "digest": transcript["digest"],
                 }
                 if budget is not None:
-                    match_summary["cost_usd"] = round(meter.spent_usd, 6) if meter is not None else 0.0
+                    match_summary["cost_usd"] = (
+                        round(min(meter.spent_usd, limits[label]), 6) if meter is not None else 0.0
+                    )
                 if include_traces:
                     match_summary["transcript"] = transcript
                 all_match_summaries.append(match_summary)
@@ -1448,7 +1458,7 @@ def run_benchmark(
         except LedgerError as exc:
             spent = committed = float("nan")
             ledger_broken = ledger_broken or str(exc)
-        report["budget"] = {"cap_usd": budget.cap_usd, "match_limit_usd": budget.match_limit_usd,
+        report["budget"] = {"cap_usd": budget.cap_usd, "match_limit_usd": dict(limits),
                             "spent_usd_ledger_total": spent, "committed_usd_ledger_total": committed}
         if ledger_broken is not None:
             report["budget"]["ledger_error"] = ledger_broken

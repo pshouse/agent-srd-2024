@@ -52,6 +52,22 @@ SUBSCRIPTION_PREFIXES = frozenset({"anthropic"})
 # Real tokenizers average ~4 bytes a token, so this over-estimates input about 4x on purpose.
 
 
+# Default per-match limits (USD), reserved before each paid match. Sized so a long real match doesn't stop partway:
+# a 15-round wyrmling on Astra is about $6.61, and thinking up to the output cap is about $15-29 on the dearest models.
+MATCH_LIMITS_USD: dict[str, float] = {
+    "jev-1.14.0": 1.0,
+    "jev-latest": 1.0,
+    "gpt-6.2-sol": 8.0,
+    "grok-4.7": 8.0,
+    "gpt-6.2-astra": 15.0,
+    "gemini-4-neon": 20.0,
+}
+
+
+def default_match_limit(spec: str) -> float | None:
+    return MATCH_LIMITS_USD.get(str(spec).partition(":")[2].strip())
+
+
 class LedgerError(RuntimeError):
     """The spend ledger is missing, corrupt or inconsistent. Paid work stops (fail closed)."""
 
@@ -107,6 +123,7 @@ class MatchMeter:
         self.spent_usd = 0.0
         self.calls = 0
         self.worst_case_charges = 0
+        self.clamped_charges = 0
 
     def call_bound_usd(self, payload: dict[str, Any], max_output_tokens: int) -> float:
         tokens_in = len(json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
@@ -120,22 +137,22 @@ class MatchMeter:
             )
 
     def charge_usage(self, usage: Any, bound_usd: float) -> float:
-        """Charge a response's usage, or the worst case when usage is missing or invalid."""
+        """Charge a response's usage, or the worst case if usage is missing, unreported or invalid.
+
+        Each charge is clamped to the pre-call bound (#92 r2). check() admitted the call only because its bound
+        fit, so an inflated usage report can't push a match past its limit, or the run past its cap.
+        """
         u = usage if isinstance(usage, dict) else {}
         tin = _valid_count(u.get("prompt_tokens"))
         tout = _valid_count(u.get("billable_output_tokens", u.get("completion_tokens")))
-        if tin is None or tout is None:
+        if u.get("usage_reported") is False or tin is None or tout is None:
             return self.charge_bound(bound_usd)
         cost = _usd(tin, tout, self.price)
+        if cost > bound_usd:
+            cost = bound_usd
+            self.clamped_charges += 1
         self.spent_usd += cost
         self.calls += 1
-        if self.spent_usd > self.limit_usd + 1e-12:
-            # The provider reported more than the worst case allowed for (it shouldn't). Stop now, so the overshoot
-            # is at most this one call.
-            raise MatchBudgetExceeded(
-                f"this match reached ${self.spent_usd:.2f}, over its ${self.limit_usd:.2f} limit (a reply's usage "
-                "exceeded its worst-case bound)"
-            )
         return cost
 
     def charge_bound(self, bound_usd: float) -> float:
@@ -169,15 +186,18 @@ class BudgetLedger:
         cap_usd: float,
         ledger_path: str | Path,
         *,
-        match_limit_usd: float = 5.0,
+        match_limit_usd: float | None = None,
         price_overrides: dict[str, tuple[float, float]] | None = None,
     ) -> None:
         if not math.isfinite(cap_usd) or cap_usd <= 0:
             raise ValueError("budget cap must be > 0 USD.")
-        if not math.isfinite(match_limit_usd) or match_limit_usd <= 0 or match_limit_usd > cap_usd:
+        if match_limit_usd is not None and (
+            not math.isfinite(match_limit_usd) or match_limit_usd <= 0 or match_limit_usd > cap_usd
+        ):
             raise ValueError("per-match limit must be > 0 and no more than the cap.")
         self.cap_usd = float(cap_usd)
-        self.match_limit_usd = float(match_limit_usd)
+        # None: use MATCH_LIMITS_USD per model. A value overrides it for every paid contender.
+        self.match_limit_usd = None if match_limit_usd is None else float(match_limit_usd)
         self.path = Path(ledger_path)
         self.price_overrides = dict(price_overrides or {})
         self._read()  # fail closed now: missing, corrupt or wrong-cap ledgers refuse to start
@@ -200,6 +220,13 @@ class BudgetLedger:
 
     def price_for(self, spec: str) -> tuple[float, float] | None:
         return contender_price(spec, self.price_overrides)
+
+    def limit_for(self, spec: str) -> float | None:
+        """Per-match limit for a paid contender: the override, else its model default, else None (refused)."""
+        limit = self.match_limit_usd if self.match_limit_usd is not None else default_match_limit(spec)
+        if limit is not None and limit > self.cap_usd:
+            return self.cap_usd
+        return limit
 
     # -- reading ---------------------------------------------------------------------------------------------------
 
@@ -273,14 +300,17 @@ class BudgetLedger:
         fh.flush()
         os.fsync(fh.fileno())
 
-    def reserve(self, meta: dict[str, Any]) -> str | None:
+    def reserve(self, meta: dict[str, Any], amount_usd: float | None = None) -> str | None:
         """Reserve one match's limit if it fits under the cap. Returns a reservation id, or None if it doesn't fit."""
+        amount = float(amount_usd if amount_usd is not None else (self.match_limit_usd or 0.0))
+        if not math.isfinite(amount) or amount <= 0:
+            raise LedgerError(f"refusing to reserve an invalid amount {amount_usd!r}.")
         with self._locked("r+", fcntl.LOCK_EX) as fh:
             settled, open_res = self._parse(fh.read())
-            if settled + sum(open_res.values()) + self.match_limit_usd > self.cap_usd + 1e-9:
+            if settled + sum(open_res.values()) + amount > self.cap_usd + 1e-9:
                 return None
             rid = uuid.uuid4().hex
-            self._append(fh, {"type": "reserve", "id": rid, "amount_usd": self.match_limit_usd, **meta})
+            self._append(fh, {"type": "reserve", "id": rid, "amount_usd": amount, **meta})
             return rid
 
     def settle(self, rid: str, actual_usd: float, meta: dict[str, Any]) -> None:
@@ -290,4 +320,7 @@ class BudgetLedger:
             _, open_res = self._parse(fh.read())
             if rid not in open_res:
                 raise LedgerError(f"reservation {rid} is not open in {self.path}.")
-            self._append(fh, {"type": "settle", "id": rid, "amount_usd": round(float(actual_usd), 6), **meta})
+            # Never settle more than was reserved (#92 r2); the meter's own figure is kept for the record.
+            charged = min(round(float(actual_usd), 6), open_res[rid])
+            self._append(fh, {"type": "settle", "id": rid, "amount_usd": charged,
+                              "metered_usd": round(float(actual_usd), 6), **meta})

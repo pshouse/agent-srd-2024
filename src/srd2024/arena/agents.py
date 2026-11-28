@@ -3073,6 +3073,17 @@ def _default_http_transport(
     return parsed
 
 
+def _flag_missing_usage(raw: dict[str, Any], required: tuple[str, ...], usage: dict[str, Any]) -> dict[str, Any]:
+    """Mark usage the provider didn't report (#92 r2), so the budget meter charges the worst case, not $0.
+
+    The counts stay numeric (0) for the trace and the scorer. `usage_reported: False` is what the meter reads.
+    """
+    ok = all(isinstance(raw.get(k), int) and not isinstance(raw.get(k), bool) and raw[k] >= 0 for k in required)
+    if not ok:
+        usage["usage_reported"] = False
+    return usage
+
+
 class BaseLLMDriver:
     """Shared base class for stdlib HTTP LLM drivers (`openai-compat`, `anthropic`, `gemini`)."""
 
@@ -3264,19 +3275,20 @@ class OpenAICompatDriver(BaseLLMDriver):
         else:
             raw_text = str(content or "")
 
-        u = response.get("usage") or {}
+        raw_u = response.get("usage")
+        u = raw_u if isinstance(raw_u, dict) else {}
         prompt_t = int(u.get("prompt_tokens", 0) or 0)
         comp_t = int(u.get("completion_tokens", 0) or 0)
         total_t = int(u.get("total_tokens", prompt_t + comp_t) or (prompt_t + comp_t))
         reasoning_t = int(((u.get("completion_tokens_details") or {}).get("reasoning_tokens", 0)) or 0)
-        return raw_text, {
+        return raw_text, _flag_missing_usage(u, ("prompt_tokens", "completion_tokens"), {
             "prompt_tokens": prompt_t,
             "completion_tokens": comp_t,
             "total_tokens": total_t,
             "reasoning_tokens": reasoning_t,
             # OpenAI counts reasoning inside completion_tokens (#budget).
             "billable_output_tokens": self._billable_output(comp_t, reasoning_t),
-        }
+        })
 
     def _billable_output(self, completion_tokens: int, reasoning_tokens: int) -> int:
         return completion_tokens
@@ -3425,15 +3437,16 @@ class AnthropicDriver(BaseLLMDriver):
         if not raw_text.strip() and stop in ("refusal", "max_tokens"):
             # Name the cause instead of failing later with an opaque "no JSON found".
             raise ValueError(f"Anthropic response has no text (stop_reason={stop!r}).")
-        u = response.get("usage") or {}
+        raw_u = response.get("usage")
+        u = raw_u if isinstance(raw_u, dict) else {}
         inp_t = int(u.get("input_tokens", 0) or 0)
         out_t = int(u.get("output_tokens", 0) or 0)
-        return raw_text, {
+        return raw_text, _flag_missing_usage(u, ("input_tokens", "output_tokens"), {
             "prompt_tokens": inp_t,
             "completion_tokens": out_t,
             "total_tokens": inp_t + out_t,
             "billable_output_tokens": out_t,  # includes thinking
-        }
+        })
 
 
 class GeminiDriver(BaseLLMDriver):
@@ -3484,19 +3497,20 @@ class GeminiDriver(BaseLLMDriver):
         finish = candidates[0].get("finishReason")
         if not raw_text.strip() and finish not in (None, "STOP"):
             raise ValueError(f"Gemini response has no text (finishReason={finish!r}).")
-        u = response.get("usageMetadata") or {}
+        raw_u = response.get("usageMetadata")
+        u = raw_u if isinstance(raw_u, dict) else {}
         prompt_t = int(u.get("promptTokenCount", 0) or 0)
         cand_t = int(u.get("candidatesTokenCount", 0) or 0)
         thoughts_t = int(u.get("thoughtsTokenCount", 0) or 0)
         total_t = int(u.get("totalTokenCount", prompt_t + cand_t) or (prompt_t + cand_t))
-        return raw_text, {
+        return raw_text, _flag_missing_usage(u, ("promptTokenCount", "candidatesTokenCount"), {
             "prompt_tokens": prompt_t,
             "completion_tokens": cand_t,
             "total_tokens": total_t,
             "reasoning_tokens": thoughts_t,
             # Thinking tokens are billed as output on top of the candidates.
             "billable_output_tokens": cand_t + thoughts_t,
-        }
+        })
 
 
 # ---------------------------------------------------------------------------

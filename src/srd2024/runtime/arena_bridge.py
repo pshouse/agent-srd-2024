@@ -570,9 +570,10 @@ def add_arena_subcommands(
         "--budget-match-usd",
         dest="budget_match_usd",
         type=float,
-        default=5.0,
-        help="Per-match spend limit, reserved before each paid match starts. A match that would pass it is "
-        "stopped (default: 5).",
+        default=None,
+        help="Per-match spend limit for every paid contender, reserved before each match. A match that would "
+        "pass it is stopped. Default: per model (budget.MATCH_LIMITS_USD: jev $1, sol/grok $8, astra $15, "
+        "neon $20).",
     )
     p_bench.add_argument(
         "--price",
