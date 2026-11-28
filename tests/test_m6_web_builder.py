@@ -345,30 +345,96 @@ class TestBuilderWebApiAndSecurity(unittest.TestCase):
         act_code, act_data = self.live.api("POST", "/api/action", {"kind": "end_turn", "decision": state["decision"]})
         self.assertEqual(act_code, 200, act_data)
 
-    def test_dungeon_launch_501_fallback_when_dungeon_module_absent(self) -> None:
-        try:
-            import srd2024.arena.dungeon  # noqa: F401
-            dungeon_present = True
-        except ImportError:
-            dungeon_present = False
-        if dungeon_present:
-            self.skipTest("srd2024.arena.dungeon is merged; 501 fallback not applicable")
-        room = {"name": "R", "map_preset": "open-hall", "width_ft": 40, "height_ft": 30, "enemies": [{"monster": "goblin-warrior", "count": 1}]}
+    def test_end_to_end_three_room_dungeon_launch_short_rest_and_finish(self) -> None:
+        # Built-in dungeons must be listed in /api/builder/catalog.
+        cat_code, cat = self.live.api("GET", "/api/builder/catalog")
+        self.assertEqual(cat_code, 200, cat)
+        dungeon_ids = [d["id"] for d in cat["dungeons"]]
+        self.assertIn("ashfall-keep", dungeon_ids)
+
+        # Launch a 3-room dungeon with 2 L5 PCs (one human-controlled, one heuristic ally) vs 1 Goblin per room.
+        room = {
+            "name": "Chamber",
+            "map_preset": "open-hall",
+            "width_ft": 35,
+            "height_ft": 25,
+            "enemies": [{"monster": "goblin-warrior", "count": 1}],
+        }
         payload = {
             "mode": "dungeon",
-            "name": "Three Room Test",
-            "party": [{"id": "pc-1", "spec": build_pc_preset("fighter", 1, self.rules)}],
-            "rooms": [room, dict(room, name="R2"), dict(room, name="R3")],
-            "play_as": "party",
+            "name": "Three Room Gauntlet",
+            "party": [
+                {"id": "pc-aldric", "spec": build_pc_preset("fighter", 5, self.rules)},
+                {"id": "pc-lyra", "spec": build_pc_preset("wizard-evoker", 5, self.rules)},
+            ],
+            "rooms": [
+                {**room, "id": "room-1", "name": "Entry Hall"},
+                {**room, "id": "room-2", "name": "Guardroom"},
+                {**room, "id": "room-3", "name": "Vault"},
+            ],
+            "play_as": "pc-aldric",
             "party_agent": "heuristic-tactical",
             "enemy_agent": "heuristic-tactical",
             "seed": 42,
             "allow_short_rest": True,
         }
         code, data = self.live.api("POST", "/api/builder/launch", payload)
-        self.assertEqual(code, 501, data)
-        rest_code, _ = self.live.api("POST", "/api/short-rest", {"take_rest": True, "plan": None})
-        self.assertEqual(rest_code, 501)
+        self.assertEqual(code, 200, data)
+        self.assertTrue(data["ok"])
+        state = data["state"]
+        self.assertNotEqual(state["status"], "error", state)
+
+        short_rests_taken = 0
+        steps = 0
+        while state["status"] not in ("finished", "error", "paused") and steps < 250:
+            steps += 1
+            if state["status"] == "running":
+                _, state = self.live.api("GET", "/api/state")
+                continue
+            if state["status"] == "short_rest":
+                self.assertIsNotNone(state.get("dungeon_progress"))
+                rc, rdata = self.live.api("POST", "/api/short-rest", {"take_rest": True, "plan": None})
+                self.assertEqual(rc, 200, rdata)
+                self.assertTrue(rdata["ok"])
+                self.assertIsNotNone(rdata["rest"])
+                self.assertTrue(rdata["rest"]["taken"])
+                short_rests_taken += 1
+                state = rdata["state"]
+                continue
+            if state["status"] == "awaiting_input":
+                # Pick first attack/spell if available, else end_turn (pc-lyra heuristic also helps clear fast).
+                menu = state.get("menu") or []
+                attack_item = next((m for m in menu if m.get("category") in ("attack", "spell")), None)
+                if attack_item is not None:
+                    ac, adata = self.live.api(
+                        "POST",
+                        "/api/action",
+                        {"kind": "menu", "index": attack_item["index"], "decision": state["decision"]},
+                    )
+                else:
+                    ac, adata = self.live.api(
+                        "POST",
+                        "/api/action",
+                        {"kind": "end_turn", "decision": state["decision"]},
+                    )
+                self.assertEqual(ac, 200, adata)
+                state = adata["state"]
+                continue
+
+        self.assertEqual(state["status"], "finished", state)
+        self.assertEqual(short_rests_taken, 2)
+
+        tcode, trace = self.live.api("GET", "/api/trace")
+        self.assertEqual(tcode, 200)
+        self.assertEqual(trace["schema_version"], "5")
+        self.assertEqual(trace["kind"], "dungeon_trace")
+        self.assertEqual(trace["winner"], "party")
+        self.assertEqual(trace["rooms_cleared"], 3)
+        self.assertEqual(len(trace["rooms"]), 3)
+        self.assertEqual(len(trace["rests"]), 2)
+        self.assertTrue(all(r["taken"] for r in trace["rests"]))
+        self.assertIn("scorecard", trace)
+        self.assertIn("digest", trace)
 
     def test_client_view_exposes_class_resources_and_hit_dice_safely(self) -> None:
         obs = {

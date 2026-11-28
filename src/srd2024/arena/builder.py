@@ -1203,14 +1203,9 @@ def get_builder_catalog(rules: RulesStore) -> dict[str, Any]:
         m["kind"] = "parametric"
         maps.append(m)
 
-    dungeons: list[dict[str, Any]] = []
-    try:
-        from . import dungeon as _dungeon_mod
+    from .dungeon import list_builtin_dungeons
 
-        if hasattr(_dungeon_mod, "list_dungeons"):
-            dungeons = list(_dungeon_mod.list_dungeons())
-    except ImportError:
-        dungeons = []
+    dungeons: list[dict[str, Any]] = list(list_builtin_dungeons())
 
     return {
         "presets": presets,

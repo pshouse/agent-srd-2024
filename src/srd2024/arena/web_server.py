@@ -507,110 +507,86 @@ class TabletopSession:
 
     def _run_dungeon(self) -> None:
         cfg = self.config
+        from srd2024.arena import dungeon as dungeon_mod
+
         try:
-            from srd2024.arena import dungeon as dungeon_mod
-        except ImportError:
-            with self._cv:
-                self.status = "error"
-                self.error = "Multi-room dungeon engine (srd2024.arena.dungeon) is not available yet."
-                self._cv.notify_all()
-            return
-        try:
-            if hasattr(dungeon_mod, "run_interactive_dungeon"):
-                result = dungeon_mod.run_interactive_dungeon(
-                    cfg.dungeon,
+            compiled = dungeon_mod.load_dungeon(cfg.dungeon, self.rules)
+            party_carryover = dungeon_mod.init_party_carryover(compiled["party"], self.rules)
+            rooms = list(compiled["rooms"])
+            total_rooms = len(rooms)
+            effective_allow_rest = bool(cfg.allow_short_rest) and bool(
+                compiled.get("allow_short_rest_between_rooms", True)
+            )
+            room_traces: list[dict[str, Any]] = []
+            rests: list[dict[str, Any]] = []
+            rooms_cleared = 0
+            last_winner = "enemy"
+
+            self._output(
+                f"=== Starting Dungeon: {compiled['name']} ({total_rooms} rooms, Tier {compiled['tier']}) ==="
+            )
+
+            for r_idx, room in enumerate(rooms):
+                if not dungeon_mod._has_conscious_living_pc(party_carryover):
+                    break
+
+                with self._cv:
+                    self.dungeon_progress = {
+                        "room_index": r_idx,
+                        "total_rooms": total_rooms,
+                        "room_name": str(room.get("name") or f"Room {r_idx + 1}"),
+                        "next_room_name": (
+                            str(rooms[r_idx + 1].get("name") or f"Room {r_idx + 2}")
+                            if r_idx + 1 < total_rooms
+                            else None
+                        ),
+                        "party_summary": copy.deepcopy(party_carryover),
+                    }
+
+                self._output(f"\n--- Entering {room['name']} ({r_idx + 1}/{total_rooms}) ---")
+                room_scenario = dungeon_mod.build_room_scenario(compiled, r_idx, party_carryover)
+                room_seed = int(cfg.seed) + r_idx * 1000
+                room_res = run_interactive_session(
+                    room_scenario,
                     rules=self.rules,
                     play_as=cfg.play_as,
                     seat_overrides=cfg.seat_overrides,
                     party_agent=cfg.party_agent,
                     enemy_agent=cfg.enemy_agent,
-                    human_driver_factory=self._new_driver,
-                    short_rest_callback=self._wait_short_rest_choice,
+                    human_driver=self._new_driver(),
                     output_fn=self._output,
-                    seed=cfg.seed,
-                    allow_short_rest=cfg.allow_short_rest,
+                    seed=room_seed,
+                    max_rounds=cfg.max_rounds,
                     max_actions_per_turn=cfg.max_actions_per_turn,
                     max_retries_per_action=cfg.max_retries_per_action,
                     api_base=cfg.api_base,
                     api_key_env=cfg.api_key_env,
                     temperature=cfg.temperature,
                 )
-            else:
-                from srd2024.engine.rng import DeterministicRNG
-
-                dspec = dungeon_mod.load_dungeon(cfg.dungeon, self.rules) if hasattr(dungeon_mod, "load_dungeon") else cfg.dungeon
-                rooms = list(dspec["rooms"])
-                total_rooms = len(rooms)
-                party_carryover: dict[str, dict[str, Any]] | None = None
-                room_traces: list[dict[str, Any]] = []
-                rests: list[dict[str, Any]] = []
-                rooms_cleared = 0
-                winner = "party"
-
-                for r_idx, room in enumerate(rooms):
+                if room_res.get("status") == "paused":
                     with self._cv:
-                        self.dungeon_progress = {
-                            "room_index": r_idx,
-                            "total_rooms": total_rooms,
-                            "room_name": str(room.get("name") or f"Room {r_idx + 1}"),
-                            "next_room_name": str(rooms[r_idx + 1].get("name") or f"Room {r_idx + 2}") if r_idx + 1 < total_rooms else None,
-                            "party_summary": copy.deepcopy(party_carryover or {}),
-                        }
-                    room_scenario = (
-                        dungeon_mod.build_room_scenario(dspec, r_idx, party_carryover)
-                        if hasattr(dungeon_mod, "build_room_scenario")
-                        else {
-                            "id": f"{dspec['id']}-{room['id']}",
-                            "name": str(room.get("name") or f"Room {r_idx + 1}"),
-                            "max_rounds": int(room.get("max_rounds", 12)),
-                            "bounds": room.get("bounds"),
-                            "terrain": room.get("terrain"),
-                            "party": [
-                                {
-                                    "id": p["id"],
-                                    "name": p.get("name", p["id"]),
-                                    "spec": p["spec"],
-                                    "position": room["party_spawns"][p["id"]],
-                                    **({} if not party_carryover or p["id"] not in party_carryover else party_carryover[p["id"]]),
-                                }
-                                for p in dspec["party"]
-                                if not party_carryover or party_carryover.get(p["id"], {}).get("alive", True)
-                            ],
-                            "enemies": room["enemies"],
-                        }
-                    )
-                    room_res = run_interactive_session(
-                        room_scenario,
-                        rules=self.rules,
-                        play_as=cfg.play_as,
-                        seat_overrides=cfg.seat_overrides,
-                        party_agent=cfg.party_agent,
-                        enemy_agent=cfg.enemy_agent,
-                        human_driver=self._new_driver(),
-                        output_fn=self._output,
-                        seed=cfg.seed + r_idx * 1000,
-                        max_rounds=cfg.max_rounds,
-                        max_actions_per_turn=cfg.max_actions_per_turn,
-                        max_retries_per_action=cfg.max_retries_per_action,
-                        api_base=cfg.api_base,
-                        api_key_env=cfg.api_key_env,
-                        temperature=cfg.temperature,
-                    )
-                    if room_res.get("status") == "paused":
-                        with self._cv:
-                            self.status = "paused"
-                            self.pause_reason = str(room_res.get("reason") or "quit")
-                            self._cv.notify_all()
-                        return
-                    room_traces.append(room_res)
-                    if room_res.get("winner") != "party":
-                        winner = str(room_res.get("winner") or "enemy")
+                        self.status = "paused"
+                        self.pause_reason = str(room_res.get("reason") or "quit")
+                        self._cv.notify_all()
+                    return
+
+                room_traces.append(room_res)
+                last_winner = str(room_res.get("winner") or "draw")
+                room_won = last_winner == "party"
+                party_carryover = dungeon_mod.extract_party_carryover(
+                    room_res["final_state"],
+                    party_carryover,
+                    room_won=room_won,
+                )
+                if not room_won:
+                    break
+
+                rooms_cleared += 1
+                if r_idx + 1 < total_rooms:
+                    if not dungeon_mod._has_any_living_pc(party_carryover):
                         break
-                    rooms_cleared += 1
-                    if hasattr(dungeon_mod, "extract_party_carryover"):
-                        party_carryover = dungeon_mod.extract_party_carryover(room_res)
-                    if r_idx + 1 < total_rooms and cfg.allow_short_rest and party_carryover is not None:
-                        next_room = rooms[r_idx + 1]
+                    next_room = rooms[r_idx + 1]
+                    if effective_allow_rest:
                         choice = self._wait_short_rest_choice(
                             {
                                 "room_index": r_idx,
@@ -620,8 +596,8 @@ class TabletopSession:
                                 "party_summary": party_carryover,
                             }
                         )
-                        if choice.get("take_rest", True) and hasattr(dungeon_mod, "resolve_short_rest"):
-                            rest_rng = DeterministicRNG(seed=(cfg.seed ^ 0x52455354) + r_idx)
+                        if choice.get("take_rest", True):
+                            rest_rng = dungeon_mod.DeterministicRNG(seed=(int(cfg.seed) ^ 0x52455354) + r_idx)
                             party_carryover, rest_rec = dungeon_mod.resolve_short_rest(
                                 party_carryover,
                                 rng=rest_rng,
@@ -630,7 +606,6 @@ class TabletopSession:
                             rest_entry = {
                                 "after_room_index": r_idx,
                                 "after_room_id": str(room.get("id") or f"room-{r_idx + 1}"),
-                                "taken": True,
                                 **rest_rec,
                             }
                         else:
@@ -640,35 +615,49 @@ class TabletopSession:
                                 "taken": False,
                                 "per_pc": {},
                             }
-                        rests.append(rest_entry)
-                        with self._cv:
-                            self._last_rest_record = copy.deepcopy(rest_entry)
-                result = {
-                    "schema_version": "5",
-                    "kind": "dungeon_trace",
-                    "dataset_id": "srd-2024-5.2",
-                    "dungeon": {
-                        "id": str(dspec.get("id") or "custom-dungeon"),
-                        "name": str(dspec.get("name") or "Custom Dungeon"),
-                        "total_rooms": total_rooms,
-                    },
-                    "config": {
-                        "seed": cfg.seed,
-                        "party_driver": cfg.party_agent,
-                        "enemy_driver": cfg.enemy_agent,
-                        "allow_short_rest": cfg.allow_short_rest,
-                    },
-                    "winner": winner,
-                    "rooms_cleared": rooms_cleared,
+                    else:
+                        rest_entry = {
+                            "after_room_index": r_idx,
+                            "after_room_id": str(room.get("id") or f"room-{r_idx + 1}"),
+                            "taken": False,
+                            "per_pc": {},
+                        }
+                    rests.append(rest_entry)
+                    with self._cv:
+                        self._last_rest_record = copy.deepcopy(rest_entry)
+                    if not dungeon_mod._has_conscious_living_pc(party_carryover):
+                        break
+
+            winner = "party" if rooms_cleared == total_rooms else last_winner
+            final_party_state = dungeon_mod._format_final_party_state(party_carryover)
+            result: dict[str, Any] = {
+                "schema_version": dungeon_mod.DUNGEON_SCHEMA_VERSION,
+                "kind": "dungeon_trace",
+                "dataset_id": self.rules.dataset_id,
+                "dungeon": {
+                    "id": compiled["id"],
+                    "name": compiled["name"],
+                    "tier": int(compiled["tier"]),
+                    "party_level": int(compiled["party_level"]),
                     "total_rooms": total_rooms,
-                    "rooms": room_traces,
-                    "rests": rests,
-                    "final_party_state": party_carryover or {},
-                }
-                if hasattr(dungeon_mod, "score_dungeon"):
-                    result["scorecard"] = dungeon_mod.score_dungeon(result, self.rules)
-                if hasattr(dungeon_mod, "compute_dungeon_digest"):
-                    result["digest"] = dungeon_mod.compute_dungeon_digest(result)
+                },
+                "config": {
+                    "seed": int(cfg.seed),
+                    "party_driver": str(cfg.party_agent),
+                    "enemy_driver": str(cfg.enemy_agent),
+                    "allow_short_rest": effective_allow_rest,
+                    "max_actions_per_turn": int(cfg.max_actions_per_turn),
+                    "max_retries_per_action": int(cfg.max_retries_per_action),
+                },
+                "winner": winner,
+                "rooms_cleared": rooms_cleared,
+                "total_rooms": total_rooms,
+                "rooms": room_traces,
+                "rests": rests,
+                "final_party_state": final_party_state,
+            }
+            result["scorecard"] = dungeon_mod.score_dungeon(result, self.rules)
+            result["digest"] = dungeon_mod.compute_dungeon_digest(result)
         except KeyboardInterrupt:
             with self._cv:
                 self.status = "paused"
