@@ -1,0 +1,4342 @@
+{
+  "schema_version": "4",
+  "dataset_id": "srd-2024-5.2",
+  "scenario": {
+    "id": "crypt-of-ghouls",
+    "name": "Crypt of Ghouls",
+    "tier": 2,
+    "party_level": 5,
+    "max_rounds": 12,
+    "description": "Tier 2 5e 2024 (SRD 5.2) undead gauntlet: three Level 5 adventurers (Champion Fighter, Evoker Wizard, Life Cleric) face two Ghouls, a Ghast, and a Skeleton archer, testing AoE Fireball placement, Paralysis threat management, 0-HP revival via Healing Word, Bless concentration, Extra Attack, and Weapon Masteries.",
+    "party_ids": [
+      "pc-aldric",
+      "pc-lyra",
+      "pc-dorian"
+    ],
+    "enemy_ids": [
+      "ghoul-1",
+      "ghoul-2",
+      "ghast-1",
+      "skeleton-1"
+    ]
+  },
+  "config": {
+    "seed": 768,
+    "max_rounds": 12,
+    "max_actions_per_turn": 6,
+    "max_retries_per_action": 2,
+    "party_driver": {
+      "pc-aldric": "heuristic-tactical",
+      "pc-dorian": "human",
+      "pc-lyra": "heuristic-tactical"
+    },
+    "enemy_driver": {
+      "ghast-1": "heuristic-tactical",
+      "ghoul-1": "heuristic-tactical",
+      "ghoul-2": "heuristic-tactical",
+      "skeleton-1": "heuristic-tactical"
+    }
+  },
+  "winner": "party",
+  "rounds": 2,
+  "initial_state": {
+    "schema_version": "2",
+    "encounter_id": "crypt-of-ghouls",
+    "status": "active",
+    "round": 1,
+    "turn_order": [
+      "skeleton-1",
+      "pc-dorian",
+      "ghast-1",
+      "ghoul-1",
+      "pc-aldric",
+      "pc-lyra",
+      "ghoul-2"
+    ],
+    "active_index": 0,
+    "rng": {
+      "seed": 768,
+      "draw_index": 7
+    },
+    "pending_reroll": null,
+    "combatants": {
+      "pc-aldric": {
+        "id": "pc-aldric",
+        "name": "Aldric Vance",
+        "side": "party",
+        "kind": "pc",
+        "source_id": "classes:fighter",
+        "level": 5,
+        "size": "Medium",
+        "position": {
+          "x": 0,
+          "y": 5
+        },
+        "hp": 44,
+        "hp_max": 44,
+        "temp_hp": 0,
+        "ac": 19,
+        "wearing_armor": true,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 5,
+        "abilities": {
+          "str": 19,
+          "dex": 14,
+          "con": 15,
+          "int": 8,
+          "wis": 12,
+          "cha": 8
+        },
+        "ability_mods": {
+          "str": 4,
+          "dex": 2,
+          "con": 2,
+          "int": -1,
+          "wis": 1,
+          "cha": -1
+        },
+        "proficiency_bonus": 3,
+        "saves": {
+          "str": 7,
+          "dex": 2,
+          "con": 5,
+          "int": -1,
+          "wis": 1,
+          "cha": -1
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": true,
+        "extra_attacks": 2,
+        "feats": [
+          "savage-attacker",
+          "alert",
+          "defense"
+        ],
+        "turn_resources": {
+          "action": true,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [
+          {
+            "weapon_id": "equipment:longsword",
+            "slug": "longsword",
+            "name": "Longsword",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 7,
+            "damage_dice": "1d8",
+            "damage_bonus": 4,
+            "damage_type": "slashing",
+            "versatile_dice": "1d10",
+            "properties": [
+              "versatile"
+            ],
+            "mastery": "sap",
+            "mastery_active": true,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:greatsword",
+            "slug": "greatsword",
+            "name": "Greatsword",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 7,
+            "damage_dice": "2d6",
+            "damage_bonus": 4,
+            "damage_type": "slashing",
+            "versatile_dice": null,
+            "properties": [
+              "heavy",
+              "two-handed"
+            ],
+            "mastery": "graze",
+            "mastery_active": true,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:javelin",
+            "slug": "javelin",
+            "name": "Javelin",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 7,
+            "damage_dice": "1d6",
+            "damage_bonus": 4,
+            "damage_type": "piercing",
+            "versatile_dice": null,
+            "properties": [
+              "thrown"
+            ],
+            "mastery": "slow",
+            "mastery_active": true,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": {
+              "long_ft": 120,
+              "normal_ft": 30
+            }
+          }
+        ],
+        "monster_actions": [],
+        "spellcasting": null,
+        "initiative": 14
+      },
+      "pc-lyra": {
+        "id": "pc-lyra",
+        "name": "Lyra Starweave",
+        "side": "party",
+        "kind": "pc",
+        "source_id": "classes:wizard",
+        "level": 5,
+        "size": "Medium",
+        "position": {
+          "x": 0,
+          "y": 20
+        },
+        "hp": 32,
+        "hp_max": 32,
+        "temp_hp": 0,
+        "ac": 11,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 1,
+        "abilities": {
+          "str": 8,
+          "dex": 13,
+          "con": 15,
+          "int": 19,
+          "wis": 12,
+          "cha": 10
+        },
+        "ability_mods": {
+          "str": -1,
+          "dex": 1,
+          "con": 2,
+          "int": 4,
+          "wis": 1,
+          "cha": 0
+        },
+        "proficiency_bonus": 3,
+        "saves": {
+          "str": -1,
+          "dex": 1,
+          "con": 2,
+          "int": 7,
+          "wis": 4,
+          "cha": 0
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [
+          "magic-initiate"
+        ],
+        "turn_resources": {
+          "action": true,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [
+          {
+            "weapon_id": "equipment:quarterstaff",
+            "slug": "quarterstaff",
+            "name": "Quarterstaff",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 2,
+            "damage_dice": "1d6",
+            "damage_bonus": -1,
+            "damage_type": "bludgeoning",
+            "versatile_dice": "1d8",
+            "properties": [
+              "versatile"
+            ],
+            "mastery": "topple",
+            "mastery_active": false,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:dagger",
+            "slug": "dagger",
+            "name": "Dagger",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "dex",
+            "attack_bonus": 4,
+            "damage_dice": "1d4",
+            "damage_bonus": 1,
+            "damage_type": "piercing",
+            "versatile_dice": null,
+            "properties": [
+              "finesse",
+              "light",
+              "thrown"
+            ],
+            "mastery": "nick",
+            "mastery_active": false,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": {
+              "long_ft": 60,
+              "normal_ft": 20
+            }
+          }
+        ],
+        "monster_actions": [],
+        "spellcasting": {
+          "ability": "int",
+          "spell_save_dc": 15,
+          "spell_attack_bonus": 7,
+          "slots": {
+            "1": 4,
+            "2": 3,
+            "3": 2
+          },
+          "is_pact_magic": false,
+          "cantrips": [
+            "fire-bolt",
+            "ray-of-frost",
+            "acid-splash",
+            "chill-touch"
+          ],
+          "prepared_spells": [
+            "fireball",
+            "lightning-bolt",
+            "shatter",
+            "misty-step",
+            "scorching-ray",
+            "magic-missile",
+            "shield",
+            "mage-armor",
+            "burning-hands",
+            "hold-person"
+          ]
+        },
+        "initiative": 5
+      },
+      "pc-dorian": {
+        "id": "pc-dorian",
+        "name": "Dorian Dawnshield",
+        "side": "party",
+        "kind": "pc",
+        "source_id": "classes:cleric",
+        "level": 5,
+        "size": "Medium",
+        "position": {
+          "x": 5,
+          "y": 15
+        },
+        "hp": 43,
+        "hp_max": 43,
+        "temp_hp": 0,
+        "ac": 16,
+        "wearing_armor": true,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 0,
+        "abilities": {
+          "str": 13,
+          "dex": 10,
+          "con": 14,
+          "int": 8,
+          "wis": 19,
+          "cha": 13
+        },
+        "ability_mods": {
+          "str": 1,
+          "dex": 0,
+          "con": 2,
+          "int": -1,
+          "wis": 4,
+          "cha": 1
+        },
+        "proficiency_bonus": 3,
+        "saves": {
+          "str": 1,
+          "dex": 0,
+          "con": 2,
+          "int": -1,
+          "wis": 7,
+          "cha": 4
+        },
+        "damage_resistances": [
+          "poison"
+        ],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [
+          "magic-initiate"
+        ],
+        "turn_resources": {
+          "action": true,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [
+          {
+            "weapon_id": "equipment:mace",
+            "slug": "mace",
+            "name": "Mace",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 4,
+            "damage_dice": "1d6",
+            "damage_bonus": 1,
+            "damage_type": "bludgeoning",
+            "versatile_dice": null,
+            "properties": [],
+            "mastery": "sap",
+            "mastery_active": false,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          }
+        ],
+        "monster_actions": [],
+        "spellcasting": {
+          "ability": "wis",
+          "spell_save_dc": 15,
+          "spell_attack_bonus": 7,
+          "slots": {
+            "1": 4,
+            "2": 3,
+            "3": 2
+          },
+          "is_pact_magic": false,
+          "cantrips": [
+            "sacred-flame",
+            "guidance",
+            "light",
+            "resistance"
+          ],
+          "prepared_spells": [
+            "bless",
+            "cure-wounds",
+            "healing-word",
+            "guiding-bolt",
+            "shield-of-faith",
+            "aid",
+            "hold-person",
+            "mass-healing-word",
+            "spirit-guardians"
+          ]
+        },
+        "initiative": 17
+      },
+      "ghoul-1": {
+        "id": "ghoul-1",
+        "name": "Crypt Ghoul A",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:ghoul",
+        "level": 1,
+        "size": "Medium",
+        "position": {
+          "x": 25,
+          "y": 0
+        },
+        "hp": 22,
+        "hp_max": 22,
+        "temp_hp": 0,
+        "ac": 12,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 2,
+        "abilities": {
+          "str": 13,
+          "dex": 15,
+          "con": 10,
+          "int": 7,
+          "wis": 10,
+          "cha": 6
+        },
+        "ability_mods": {
+          "str": 1,
+          "dex": 2,
+          "con": 0,
+          "int": -2,
+          "wis": 0,
+          "cha": -2
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": 1,
+          "dex": 2,
+          "con": 0,
+          "int": -2,
+          "wis": 0,
+          "cha": -2
+        },
+        "damage_resistances": [],
+        "damage_immunities": [
+          "poison"
+        ],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [
+          "charmed",
+          "exhaustion",
+          "poisoned"
+        ],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": true,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "desc": "The ghoul makes two Bite attacks.",
+            "kind": "multiattack",
+            "multiattack": {
+              "desc": "The ghoul makes two Bite attacks.",
+              "options": [],
+              "sequence": [
+                {
+                  "action_name": "Bite",
+                  "count": 2
+                }
+              ],
+              "total_attacks": 2
+            },
+            "name": "Multiattack"
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "piercing"
+              },
+              {
+                "conditional": null,
+                "dice": "1d6",
+                "type": "necrotic"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 5 (1d6 + 2) Piercing damage plus 3 (1d6) Necrotic damage.",
+            "kind": "attack",
+            "name": "Bite",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [
+              {
+                "condition": "paralyzed",
+                "duration": "end_of_next_turn",
+                "repeat_save_ability": null,
+                "trigger": "on_fail"
+              }
+            ],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d4+2",
+                "type": "slashing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 4 (1d4 + 2) Slashing damage. If the target is a creature that isn't an Undead or elf, it is subjected to the following effect. Constitution Saving Throw: DC 10. Failure: The target has the Paralyzed condition until the end of its next turn.",
+            "kind": "attack",
+            "name": "Claw",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": {
+              "ability": "con",
+              "dc": 10,
+              "on_success": "none"
+            },
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 14
+      },
+      "ghoul-2": {
+        "id": "ghoul-2",
+        "name": "Crypt Ghoul B",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:ghoul",
+        "level": 1,
+        "size": "Medium",
+        "position": {
+          "x": 25,
+          "y": 10
+        },
+        "hp": 22,
+        "hp_max": 22,
+        "temp_hp": 0,
+        "ac": 12,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 2,
+        "abilities": {
+          "str": 13,
+          "dex": 15,
+          "con": 10,
+          "int": 7,
+          "wis": 10,
+          "cha": 6
+        },
+        "ability_mods": {
+          "str": 1,
+          "dex": 2,
+          "con": 0,
+          "int": -2,
+          "wis": 0,
+          "cha": -2
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": 1,
+          "dex": 2,
+          "con": 0,
+          "int": -2,
+          "wis": 0,
+          "cha": -2
+        },
+        "damage_resistances": [],
+        "damage_immunities": [
+          "poison"
+        ],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [
+          "charmed",
+          "exhaustion",
+          "poisoned"
+        ],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": true,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "desc": "The ghoul makes two Bite attacks.",
+            "kind": "multiattack",
+            "multiattack": {
+              "desc": "The ghoul makes two Bite attacks.",
+              "options": [],
+              "sequence": [
+                {
+                  "action_name": "Bite",
+                  "count": 2
+                }
+              ],
+              "total_attacks": 2
+            },
+            "name": "Multiattack"
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "piercing"
+              },
+              {
+                "conditional": null,
+                "dice": "1d6",
+                "type": "necrotic"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 5 (1d6 + 2) Piercing damage plus 3 (1d6) Necrotic damage.",
+            "kind": "attack",
+            "name": "Bite",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [
+              {
+                "condition": "paralyzed",
+                "duration": "end_of_next_turn",
+                "repeat_save_ability": null,
+                "trigger": "on_fail"
+              }
+            ],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d4+2",
+                "type": "slashing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 4 (1d4 + 2) Slashing damage. If the target is a creature that isn't an Undead or elf, it is subjected to the following effect. Constitution Saving Throw: DC 10. Failure: The target has the Paralyzed condition until the end of its next turn.",
+            "kind": "attack",
+            "name": "Claw",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": {
+              "ability": "con",
+              "dc": 10,
+              "on_success": "none"
+            },
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 3
+      },
+      "ghast-1": {
+        "id": "ghast-1",
+        "name": "Crypt Ghast",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:ghast",
+        "level": 2,
+        "size": "Medium",
+        "position": {
+          "x": 30,
+          "y": 5
+        },
+        "hp": 36,
+        "hp_max": 36,
+        "temp_hp": 0,
+        "ac": 13,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 3,
+        "abilities": {
+          "str": 16,
+          "dex": 17,
+          "con": 10,
+          "int": 11,
+          "wis": 10,
+          "cha": 8
+        },
+        "ability_mods": {
+          "str": 3,
+          "dex": 3,
+          "con": 0,
+          "int": 0,
+          "wis": 0,
+          "cha": -1
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": 3,
+          "dex": 3,
+          "con": 0,
+          "int": 0,
+          "wis": 2,
+          "cha": -1
+        },
+        "damage_resistances": [
+          "necrotic"
+        ],
+        "damage_immunities": [
+          "poison"
+        ],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [
+          "charmed",
+          "exhaustion",
+          "poisoned"
+        ],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": true,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "attack_bonus": 5,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d8+3",
+                "type": "piercing"
+              },
+              {
+                "conditional": null,
+                "dice": "2d8",
+                "type": "necrotic"
+              }
+            ],
+            "desc": "Melee Attack Roll: +5, reach 5 ft. Hit: 7 (1d8 + 3) Piercing damage plus 9 (2d8) Necrotic damage.",
+            "kind": "attack",
+            "name": "Bite",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 5,
+            "attack_kind": "melee",
+            "conditions_applied": [
+              {
+                "condition": "paralyzed",
+                "duration": "end_of_next_turn",
+                "repeat_save_ability": null,
+                "trigger": "on_fail"
+              }
+            ],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "2d6+3",
+                "type": "slashing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +5, reach 5 ft. Hit: 10 (2d6 + 3) Slashing damage. If the target is a non-Undead creature, it is subjected to the following effect. Constitution Saving Throw: DC 10. Failure: The target has the Paralyzed condition until the end of its next turn.",
+            "kind": "attack",
+            "name": "Claw",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": {
+              "ability": "con",
+              "dc": 10,
+              "on_success": "none"
+            },
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 15
+      },
+      "skeleton-1": {
+        "id": "skeleton-1",
+        "name": "Crypt Archer",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:skeleton",
+        "level": 1,
+        "size": "Medium",
+        "position": {
+          "x": 35,
+          "y": 15
+        },
+        "hp": 13,
+        "hp_max": 13,
+        "temp_hp": 0,
+        "ac": 14,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 3,
+        "abilities": {
+          "str": 10,
+          "dex": 16,
+          "con": 15,
+          "int": 6,
+          "wis": 8,
+          "cha": 5
+        },
+        "ability_mods": {
+          "str": 0,
+          "dex": 3,
+          "con": 2,
+          "int": -2,
+          "wis": -1,
+          "cha": -3
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": 0,
+          "dex": 3,
+          "con": 2,
+          "int": -2,
+          "wis": -1,
+          "cha": -3
+        },
+        "damage_resistances": [],
+        "damage_immunities": [
+          "poison"
+        ],
+        "damage_vulnerabilities": [
+          "bludgeoning"
+        ],
+        "condition_immunities": [
+          "exhaustion",
+          "poisoned"
+        ],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": true,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "attack_bonus": 5,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+3",
+                "type": "piercing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +5, reach 5 ft. Hit: 6 (1d6 + 3) Piercing damage.",
+            "kind": "attack",
+            "name": "Shortsword",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 5,
+            "attack_kind": "ranged",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+3",
+                "type": "piercing"
+              }
+            ],
+            "desc": "Ranged Attack Roll: +5, range 80/320 ft. Hit: 6 (1d6 + 3) Piercing damage.",
+            "kind": "attack",
+            "name": "Shortbow",
+            "range_long_ft": 320,
+            "range_normal_ft": 80,
+            "reach_ft": null,
+            "save": null,
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 17
+      }
+    }
+  },
+  "final_state": {
+    "schema_version": "2",
+    "encounter_id": "crypt-of-ghouls",
+    "status": "ended",
+    "round": 2,
+    "turn_order": [
+      "skeleton-1",
+      "pc-dorian",
+      "ghast-1",
+      "ghoul-1",
+      "pc-aldric",
+      "pc-lyra",
+      "ghoul-2"
+    ],
+    "active_index": 4,
+    "rng": {
+      "seed": 768,
+      "draw_index": 58
+    },
+    "pending_reroll": null,
+    "combatants": {
+      "pc-aldric": {
+        "id": "pc-aldric",
+        "name": "Aldric Vance",
+        "side": "party",
+        "kind": "pc",
+        "source_id": "classes:fighter",
+        "level": 5,
+        "size": "Medium",
+        "position": {
+          "x": 20,
+          "y": 10
+        },
+        "hp": 44,
+        "hp_max": 44,
+        "temp_hp": 0,
+        "ac": 19,
+        "wearing_armor": true,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 5,
+        "abilities": {
+          "str": 19,
+          "dex": 14,
+          "con": 15,
+          "int": 8,
+          "wis": 12,
+          "cha": 8
+        },
+        "ability_mods": {
+          "str": 4,
+          "dex": 2,
+          "con": 2,
+          "int": -1,
+          "wis": 1,
+          "cha": -1
+        },
+        "proficiency_bonus": 3,
+        "saves": {
+          "str": 7,
+          "dex": 2,
+          "con": 5,
+          "int": -1,
+          "wis": 1,
+          "cha": -1
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": true,
+        "extra_attacks": 2,
+        "feats": [
+          "savage-attacker",
+          "alert",
+          "defense"
+        ],
+        "turn_resources": {
+          "action": false,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 1,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [
+          {
+            "weapon_id": "equipment:longsword",
+            "slug": "longsword",
+            "name": "Longsword",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 7,
+            "damage_dice": "1d8",
+            "damage_bonus": 4,
+            "damage_type": "slashing",
+            "versatile_dice": "1d10",
+            "properties": [
+              "versatile"
+            ],
+            "mastery": "sap",
+            "mastery_active": true,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:greatsword",
+            "slug": "greatsword",
+            "name": "Greatsword",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 7,
+            "damage_dice": "2d6",
+            "damage_bonus": 4,
+            "damage_type": "slashing",
+            "versatile_dice": null,
+            "properties": [
+              "heavy",
+              "two-handed"
+            ],
+            "mastery": "graze",
+            "mastery_active": true,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:javelin",
+            "slug": "javelin",
+            "name": "Javelin",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 7,
+            "damage_dice": "1d6",
+            "damage_bonus": 4,
+            "damage_type": "piercing",
+            "versatile_dice": null,
+            "properties": [
+              "thrown"
+            ],
+            "mastery": "slow",
+            "mastery_active": true,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": {
+              "long_ft": 120,
+              "normal_ft": 30
+            }
+          }
+        ],
+        "monster_actions": [],
+        "spellcasting": null,
+        "initiative": 14
+      },
+      "pc-lyra": {
+        "id": "pc-lyra",
+        "name": "Lyra Starweave",
+        "side": "party",
+        "kind": "pc",
+        "source_id": "classes:wizard",
+        "level": 5,
+        "size": "Medium",
+        "position": {
+          "x": 0,
+          "y": 20
+        },
+        "hp": 32,
+        "hp_max": 32,
+        "temp_hp": 0,
+        "ac": 11,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 1,
+        "abilities": {
+          "str": 8,
+          "dex": 13,
+          "con": 15,
+          "int": 19,
+          "wis": 12,
+          "cha": 10
+        },
+        "ability_mods": {
+          "str": -1,
+          "dex": 1,
+          "con": 2,
+          "int": 4,
+          "wis": 1,
+          "cha": 0
+        },
+        "proficiency_bonus": 3,
+        "saves": {
+          "str": -1,
+          "dex": 1,
+          "con": 2,
+          "int": 7,
+          "wis": 4,
+          "cha": 0
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [
+          "magic-initiate"
+        ],
+        "turn_resources": {
+          "action": false,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [
+          {
+            "weapon_id": "equipment:quarterstaff",
+            "slug": "quarterstaff",
+            "name": "Quarterstaff",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 2,
+            "damage_dice": "1d6",
+            "damage_bonus": -1,
+            "damage_type": "bludgeoning",
+            "versatile_dice": "1d8",
+            "properties": [
+              "versatile"
+            ],
+            "mastery": "topple",
+            "mastery_active": false,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:dagger",
+            "slug": "dagger",
+            "name": "Dagger",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "dex",
+            "attack_bonus": 4,
+            "damage_dice": "1d4",
+            "damage_bonus": 1,
+            "damage_type": "piercing",
+            "versatile_dice": null,
+            "properties": [
+              "finesse",
+              "light",
+              "thrown"
+            ],
+            "mastery": "nick",
+            "mastery_active": false,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": {
+              "long_ft": 60,
+              "normal_ft": 20
+            }
+          }
+        ],
+        "monster_actions": [],
+        "spellcasting": {
+          "ability": "int",
+          "spell_save_dc": 15,
+          "spell_attack_bonus": 7,
+          "slots": {
+            "1": 4,
+            "2": 3,
+            "3": 1
+          },
+          "is_pact_magic": false,
+          "cantrips": [
+            "fire-bolt",
+            "ray-of-frost",
+            "acid-splash",
+            "chill-touch"
+          ],
+          "prepared_spells": [
+            "fireball",
+            "lightning-bolt",
+            "shatter",
+            "misty-step",
+            "scorching-ray",
+            "magic-missile",
+            "shield",
+            "mage-armor",
+            "burning-hands",
+            "hold-person"
+          ]
+        },
+        "initiative": 5
+      },
+      "pc-dorian": {
+        "id": "pc-dorian",
+        "name": "Dorian Dawnshield",
+        "side": "party",
+        "kind": "pc",
+        "source_id": "classes:cleric",
+        "level": 5,
+        "size": "Medium",
+        "position": {
+          "x": 20,
+          "y": 10
+        },
+        "hp": 25,
+        "hp_max": 43,
+        "temp_hp": 0,
+        "ac": 16,
+        "wearing_armor": true,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 0,
+        "abilities": {
+          "str": 13,
+          "dex": 10,
+          "con": 14,
+          "int": 8,
+          "wis": 19,
+          "cha": 13
+        },
+        "ability_mods": {
+          "str": 1,
+          "dex": 0,
+          "con": 2,
+          "int": -1,
+          "wis": 4,
+          "cha": 1
+        },
+        "proficiency_bonus": 3,
+        "saves": {
+          "str": 1,
+          "dex": 0,
+          "con": 2,
+          "int": -1,
+          "wis": 7,
+          "cha": 4
+        },
+        "damage_resistances": [
+          "poison"
+        ],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [
+          "magic-initiate"
+        ],
+        "turn_resources": {
+          "action": false,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [
+          {
+            "weapon_id": "equipment:mace",
+            "slug": "mace",
+            "name": "Mace",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 4,
+            "damage_dice": "1d6",
+            "damage_bonus": 1,
+            "damage_type": "bludgeoning",
+            "versatile_dice": null,
+            "properties": [],
+            "mastery": "sap",
+            "mastery_active": false,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          }
+        ],
+        "monster_actions": [],
+        "spellcasting": {
+          "ability": "wis",
+          "spell_save_dc": 15,
+          "spell_attack_bonus": 7,
+          "slots": {
+            "1": 2,
+            "2": 3,
+            "3": 1
+          },
+          "is_pact_magic": false,
+          "cantrips": [
+            "sacred-flame",
+            "guidance",
+            "light",
+            "resistance"
+          ],
+          "prepared_spells": [
+            "bless",
+            "cure-wounds",
+            "healing-word",
+            "guiding-bolt",
+            "shield-of-faith",
+            "aid",
+            "hold-person",
+            "mass-healing-word",
+            "spirit-guardians"
+          ]
+        },
+        "initiative": 17
+      },
+      "ghoul-1": {
+        "id": "ghoul-1",
+        "name": "Crypt Ghoul A",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:ghoul",
+        "level": 1,
+        "size": "Medium",
+        "position": {
+          "x": 20,
+          "y": 5
+        },
+        "hp": 0,
+        "hp_max": 22,
+        "temp_hp": 0,
+        "ac": 12,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 2,
+        "abilities": {
+          "str": 13,
+          "dex": 15,
+          "con": 10,
+          "int": 7,
+          "wis": 10,
+          "cha": 6
+        },
+        "ability_mods": {
+          "str": 1,
+          "dex": 2,
+          "con": 0,
+          "int": -2,
+          "wis": 0,
+          "cha": -2
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": 1,
+          "dex": 2,
+          "con": 0,
+          "int": -2,
+          "wis": 0,
+          "cha": -2
+        },
+        "damage_resistances": [],
+        "damage_immunities": [
+          "poison"
+        ],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [
+          "charmed",
+          "exhaustion",
+          "poisoned"
+        ],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": false,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": false,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "desc": "The ghoul makes two Bite attacks.",
+            "kind": "multiattack",
+            "multiattack": {
+              "desc": "The ghoul makes two Bite attacks.",
+              "options": [],
+              "sequence": [
+                {
+                  "action_name": "Bite",
+                  "count": 2
+                }
+              ],
+              "total_attacks": 2
+            },
+            "name": "Multiattack"
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "piercing"
+              },
+              {
+                "conditional": null,
+                "dice": "1d6",
+                "type": "necrotic"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 5 (1d6 + 2) Piercing damage plus 3 (1d6) Necrotic damage.",
+            "kind": "attack",
+            "name": "Bite",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [
+              {
+                "condition": "paralyzed",
+                "duration": "end_of_next_turn",
+                "repeat_save_ability": null,
+                "trigger": "on_fail"
+              }
+            ],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d4+2",
+                "type": "slashing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 4 (1d4 + 2) Slashing damage. If the target is a creature that isn't an Undead or elf, it is subjected to the following effect. Constitution Saving Throw: DC 10. Failure: The target has the Paralyzed condition until the end of its next turn.",
+            "kind": "attack",
+            "name": "Claw",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": {
+              "ability": "con",
+              "dc": 10,
+              "on_success": "none"
+            },
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 14
+      },
+      "ghoul-2": {
+        "id": "ghoul-2",
+        "name": "Crypt Ghoul B",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:ghoul",
+        "level": 1,
+        "size": "Medium",
+        "position": {
+          "x": 25,
+          "y": 10
+        },
+        "hp": 0,
+        "hp_max": 22,
+        "temp_hp": 0,
+        "ac": 12,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 2,
+        "abilities": {
+          "str": 13,
+          "dex": 15,
+          "con": 10,
+          "int": 7,
+          "wis": 10,
+          "cha": 6
+        },
+        "ability_mods": {
+          "str": 1,
+          "dex": 2,
+          "con": 0,
+          "int": -2,
+          "wis": 0,
+          "cha": -2
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": 1,
+          "dex": 2,
+          "con": 0,
+          "int": -2,
+          "wis": 0,
+          "cha": -2
+        },
+        "damage_resistances": [],
+        "damage_immunities": [
+          "poison"
+        ],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [
+          "charmed",
+          "exhaustion",
+          "poisoned"
+        ],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": false,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": false,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "desc": "The ghoul makes two Bite attacks.",
+            "kind": "multiattack",
+            "multiattack": {
+              "desc": "The ghoul makes two Bite attacks.",
+              "options": [],
+              "sequence": [
+                {
+                  "action_name": "Bite",
+                  "count": 2
+                }
+              ],
+              "total_attacks": 2
+            },
+            "name": "Multiattack"
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "piercing"
+              },
+              {
+                "conditional": null,
+                "dice": "1d6",
+                "type": "necrotic"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 5 (1d6 + 2) Piercing damage plus 3 (1d6) Necrotic damage.",
+            "kind": "attack",
+            "name": "Bite",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [
+              {
+                "condition": "paralyzed",
+                "duration": "end_of_next_turn",
+                "repeat_save_ability": null,
+                "trigger": "on_fail"
+              }
+            ],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d4+2",
+                "type": "slashing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 4 (1d4 + 2) Slashing damage. If the target is a creature that isn't an Undead or elf, it is subjected to the following effect. Constitution Saving Throw: DC 10. Failure: The target has the Paralyzed condition until the end of its next turn.",
+            "kind": "attack",
+            "name": "Claw",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": {
+              "ability": "con",
+              "dc": 10,
+              "on_success": "none"
+            },
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 3
+      },
+      "ghast-1": {
+        "id": "ghast-1",
+        "name": "Crypt Ghast",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:ghast",
+        "level": 2,
+        "size": "Medium",
+        "position": {
+          "x": 25,
+          "y": 10
+        },
+        "hp": 0,
+        "hp_max": 36,
+        "temp_hp": 0,
+        "ac": 13,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 25,
+        "initiative_bonus": 3,
+        "abilities": {
+          "str": 16,
+          "dex": 17,
+          "con": 10,
+          "int": 11,
+          "wis": 10,
+          "cha": 8
+        },
+        "ability_mods": {
+          "str": 3,
+          "dex": 3,
+          "con": 0,
+          "int": 0,
+          "wis": 0,
+          "cha": -1
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": 3,
+          "dex": 3,
+          "con": 0,
+          "int": 0,
+          "wis": 2,
+          "cha": -1
+        },
+        "damage_resistances": [
+          "necrotic"
+        ],
+        "damage_immunities": [
+          "poison"
+        ],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [
+          "charmed",
+          "exhaustion",
+          "poisoned"
+        ],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": false,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": false,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "attack_bonus": 5,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d8+3",
+                "type": "piercing"
+              },
+              {
+                "conditional": null,
+                "dice": "2d8",
+                "type": "necrotic"
+              }
+            ],
+            "desc": "Melee Attack Roll: +5, reach 5 ft. Hit: 7 (1d8 + 3) Piercing damage plus 9 (2d8) Necrotic damage.",
+            "kind": "attack",
+            "name": "Bite",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 5,
+            "attack_kind": "melee",
+            "conditions_applied": [
+              {
+                "condition": "paralyzed",
+                "duration": "end_of_next_turn",
+                "repeat_save_ability": null,
+                "trigger": "on_fail"
+              }
+            ],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "2d6+3",
+                "type": "slashing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +5, reach 5 ft. Hit: 10 (2d6 + 3) Slashing damage. If the target is a non-Undead creature, it is subjected to the following effect. Constitution Saving Throw: DC 10. Failure: The target has the Paralyzed condition until the end of its next turn.",
+            "kind": "attack",
+            "name": "Claw",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": {
+              "ability": "con",
+              "dc": 10,
+              "on_success": "none"
+            },
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 15
+      },
+      "skeleton-1": {
+        "id": "skeleton-1",
+        "name": "Crypt Archer",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:skeleton",
+        "level": 1,
+        "size": "Medium",
+        "position": {
+          "x": 35,
+          "y": 15
+        },
+        "hp": 0,
+        "hp_max": 13,
+        "temp_hp": 0,
+        "ac": 14,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 3,
+        "abilities": {
+          "str": 10,
+          "dex": 16,
+          "con": 15,
+          "int": 6,
+          "wis": 8,
+          "cha": 5
+        },
+        "ability_mods": {
+          "str": 0,
+          "dex": 3,
+          "con": 2,
+          "int": -2,
+          "wis": -1,
+          "cha": -3
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": 0,
+          "dex": 3,
+          "con": 2,
+          "int": -2,
+          "wis": -1,
+          "cha": -3
+        },
+        "damage_resistances": [],
+        "damage_immunities": [
+          "poison"
+        ],
+        "damage_vulnerabilities": [
+          "bludgeoning"
+        ],
+        "condition_immunities": [
+          "exhaustion",
+          "poisoned"
+        ],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": false,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": false,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "attack_bonus": 5,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+3",
+                "type": "piercing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +5, reach 5 ft. Hit: 6 (1d6 + 3) Piercing damage.",
+            "kind": "attack",
+            "name": "Shortsword",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 5,
+            "attack_kind": "ranged",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+3",
+                "type": "piercing"
+              }
+            ],
+            "desc": "Ranged Attack Roll: +5, range 80/320 ft. Hit: 6 (1d6 + 3) Piercing damage.",
+            "kind": "attack",
+            "name": "Shortbow",
+            "range_long_ft": 320,
+            "range_normal_ft": 80,
+            "reach_ft": null,
+            "save": null,
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 17
+      }
+    },
+    "_effect_seq": 3
+  },
+  "actions": [
+    {
+      "seq": 1,
+      "round": 1,
+      "turn_index": 0,
+      "action_index": 0,
+      "actor_id": "skeleton-1",
+      "actor_name": "Crypt Archer",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "skeleton-1",
+        "action": "Shortbow",
+        "target_ids": [
+          "pc-lyra"
+        ]
+      },
+      "rationale": "Firing ranged Shortbow at Lyra Starweave.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "skeleton-1",
+          "target_id": "pc-lyra",
+          "action": "Shortbow",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            14
+          ],
+          "chosen": 14,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 5,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 19,
+          "target_ac": 11,
+          "hit": true,
+          "crit": false
+        },
+        {
+          "seq": 2,
+          "type": "damage_applied",
+          "source_id": "skeleton-1",
+          "target_id": "pc-lyra",
+          "breakdown": [
+            {
+              "type": "piercing",
+              "raw": 5,
+              "effective": 5,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 5,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 5,
+          "hp_before": 32,
+          "hp_after": 27
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "pc-lyra",
+            "before": 32,
+            "after": 27,
+            "delta": -5
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Crypt Archer hits Lyra Starweave with Shortbow (19 vs AC 11) for 5 damage."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 2,
+      "round": 1,
+      "turn_index": 0,
+      "action_index": 1,
+      "actor_id": "skeleton-1",
+      "actor_name": "Crypt Archer",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "skeleton-1"
+      },
+      "rationale": "Monster action spent; ending turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "skeleton-1",
+          "round": 1
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "pc-dorian",
+          "round": 1
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 1: Dorian Dawnshield's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 3,
+      "round": 1,
+      "turn_index": 1,
+      "action_index": 0,
+      "actor_id": "pc-dorian",
+      "actor_name": "Dorian Dawnshield",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "cast_spell",
+        "actor_id": "pc-dorian",
+        "spell": "bless",
+        "slot_level": 1,
+        "target_ids": [
+          "pc-lyra",
+          "pc-aldric",
+          "pc-dorian"
+        ]
+      },
+      "rationale": "Human chose [10]: Cast Bless on party (3 targets, L1 slot)",
+      "table_talk": "Target the Ghouls!",
+      "events": [
+        {
+          "seq": 1,
+          "type": "concentration_started",
+          "actor_id": "pc-dorian",
+          "spell": "bless",
+          "targets": [
+            "pc-lyra",
+            "pc-aldric",
+            "pc-dorian"
+          ]
+        },
+        {
+          "seq": 2,
+          "type": "spell_cast",
+          "actor_id": "pc-dorian",
+          "spell": "bless",
+          "slot_level": 1,
+          "target_ids": [
+            "pc-lyra",
+            "pc-aldric",
+            "pc-dorian"
+          ],
+          "coverage": "full",
+          "unmodeled_clauses": []
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [
+          {
+            "id": "pc-dorian",
+            "slot_level": 1,
+            "before": 4,
+            "after": 3
+          }
+        ],
+        "effect_changes": [
+          {
+            "id": "pc-aldric",
+            "added": [
+              "bless"
+            ],
+            "removed": []
+          },
+          {
+            "id": "pc-dorian",
+            "added": [
+              "bless"
+            ],
+            "removed": []
+          },
+          {
+            "id": "pc-lyra",
+            "added": [
+              "bless"
+            ],
+            "removed": []
+          }
+        ],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Dorian Dawnshield casts Bless on Lyra Starweave, Aldric Vance, Dorian Dawnshield (+1d4 to attacks and saves)."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 4,
+      "round": 1,
+      "turn_index": 1,
+      "action_index": 1,
+      "actor_id": "pc-dorian",
+      "actor_name": "Dorian Dawnshield",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "cast_spell",
+        "actor_id": "pc-dorian",
+        "spell": "healing-word",
+        "slot_level": 1,
+        "target_ids": [
+          "pc-lyra"
+        ]
+      },
+      "rationale": "Human chose [1]: Cast Healing Word on Lyra Starweave (27/32 HP, 5 ft, L1 slot)",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "spell_cast",
+          "actor_id": "pc-dorian",
+          "spell": "healing-word",
+          "slot_level": 1,
+          "target_ids": [
+            "pc-lyra"
+          ],
+          "coverage": "full",
+          "unmodeled_clauses": []
+        },
+        {
+          "seq": 2,
+          "type": "healing_applied",
+          "source_id": "pc-dorian",
+          "target_id": "pc-lyra",
+          "spell": "healing-word",
+          "amount": 8,
+          "hp_before": 27,
+          "hp_after": 32,
+          "revived": false
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "pc-lyra",
+            "before": 27,
+            "after": 32,
+            "delta": 5
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [
+          {
+            "id": "pc-dorian",
+            "slot_level": 1,
+            "before": 3,
+            "after": 2
+          }
+        ],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Dorian Dawnshield casts Healing Word, restoring 8 HP to Lyra Starweave."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 5,
+      "round": 1,
+      "turn_index": 1,
+      "action_index": 2,
+      "actor_id": "pc-dorian",
+      "actor_name": "Dorian Dawnshield",
+      "side": "party",
+      "driver": "human",
+      "attempts": 2,
+      "first_attempt_legal": false,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "move",
+        "actor_id": "pc-dorian",
+        "to": {
+          "x": 20,
+          "y": 10
+        }
+      },
+      "rationale": "Human moved to (20, 10).",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "moved",
+          "actor_id": "pc-dorian",
+          "from_pos": {
+            "x": 5,
+            "y": 15
+          },
+          "to_pos": {
+            "x": 20,
+            "y": 10
+          },
+          "distance_ft": 15,
+          "movement_cost_ft": 15,
+          "crawled": false
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [
+          {
+            "id": "pc-dorian",
+            "before": {
+              "x": 5,
+              "y": 15
+            },
+            "after": {
+              "x": 20,
+              "y": 10
+            }
+          }
+        ],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Dorian Dawnshield moves 15 ft to (20, 10)."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 6,
+      "round": 1,
+      "turn_index": 1,
+      "action_index": 3,
+      "actor_id": "pc-dorian",
+      "actor_name": "Dorian Dawnshield",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "pc-dorian"
+      },
+      "rationale": "Human ended turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "pc-dorian",
+          "round": 1
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "ghast-1",
+          "round": 1
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 1: Crypt Ghast's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 7,
+      "round": 1,
+      "turn_index": 2,
+      "action_index": 0,
+      "actor_id": "ghast-1",
+      "actor_name": "Crypt Ghast",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "move",
+        "actor_id": "ghast-1",
+        "to": {
+          "x": 25,
+          "y": 10
+        }
+      },
+      "rationale": "Closing to melee reach of Dorian Dawnshield.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "moved",
+          "actor_id": "ghast-1",
+          "from_pos": {
+            "x": 30,
+            "y": 5
+          },
+          "to_pos": {
+            "x": 25,
+            "y": 10
+          },
+          "distance_ft": 5,
+          "movement_cost_ft": 5,
+          "crawled": false
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [
+          {
+            "id": "ghast-1",
+            "before": {
+              "x": 30,
+              "y": 5
+            },
+            "after": {
+              "x": 25,
+              "y": 10
+            }
+          }
+        ],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Crypt Ghast moves 5 ft to (25, 10)."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 8,
+      "round": 1,
+      "turn_index": 2,
+      "action_index": 1,
+      "actor_id": "ghast-1",
+      "actor_name": "Crypt Ghast",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "ghast-1",
+        "action": "Claw",
+        "target_ids": [
+          "pc-dorian"
+        ]
+      },
+      "rationale": "Using Claw on Dorian Dawnshield to inflict Paralyzed.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "ghast-1",
+          "target_id": "pc-dorian",
+          "action": "Claw",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            14
+          ],
+          "chosen": 14,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 5,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 19,
+          "target_ac": 16,
+          "hit": true,
+          "crit": false
+        },
+        {
+          "seq": 2,
+          "type": "damage_applied",
+          "source_id": "ghast-1",
+          "target_id": "pc-dorian",
+          "breakdown": [
+            {
+              "type": "slashing",
+              "raw": 11,
+              "effective": 11,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 11,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 11,
+          "hp_before": 43,
+          "hp_after": 32
+        },
+        {
+          "seq": 3,
+          "type": "saving_throw",
+          "target_id": "pc-dorian",
+          "ability": "con",
+          "dc": 10,
+          "auto_fail": false,
+          "mode": "normal",
+          "rolls": [
+            18
+          ],
+          "chosen": 18,
+          "modifier": 2,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [
+            {
+              "kind": "bless",
+              "dice": "1d4",
+              "rolls": [
+                3
+              ],
+              "delta": 3
+            }
+          ],
+          "total": 23,
+          "success": true,
+          "reason": "concentration"
+        },
+        {
+          "seq": 4,
+          "type": "saving_throw",
+          "target_id": "pc-dorian",
+          "ability": "con",
+          "dc": 10,
+          "auto_fail": false,
+          "mode": "normal",
+          "rolls": [
+            10
+          ],
+          "chosen": 10,
+          "modifier": 2,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [
+            {
+              "kind": "bless",
+              "dice": "1d4",
+              "rolls": [
+                2
+              ],
+              "delta": 2
+            }
+          ],
+          "total": 14,
+          "success": true,
+          "reason": "Claw_rider"
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "pc-dorian",
+            "before": 43,
+            "after": 32,
+            "delta": -11
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Crypt Ghast hits Dorian Dawnshield with Claw (19 vs AC 16) for 11 damage."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 9,
+      "round": 1,
+      "turn_index": 2,
+      "action_index": 2,
+      "actor_id": "ghast-1",
+      "actor_name": "Crypt Ghast",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "ghast-1"
+      },
+      "rationale": "Monster action spent; ending turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "ghast-1",
+          "round": 1
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "ghoul-1",
+          "round": 1
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 1: Crypt Ghoul A's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 10,
+      "round": 1,
+      "turn_index": 3,
+      "action_index": 0,
+      "actor_id": "ghoul-1",
+      "actor_name": "Crypt Ghoul A",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "move",
+        "actor_id": "ghoul-1",
+        "to": {
+          "x": 20,
+          "y": 5
+        }
+      },
+      "rationale": "Closing to melee reach of Dorian Dawnshield.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "moved",
+          "actor_id": "ghoul-1",
+          "from_pos": {
+            "x": 25,
+            "y": 0
+          },
+          "to_pos": {
+            "x": 20,
+            "y": 5
+          },
+          "distance_ft": 5,
+          "movement_cost_ft": 5,
+          "crawled": false
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [
+          {
+            "id": "ghoul-1",
+            "before": {
+              "x": 25,
+              "y": 0
+            },
+            "after": {
+              "x": 20,
+              "y": 5
+            }
+          }
+        ],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Crypt Ghoul A moves 5 ft to (20, 5)."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 11,
+      "round": 1,
+      "turn_index": 3,
+      "action_index": 1,
+      "actor_id": "ghoul-1",
+      "actor_name": "Crypt Ghoul A",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "ghoul-1",
+        "action": "Claw",
+        "target_ids": [
+          "pc-dorian"
+        ]
+      },
+      "rationale": "Using Claw on Dorian Dawnshield to inflict Paralyzed.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "ghoul-1",
+          "target_id": "pc-dorian",
+          "action": "Claw",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            4
+          ],
+          "chosen": 4,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 4,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 8,
+          "target_ac": 16,
+          "hit": false,
+          "crit": false
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Crypt Ghoul A misses Dorian Dawnshield with Claw (8 vs AC 16)."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 12,
+      "round": 1,
+      "turn_index": 3,
+      "action_index": 2,
+      "actor_id": "ghoul-1",
+      "actor_name": "Crypt Ghoul A",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "ghoul-1"
+      },
+      "rationale": "Monster action spent; ending turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "ghoul-1",
+          "round": 1
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "pc-aldric",
+          "round": 1
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 1: Aldric Vance's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 13,
+      "round": 1,
+      "turn_index": 4,
+      "action_index": 0,
+      "actor_id": "pc-aldric",
+      "actor_name": "Aldric Vance",
+      "side": "party",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "move",
+        "actor_id": "pc-aldric",
+        "to": {
+          "x": 20,
+          "y": 10
+        }
+      },
+      "rationale": "Closing to melee reach of Crypt Ghast.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "moved",
+          "actor_id": "pc-aldric",
+          "from_pos": {
+            "x": 0,
+            "y": 5
+          },
+          "to_pos": {
+            "x": 20,
+            "y": 10
+          },
+          "distance_ft": 20,
+          "movement_cost_ft": 20,
+          "crawled": false
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [
+          {
+            "id": "pc-aldric",
+            "before": {
+              "x": 0,
+              "y": 5
+            },
+            "after": {
+              "x": 20,
+              "y": 10
+            }
+          }
+        ],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Aldric Vance moves 20 ft to (20, 10)."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 14,
+      "round": 1,
+      "turn_index": 4,
+      "action_index": 1,
+      "actor_id": "pc-aldric",
+      "actor_name": "Aldric Vance",
+      "side": "party",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "pc-aldric",
+        "target_id": "ghast-1",
+        "weapon": "greatsword"
+      },
+      "rationale": "Melee Greatsword (Graze mastery) strike on Crypt Ghast.",
+      "table_talk": "Focusing Crypt Ghast with Greatsword (Graze mastery)!",
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "pc-aldric",
+          "target_id": "ghast-1",
+          "weapon": "greatsword",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            9
+          ],
+          "chosen": 9,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 7,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [
+            {
+              "kind": "bless",
+              "dice": "1d4",
+              "rolls": [
+                1
+              ],
+              "delta": 1
+            }
+          ],
+          "total": 17,
+          "target_ac": 13,
+          "hit": true,
+          "crit": false
+        },
+        {
+          "seq": 2,
+          "type": "damage_applied",
+          "source_id": "pc-aldric",
+          "target_id": "ghast-1",
+          "breakdown": [
+            {
+              "type": "slashing",
+              "raw": 8,
+              "effective": 8,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 8,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 8,
+          "hp_before": 36,
+          "hp_after": 28
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "ghast-1",
+            "before": 36,
+            "after": 28,
+            "delta": -8
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Aldric Vance hits Crypt Ghast with Greatsword (17 vs AC 13) for 8 slashing damage."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 15,
+      "round": 1,
+      "turn_index": 4,
+      "action_index": 2,
+      "actor_id": "pc-aldric",
+      "actor_name": "Aldric Vance",
+      "side": "party",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "pc-aldric",
+        "target_id": "ghast-1",
+        "weapon": "greatsword"
+      },
+      "rationale": "Melee Greatsword (Graze mastery) strike on Crypt Ghast.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "pc-aldric",
+          "target_id": "ghast-1",
+          "weapon": "greatsword",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            16
+          ],
+          "chosen": 16,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 7,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [
+            {
+              "kind": "bless",
+              "dice": "1d4",
+              "rolls": [
+                4
+              ],
+              "delta": 4
+            }
+          ],
+          "total": 27,
+          "target_ac": 13,
+          "hit": true,
+          "crit": false
+        },
+        {
+          "seq": 2,
+          "type": "damage_applied",
+          "source_id": "pc-aldric",
+          "target_id": "ghast-1",
+          "breakdown": [
+            {
+              "type": "slashing",
+              "raw": 13,
+              "effective": 13,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 13,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 13,
+          "hp_before": 28,
+          "hp_after": 15
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "ghast-1",
+            "before": 28,
+            "after": 15,
+            "delta": -13
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Aldric Vance hits Crypt Ghast with Greatsword (27 vs AC 13) for 13 slashing damage."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 16,
+      "round": 1,
+      "turn_index": 4,
+      "action_index": 3,
+      "actor_id": "pc-aldric",
+      "actor_name": "Aldric Vance",
+      "side": "party",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "pc-aldric"
+      },
+      "rationale": "Turn resources exhausted; ending turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "pc-aldric",
+          "round": 1
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "pc-lyra",
+          "round": 1
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 1: Lyra Starweave's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 17,
+      "round": 1,
+      "turn_index": 5,
+      "action_index": 0,
+      "actor_id": "pc-lyra",
+      "actor_name": "Lyra Starweave",
+      "side": "party",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "cast_spell",
+        "actor_id": "pc-lyra",
+        "spell": "fireball",
+        "target_ids": [
+          "skeleton-1",
+          "ghast-1",
+          "ghoul-2"
+        ],
+        "slot_level": 3
+      },
+      "rationale": "Casting fireball (slot 3) on 3 non-immune target(s) with zero friendly fire.",
+      "table_talk": "Dropping fireball on Crypt Archer, Crypt Ghast, Crypt Ghoul B—allies are clear!",
+      "events": [
+        {
+          "seq": 1,
+          "type": "spell_cast",
+          "actor_id": "pc-lyra",
+          "spell": "fireball",
+          "slot_level": 3,
+          "target_ids": [
+            "skeleton-1",
+            "ghast-1",
+            "ghoul-2"
+          ],
+          "coverage": "full",
+          "unmodeled_clauses": []
+        },
+        {
+          "seq": 2,
+          "type": "saving_throw",
+          "target_id": "skeleton-1",
+          "ability": "dex",
+          "dc": 15,
+          "auto_fail": false,
+          "mode": "normal",
+          "rolls": [
+            1
+          ],
+          "chosen": 1,
+          "modifier": 3,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 4,
+          "success": false,
+          "reason": "fireball"
+        },
+        {
+          "seq": 3,
+          "type": "damage_applied",
+          "source_id": "pc-lyra",
+          "target_id": "skeleton-1",
+          "breakdown": [
+            {
+              "type": "fire",
+              "raw": 27,
+              "effective": 27,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 27,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 27,
+          "hp_before": 13,
+          "hp_after": 0
+        },
+        {
+          "seq": 4,
+          "type": "combatant_defeated",
+          "combatant_id": "skeleton-1"
+        },
+        {
+          "seq": 5,
+          "type": "saving_throw",
+          "target_id": "ghast-1",
+          "ability": "dex",
+          "dc": 15,
+          "auto_fail": false,
+          "mode": "normal",
+          "rolls": [
+            5
+          ],
+          "chosen": 5,
+          "modifier": 3,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 8,
+          "success": false,
+          "reason": "fireball"
+        },
+        {
+          "seq": 6,
+          "type": "damage_applied",
+          "source_id": "pc-lyra",
+          "target_id": "ghast-1",
+          "breakdown": [
+            {
+              "type": "fire",
+              "raw": 27,
+              "effective": 27,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 27,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 27,
+          "hp_before": 15,
+          "hp_after": 0
+        },
+        {
+          "seq": 7,
+          "type": "combatant_defeated",
+          "combatant_id": "ghast-1"
+        },
+        {
+          "seq": 8,
+          "type": "saving_throw",
+          "target_id": "ghoul-2",
+          "ability": "dex",
+          "dc": 15,
+          "auto_fail": false,
+          "mode": "normal",
+          "rolls": [
+            13
+          ],
+          "chosen": 13,
+          "modifier": 2,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 15,
+          "success": true,
+          "reason": "fireball"
+        },
+        {
+          "seq": 9,
+          "type": "damage_applied",
+          "source_id": "pc-lyra",
+          "target_id": "ghoul-2",
+          "breakdown": [
+            {
+              "type": "fire",
+              "raw": 13,
+              "effective": 13,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 13,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 13,
+          "hp_before": 22,
+          "hp_after": 9
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "ghast-1",
+            "before": 15,
+            "after": 0,
+            "delta": -15
+          },
+          {
+            "id": "ghoul-2",
+            "before": 22,
+            "after": 9,
+            "delta": -13
+          },
+          {
+            "id": "skeleton-1",
+            "before": 13,
+            "after": 0,
+            "delta": -13
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [
+          {
+            "id": "pc-lyra",
+            "slot_level": 3,
+            "before": 2,
+            "after": 1
+          }
+        ],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Lyra Starweave casts Fireball (DC 15 DEX): Crypt Archer fails and takes 27 fire damage.",
+        "Crypt Archer drops to 0 HP and is defeated.",
+        "Lyra Starweave casts Fireball (DC 15 DEX): Crypt Ghast fails and takes 27 fire damage.",
+        "Crypt Ghast drops to 0 HP and is defeated.",
+        "Lyra Starweave casts Fireball (DC 15 DEX): Crypt Ghoul B succeeds and takes 13 fire damage."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 18,
+      "round": 1,
+      "turn_index": 5,
+      "action_index": 1,
+      "actor_id": "pc-lyra",
+      "actor_name": "Lyra Starweave",
+      "side": "party",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "pc-lyra"
+      },
+      "rationale": "Turn resources exhausted; ending turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "pc-lyra",
+          "round": 1
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "ghoul-2",
+          "round": 1
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 1: Crypt Ghoul B's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 19,
+      "round": 1,
+      "turn_index": 6,
+      "action_index": 0,
+      "actor_id": "ghoul-2",
+      "actor_name": "Crypt Ghoul B",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "ghoul-2",
+        "action": "Claw",
+        "target_ids": [
+          "pc-dorian"
+        ]
+      },
+      "rationale": "Using Claw on Dorian Dawnshield to inflict Paralyzed.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "ghoul-2",
+          "target_id": "pc-dorian",
+          "action": "Claw",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            18
+          ],
+          "chosen": 18,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 4,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 22,
+          "target_ac": 16,
+          "hit": true,
+          "crit": false
+        },
+        {
+          "seq": 2,
+          "type": "damage_applied",
+          "source_id": "ghoul-2",
+          "target_id": "pc-dorian",
+          "breakdown": [
+            {
+              "type": "slashing",
+              "raw": 3,
+              "effective": 3,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 3,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 3,
+          "hp_before": 32,
+          "hp_after": 29
+        },
+        {
+          "seq": 3,
+          "type": "saving_throw",
+          "target_id": "pc-dorian",
+          "ability": "con",
+          "dc": 10,
+          "auto_fail": false,
+          "mode": "normal",
+          "rolls": [
+            3
+          ],
+          "chosen": 3,
+          "modifier": 2,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [
+            {
+              "kind": "bless",
+              "dice": "1d4",
+              "rolls": [
+                2
+              ],
+              "delta": 2
+            }
+          ],
+          "total": 7,
+          "success": false,
+          "reason": "concentration"
+        },
+        {
+          "seq": 4,
+          "type": "concentration_ended",
+          "actor_id": "pc-dorian",
+          "spell": "bless",
+          "reason": "failed_concentration_save"
+        },
+        {
+          "seq": 5,
+          "type": "saving_throw",
+          "target_id": "pc-dorian",
+          "ability": "con",
+          "dc": 10,
+          "auto_fail": false,
+          "mode": "normal",
+          "rolls": [
+            17
+          ],
+          "chosen": 17,
+          "modifier": 2,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 19,
+          "success": true,
+          "reason": "Claw_rider"
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "pc-dorian",
+            "before": 32,
+            "after": 29,
+            "delta": -3
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [
+          {
+            "id": "pc-aldric",
+            "added": [],
+            "removed": [
+              "bless"
+            ]
+          },
+          {
+            "id": "pc-dorian",
+            "added": [],
+            "removed": [
+              "bless"
+            ]
+          },
+          {
+            "id": "pc-lyra",
+            "added": [],
+            "removed": [
+              "bless"
+            ]
+          }
+        ],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Crypt Ghoul B hits Dorian Dawnshield with Claw (22 vs AC 16) for 3 damage.",
+        "Dorian Dawnshield loses concentration on bless (failed_concentration_save)."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 20,
+      "round": 1,
+      "turn_index": 6,
+      "action_index": 1,
+      "actor_id": "ghoul-2",
+      "actor_name": "Crypt Ghoul B",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "ghoul-2"
+      },
+      "rationale": "Monster action spent; ending turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "ghoul-2",
+          "round": 1
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "pc-dorian",
+          "round": 2
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 2: Dorian Dawnshield's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 21,
+      "round": 2,
+      "turn_index": 7,
+      "action_index": 0,
+      "actor_id": "pc-dorian",
+      "actor_name": "Dorian Dawnshield",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "cast_spell",
+        "actor_id": "pc-dorian",
+        "spell": "spirit-guardians",
+        "slot_level": 3,
+        "target_ids": [
+          "ghoul-1",
+          "ghoul-2"
+        ]
+      },
+      "rationale": "Human chose [22]: Cast Spirit Guardians (AoE, safe) hitting Crypt Ghoul A, Crypt Ghoul B (L3 slot)",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "concentration_started",
+          "actor_id": "pc-dorian",
+          "spell": "spirit-guardians",
+          "targets": [
+            "ghoul-1",
+            "ghoul-2"
+          ]
+        },
+        {
+          "seq": 2,
+          "type": "spell_cast",
+          "actor_id": "pc-dorian",
+          "spell": "spirit-guardians",
+          "slot_level": 3,
+          "target_ids": [
+            "ghoul-1",
+            "ghoul-2"
+          ],
+          "coverage": "partial",
+          "unmodeled_clauses": [
+            "persistent_zone_or_wall"
+          ]
+        },
+        {
+          "seq": 3,
+          "type": "saving_throw",
+          "target_id": "ghoul-1",
+          "ability": "wis",
+          "dc": 15,
+          "auto_fail": false,
+          "mode": "normal",
+          "rolls": [
+            20
+          ],
+          "chosen": 20,
+          "modifier": 0,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 20,
+          "success": true,
+          "reason": "spirit-guardians"
+        },
+        {
+          "seq": 4,
+          "type": "damage_applied",
+          "source_id": "pc-dorian",
+          "target_id": "ghoul-1",
+          "breakdown": [
+            {
+              "type": "radiant",
+              "raw": 9,
+              "effective": 9,
+              "modifier": "normal"
+            },
+            {
+              "type": "necrotic",
+              "raw": 9,
+              "effective": 9,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 18,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 18,
+          "hp_before": 22,
+          "hp_after": 4
+        },
+        {
+          "seq": 5,
+          "type": "saving_throw",
+          "target_id": "ghoul-2",
+          "ability": "wis",
+          "dc": 15,
+          "auto_fail": false,
+          "mode": "normal",
+          "rolls": [
+            17
+          ],
+          "chosen": 17,
+          "modifier": 0,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 17,
+          "success": true,
+          "reason": "spirit-guardians"
+        },
+        {
+          "seq": 6,
+          "type": "damage_applied",
+          "source_id": "pc-dorian",
+          "target_id": "ghoul-2",
+          "breakdown": [
+            {
+              "type": "radiant",
+              "raw": 9,
+              "effective": 9,
+              "modifier": "normal"
+            },
+            {
+              "type": "necrotic",
+              "raw": 9,
+              "effective": 9,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 18,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 18,
+          "hp_before": 9,
+          "hp_after": 0
+        },
+        {
+          "seq": 7,
+          "type": "combatant_defeated",
+          "combatant_id": "ghoul-2"
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "ghoul-1",
+            "before": 22,
+            "after": 4,
+            "delta": -18
+          },
+          {
+            "id": "ghoul-2",
+            "before": 9,
+            "after": 0,
+            "delta": -9
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [
+          {
+            "id": "pc-dorian",
+            "slot_level": 3,
+            "before": 2,
+            "after": 1
+          }
+        ],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Dorian Dawnshield casts Spirit Guardians (DC 15 WIS): Crypt Ghoul A succeeds and takes 18 radiant/necrotic damage.",
+        "Dorian Dawnshield casts Spirit Guardians (DC 15 WIS): Crypt Ghoul B succeeds and takes 18 radiant/necrotic damage.",
+        "Crypt Ghoul B drops to 0 HP and is defeated."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 22,
+      "round": 2,
+      "turn_index": 7,
+      "action_index": 1,
+      "actor_id": "pc-dorian",
+      "actor_name": "Dorian Dawnshield",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "pc-dorian"
+      },
+      "rationale": "Human ended turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "pc-dorian",
+          "round": 2
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "ghoul-1",
+          "round": 2
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 2: Crypt Ghoul A's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 23,
+      "round": 2,
+      "turn_index": 8,
+      "action_index": 0,
+      "actor_id": "ghoul-1",
+      "actor_name": "Crypt Ghoul A",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "ghoul-1",
+        "action": "Claw",
+        "target_ids": [
+          "pc-dorian"
+        ]
+      },
+      "rationale": "Using Claw on Dorian Dawnshield to inflict Paralyzed.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "ghoul-1",
+          "target_id": "pc-dorian",
+          "action": "Claw",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            15
+          ],
+          "chosen": 15,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 4,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 19,
+          "target_ac": 16,
+          "hit": true,
+          "crit": false
+        },
+        {
+          "seq": 2,
+          "type": "damage_applied",
+          "source_id": "ghoul-1",
+          "target_id": "pc-dorian",
+          "breakdown": [
+            {
+              "type": "slashing",
+              "raw": 4,
+              "effective": 4,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 4,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 4,
+          "hp_before": 29,
+          "hp_after": 25
+        },
+        {
+          "seq": 3,
+          "type": "saving_throw",
+          "target_id": "pc-dorian",
+          "ability": "con",
+          "dc": 10,
+          "auto_fail": false,
+          "mode": "normal",
+          "rolls": [
+            4
+          ],
+          "chosen": 4,
+          "modifier": 2,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 6,
+          "success": false,
+          "reason": "concentration"
+        },
+        {
+          "seq": 4,
+          "type": "concentration_ended",
+          "actor_id": "pc-dorian",
+          "spell": "spirit-guardians",
+          "reason": "failed_concentration_save"
+        },
+        {
+          "seq": 5,
+          "type": "saving_throw",
+          "target_id": "pc-dorian",
+          "ability": "con",
+          "dc": 10,
+          "auto_fail": false,
+          "mode": "normal",
+          "rolls": [
+            11
+          ],
+          "chosen": 11,
+          "modifier": 2,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 13,
+          "success": true,
+          "reason": "Claw_rider"
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "pc-dorian",
+            "before": 29,
+            "after": 25,
+            "delta": -4
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Crypt Ghoul A hits Dorian Dawnshield with Claw (19 vs AC 16) for 4 damage.",
+        "Dorian Dawnshield loses concentration on spirit-guardians (failed_concentration_save)."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 24,
+      "round": 2,
+      "turn_index": 8,
+      "action_index": 1,
+      "actor_id": "ghoul-1",
+      "actor_name": "Crypt Ghoul A",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "ghoul-1"
+      },
+      "rationale": "Monster action spent; ending turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "ghoul-1",
+          "round": 2
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "pc-aldric",
+          "round": 2
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 2: Aldric Vance's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 25,
+      "round": 2,
+      "turn_index": 9,
+      "action_index": 0,
+      "actor_id": "pc-aldric",
+      "actor_name": "Aldric Vance",
+      "side": "party",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "pc-aldric",
+        "target_id": "ghoul-1",
+        "weapon": "greatsword"
+      },
+      "rationale": "Melee Greatsword (Graze mastery) strike on Crypt Ghoul A.",
+      "table_talk": "Focusing Crypt Ghoul A with Greatsword (Graze mastery)!",
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "pc-aldric",
+          "target_id": "ghoul-1",
+          "weapon": "greatsword",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            16
+          ],
+          "chosen": 16,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 7,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 23,
+          "target_ac": 12,
+          "hit": true,
+          "crit": false
+        },
+        {
+          "seq": 2,
+          "type": "damage_applied",
+          "source_id": "pc-aldric",
+          "target_id": "ghoul-1",
+          "breakdown": [
+            {
+              "type": "slashing",
+              "raw": 6,
+              "effective": 6,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 6,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 6,
+          "hp_before": 4,
+          "hp_after": 0
+        },
+        {
+          "seq": 3,
+          "type": "combatant_defeated",
+          "combatant_id": "ghoul-1"
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "ghoul-1",
+            "before": 4,
+            "after": 0,
+            "delta": -4
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Crypt Ghoul A drops to 0 HP and is defeated.",
+        "Aldric Vance hits Crypt Ghoul A with Greatsword (23 vs AC 12) for 6 slashing damage."
+      ],
+      "usage": {}
+    }
+  ],
+  "violations": [
+    {
+      "round": 1,
+      "turn_index": 1,
+      "actor_id": "pc-dorian",
+      "side": "party",
+      "action_index": 2,
+      "attempt": 1,
+      "intent": {
+        "type": "move",
+        "actor_id": "pc-dorian",
+        "to": {
+          "x": 20,
+          "y": 100
+        }
+      },
+      "error": "Insufficient movement: need 85 ft (walking), have 30 ft."
+    }
+  ],
+  "rejected_inputs": [],
+  "recharge_events": [],
+  "blackboard": {
+    "party": [
+      {
+        "round": 1,
+        "actor_id": "pc-dorian",
+        "actor_name": "Dorian Dawnshield",
+        "message": "Target the Ghouls!"
+      },
+      {
+        "round": 1,
+        "actor_id": "pc-aldric",
+        "actor_name": "Aldric Vance",
+        "message": "Focusing Crypt Ghast with Greatsword (Graze mastery)!"
+      },
+      {
+        "round": 1,
+        "actor_id": "pc-lyra",
+        "actor_name": "Lyra Starweave",
+        "message": "Dropping fireball on Crypt Archer, Crypt Ghast, Crypt Ghoul B—allies are clear!"
+      },
+      {
+        "round": 2,
+        "actor_id": "pc-aldric",
+        "actor_name": "Aldric Vance",
+        "message": "Focusing Crypt Ghoul A with Greatsword (Graze mastery)!"
+      }
+    ],
+    "enemy": []
+  },
+  "scorecard": {
+    "side": "party",
+    "outcome_score": 96.9,
+    "rules_legality_score": 92.31,
+    "tactical_score": 93.0,
+    "coordination_score": 94.0,
+    "composite_score": 94.34,
+    "weights": {
+      "outcome": 0.35,
+      "rules_legality": 0.25,
+      "tactical": 0.25,
+      "coordination": 0.15
+    },
+    "metrics": {
+      "winner": "party",
+      "rounds": 2,
+      "max_rounds": 12,
+      "survivors": 3,
+      "total_allies": 3,
+      "hp_ratio": 0.8487,
+      "effective_damage_dealt": 130,
+      "wasted_immune_hits": 0,
+      "wasted_immune_raw_damage": 0,
+      "mastery_triggers": 0,
+      "mastery_setup_triggers": 0,
+      "effective_buff_casts": 2,
+      "ally_revivals": 0,
+      "ally_heals": 1,
+      "ally_buff_targets": 2,
+      "help_actions": 0,
+      "effective_help_actions": 0,
+      "friendly_fire_incidents": 0,
+      "friendly_fire_damage": 0,
+      "table_talk_messages": 4,
+      "focus_fire_ratio": 1.0,
+      "active_turns": 5,
+      "productive_turns": 5,
+      "contribution": 1.0,
+      "productive_talk_turns": 4,
+      "total_decisions": 13,
+      "first_attempt_legal": 12,
+      "total_violations": 1,
+      "forced_fallbacks": 0,
+      "llm_usage_totals": {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0
+      }
+    }
+  },
+  "digest": "e1f190842d1368bcbd98200feaab1628d94c362bb9d66ad4091033a081953840"
+}
