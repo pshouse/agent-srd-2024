@@ -236,7 +236,6 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
             "spell-economy",
             "focus-fire",
         ],
-        "bounds": {"min_x": -10, "min_y": -10, "max_x": 45, "max_y": 30},
         "party": [
             {"id": "pc-bram", "spec": _SPEC_BRAM_L1, "position": {"x": 0, "y": 0}},
             {"id": "pc-talia", "spec": _SPEC_TALIA_L1, "position": {"x": 0, "y": 15}},
@@ -281,7 +280,6 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
             "concentration",
             "weapon-mastery",
         ],
-        "bounds": {"min_x": -15, "min_y": -15, "max_x": 55, "max_y": 40},
         "party": [
             {"id": "pc-aldric", "spec": _SPEC_ALDRIC_L5, "position": {"x": 0, "y": 5}},
             {"id": "pc-lyra", "spec": _SPEC_LYRA_L5, "position": {"x": 0, "y": 20}},
@@ -357,7 +355,6 @@ _BUILTIN_SCENARIOS: dict[str, dict[str, Any]] = {
             "weapon-mastery",
             "focus-fire",
         ],
-        "bounds": {"min_x": -15, "min_y": -15, "max_x": 65, "max_y": 50},
         "party": [
             {"id": "pc-aldric", "spec": _SPEC_ALDRIC_L5, "position": {"x": 0, "y": 0}},
             {"id": "pc-lyra", "spec": _SPEC_LYRA_L5, "position": {"x": 0, "y": 25}},

@@ -42,6 +42,7 @@ from .agents import (
     _conscious_allies,
     _downed_allies,
     _ensure_rules,
+    _has_movement_obstacles,
     _obs_bounds_terrain,
     _reject_control_chars_in_secret,
     _spell_aoe_spec,
@@ -275,7 +276,7 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
     conds = _conditions(me)
     rem_after_stand = raw_move_ft - (int(me.get("speed_ft", 30) or 30) // 2) if stand else raw_move_ft
     crawling = ("prone" in conds) and not stand
-    move_budget = rem_after_stand if (bounds is not None or terrain is not None) else (rem_after_stand // 2 if crawling else rem_after_stand)
+    move_budget = rem_after_stand if _has_movement_obstacles(terrain) else (rem_after_stand // 2 if crawling else rem_after_stand)
     fear_src = conds.get("frightened")
     # The observation names the condition but not its source, so when Frightened treat every enemy as one.
     fear_pos = [e["position"] for e in enemies if fear_src is not None and (not fear_src or e["id"] in fear_src)]

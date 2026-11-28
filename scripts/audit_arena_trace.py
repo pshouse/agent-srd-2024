@@ -562,8 +562,27 @@ def audit(path: Path) -> None:
                     and x.get("actor_id") == e.get("trigger_source_id")
                 ]
                 own_turn = a["actor_id"] == caster
+                # SRD 5.2 RAW: Shield is also legal on the caster's own turn as a Reaction when hit by an
+                # Opportunity Attack provoked by the caster's own movement (intent == "move").
+                oa_trigger = (
+                    own_turn
+                    and intent.get("type") == "move"
+                    and any(
+                        x["type"] == "opportunity_attack"
+                        and x.get("target_id") == caster
+                        and (not e.get("trigger_source_id") or x.get("actor_id") == e.get("trigger_source_id"))
+                        for x in evs[:idx]
+                    )
+                    and nxt is not None
+                    and bool(nxt.get("reaction"))
+                    and nxt.get("actor_id") != caster
+                    and (not e.get("trigger_source_id") or nxt.get("actor_id") == e.get("trigger_source_id"))
+                )
                 hit_trigger = (
-                    bool(e.get("as_reaction")) and trigger == "hit_by_attack" and not own_turn and nxt is not None
+                    bool(e.get("as_reaction"))
+                    and trigger == "hit_by_attack"
+                    and nxt is not None
+                    and (not own_turn or oa_trigger)
                 )
                 mm_trigger = (
                     bool(e.get("as_reaction")) and trigger == "targeted_by_magic_missile" and not own_turn

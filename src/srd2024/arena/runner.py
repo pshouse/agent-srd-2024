@@ -510,7 +510,8 @@ def _cannot_act(actor: dict[str, Any], rules: RulesStore) -> bool:
     return False
 
 
-STATE_SHAPE_VERSION: int = 1
+# State-shape schema version (#66, bumped to 2 in #95 for optional top-level EncounterState `bounds`/`terrain`).
+STATE_SHAPE_VERSION: int = 2
 _RULES_DIGEST_CACHE: dict[tuple[str, int, int], str] = {}
 
 

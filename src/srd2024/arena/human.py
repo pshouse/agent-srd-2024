@@ -54,6 +54,7 @@ from .agents import (
     _conscious_allies,
     _downed_allies,
     _ensure_rules,
+    _has_movement_obstacles,
     _monster_action_range,
     _obs_bounds_terrain,
     _spell_aoe_spec,
@@ -139,7 +140,7 @@ def _retreat_step(
                     best = cand
         return best
 
-    if bounds is not None or terrain is not None:
+    if _has_movement_obstacles(terrain):
         reach_map = reachable_grid_costs(origin, max_move_ft, bounds, terrain, is_prone=is_prone)
         best = None
         best_d = cur_dist
@@ -164,6 +165,22 @@ def _retreat_step(
         step_y = 5 if dy > 0 else (-5 if dy < 0 else 0)
     steps = min(4, max_move_ft // 5)
     cand = {"x": ox + step_x * steps, "y": oy + step_y * steps}
+    if bounds is not None and not in_bounds(cand, bounds):
+        max_steps = min(6, max_move_ft // 5)
+        best = None
+        best_d = cur_dist
+        for dx_s in range(-max_steps, max_steps + 1):
+            for dy_s in range(-max_steps, max_steps + 1):
+                if dx_s == 0 and dy_s == 0:
+                    continue
+                c2 = {"x": ox + dx_s * 5, "y": oy + dy_s * 5}
+                if distance_ft(origin, c2) > max_move_ft or not in_bounds(c2, bounds) or not _is_free(c2, occupied):
+                    continue
+                d = distance_ft(c2, nearest["position"])
+                if d > best_d:
+                    best_d = d
+                    best = c2
+        return best
     if cand == origin or not _is_free(cand, occupied):
         return None
     if distance_ft(origin, cand) > max_move_ft:
@@ -830,7 +847,7 @@ def build_human_action_menu(
 
     # 4. Smart Tactical Movement Destinations
     crawl_mult = 2 if is_prone else 1
-    max_step = rem_move if (bounds is not None or terrain is not None) else (rem_move // crawl_mult)
+    max_step = rem_move if _has_movement_obstacles(terrain) else (rem_move // crawl_mult)
     if rem_move >= 5 * crawl_mult and speed > 0:
         seen_dests: set[tuple[int, int]] = {(sx, sy)}
 

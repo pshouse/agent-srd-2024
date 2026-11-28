@@ -236,6 +236,34 @@ _COVER_LABELS: dict[str, str] = {
     "three_quarters": "three-quarters cover",
 }
 
+# Spells that explicitly ignore Half Cover and Three-Quarters Cover (SRD 5.2 RAW).
+COVER_IGNORING_SPELLS: frozenset[str] = frozenset({"sacred-flame"})
+
+_AOE_SHAPES: frozenset[str] = frozenset(
+    {"sphere", "cone", "cube", "cylinder", "line", "emanation", "radius"}
+)
+
+
+def _spell_aoe_info(spell_slug: str, spell: dict[str, Any]) -> dict[str, Any] | None:
+    """Return AoE metadata dict if `spell` is an Area of Effect spell, else None."""
+    targeting = spell.get("targeting")
+    if isinstance(targeting, dict):
+        aoe = targeting.get("aoe")
+        if isinstance(aoe, dict):
+            shape = str(aoe.get("shape") or "").strip().lower()
+            if shape in _AOE_SHAPES or aoe.get("radius_ft") or aoe.get("radius"):
+                return aoe
+        if str(targeting.get("mode") or "").strip().lower() == "aoe":
+            return aoe if isinstance(aoe, dict) else {"shape": "sphere"}
+    top_aoe = spell.get("aoe")
+    if isinstance(top_aoe, dict):
+        shape = str(top_aoe.get("shape") or "").strip().lower()
+        if shape in _AOE_SHAPES or top_aoe.get("radius_ft") or top_aoe.get("radius"):
+            return top_aoe
+    if spell_slug in SELF_LINE_SPELLS:
+        return {"shape": "line"}
+    return None
+
 
 def _parse_grid_pair(raw: Any, label: str) -> tuple[int, int]:
     """Parse a 5-ft aligned `[x, y]` list/tuple or `{"x": x, "y": y}` dict."""
@@ -1070,6 +1098,7 @@ def _roll_save(
     *,
     reason: str = "save",
     source_pos: dict[str, int] | None = None,
+    ignore_cover: bool = False,
 ) -> dict[str, Any]:
     target = state["combatants"][target_id]
     ab = strip_prefix(ability)
@@ -1119,8 +1148,21 @@ def _roll_save(
 
     cover_kind: str | None = None
     cover_bonus = 0
+    cover_fields: dict[str, Any] = {}
     if ab == "dex" and source_pos is not None:
-        cover_kind, cover_bonus = compute_cover(source_pos, target["position"], state.get("terrain"))
+        raw_cover_kind, raw_cover_bonus = compute_cover(source_pos, target["position"], state.get("terrain"))
+        if raw_cover_bonus > 0 and raw_cover_kind:
+            if ignore_cover:
+                cover_kind = "none"
+                cover_bonus = 0
+                cover_fields["cover"] = "none"
+                cover_fields["cover_save_bonus"] = 0
+                cover_fields["cover_ignored"] = True
+            else:
+                cover_kind = raw_cover_kind
+                cover_bonus = raw_cover_bonus
+                cover_fields["cover"] = cover_kind
+                cover_fields["cover_save_bonus"] = cover_bonus
 
     d20 = rng.roll_d20(mode)
     base_mod = int(target["saves"].get(ab, 0))
@@ -1128,11 +1170,6 @@ def _roll_save(
     bb_bonus, bb_details = _roll_bless_bane(target, "save", rng)
     total = int(d20["chosen"]) + base_mod + exh_pen + bb_bonus + cover_bonus
     success = total >= int(dc)
-
-    cover_fields: dict[str, Any] = {}
-    if cover_bonus > 0 and cover_kind:
-        cover_fields["cover"] = cover_kind
-        cover_fields["cover_save_bonus"] = cover_bonus
 
     ev = tracker.emit(
         "saving_throw",
@@ -3594,18 +3631,100 @@ def step(
                         rules,
                     )
 
-        # Line of Sight check for targeted spells (M6.2): walls block targeted LoS spells.
-        if s.get("terrain") and target_ids:
-            for tid in target_ids:
-                if tid == actor_id:
-                    continue
-                t_pos = s["combatants"][tid]["position"]
-                if not has_line_of_sight(actor["position"], t_pos, s.get("terrain")):
-                    return _invalid(
-                        copy.deepcopy(state),
-                        f"No line of sight to '{tid}' for '{spell_slug}': blocked by a wall.",
-                        rules,
-                    )
+        # AoE origin resolution & Line of Sight checks (M6.2 / MF2):
+        # - Non-AoE targeted spells require LoS from caster to every target.
+        # - AoE spells measure LoS and Cover from the AoE point of origin (caster for Self-originated AoEs,
+        #   or explicit origin/target_point/point or primary in-LoS target for ranged-point AoEs).
+        #   Targets behind total cover (wall) from the AoE origin are dropped individually without
+        #   refusing the spell or refunding the slot when a valid point/target exists.
+        terrain = s.get("terrain")
+        aoe_info = _spell_aoe_info(spell_slug, spell)
+        aoe_shape = str(aoe_info.get("shape") or "").strip().lower() if isinstance(aoe_info, dict) else ""
+        is_self_origin_aoe = bool(
+            aoe_info is not None
+            and (
+                self_range
+                or aoe_shape in ("cone", "emanation")
+                or spell_slug in ("thunderwave", "burning-hands", "spirit-guardians")
+            )
+        )
+        aoe_origin: dict[str, int] | None = None
+        explicit_aoe_origin = False
+        blocked_aoe_targets: list[str] = []
+
+        if aoe_info is not None:
+            if is_self_origin_aoe:
+                aoe_origin = copy.deepcopy(actor["position"])
+            else:
+                raw_origin = intent.get("origin")
+                if raw_origin is None:
+                    raw_origin = intent.get("target_point")
+                if raw_origin is None:
+                    raw_origin = intent.get("point")
+                if raw_origin is not None:
+                    parsed_origin = _parse_point(raw_origin)
+                    if parsed_origin is None:
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"Spell '{spell_slug}' AoE origin must be {{x, y}} with integer coordinates.",
+                            rules,
+                        )
+                    if not in_bounds(parsed_origin, s.get("bounds")):
+                        b = s["bounds"]
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"AoE origin ({parsed_origin['x']}, {parsed_origin['y']}) for '{spell_slug}' is outside battlefield bounds "
+                            f"[x: {b['min_x']}..{b['max_x']}, y: {b['min_y']}..{b['max_y']}].",
+                            rules,
+                        )
+                    if is_wall(parsed_origin, terrain):
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"AoE origin ({parsed_origin['x']}, {parsed_origin['y']}) for '{spell_slug}' is blocked by a wall.",
+                            rules,
+                        )
+                    if parsed_origin != actor["position"] and not has_line_of_sight(actor["position"], parsed_origin, terrain):
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"No line of sight to AoE origin ({parsed_origin['x']}, {parsed_origin['y']}) for '{spell_slug}': blocked by a wall.",
+                            rules,
+                        )
+                    aoe_origin = parsed_origin
+                    explicit_aoe_origin = True
+                elif target_ids:
+                    for tid in target_ids:
+                        t_pos = s["combatants"][tid]["position"]
+                        if tid == actor_id or has_line_of_sight(actor["position"], t_pos, terrain):
+                            aoe_origin = copy.deepcopy(t_pos)
+                            break
+                    if aoe_origin is None:
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"No line of sight to any target for '{spell_slug}': blocked by a wall.",
+                            rules,
+                        )
+
+            if terrain and aoe_origin is not None and target_ids:
+                kept_targets: list[str] = []
+                for tid in target_ids:
+                    t_pos = s["combatants"][tid]["position"]
+                    if has_line_of_sight(aoe_origin, t_pos, terrain):
+                        kept_targets.append(tid)
+                    else:
+                        blocked_aoe_targets.append(tid)
+                target_ids = kept_targets
+        else:
+            if terrain and target_ids:
+                for tid in target_ids:
+                    if tid == actor_id:
+                        continue
+                    t_pos = s["combatants"][tid]["position"]
+                    if not has_line_of_sight(actor["position"], t_pos, terrain):
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"No line of sight to '{tid}' for '{spell_slug}': blocked by a wall.",
+                            rules,
+                        )
 
         # Concentration handling (drop previous concentration first!).
         is_conc = bool(spell.get("concentration", False))
@@ -3660,6 +3779,10 @@ def step(
                 "narrative_hooks": tracker.hooks,
             }
 
+        spell_cast_extra: dict[str, Any] = {}
+        if aoe_origin is not None and (explicit_aoe_origin or terrain is not None):
+            spell_cast_extra["aoe_origin"] = copy.deepcopy(aoe_origin)
+
         tracker.emit(
             "spell_cast",
             actor_id=actor_id,
@@ -3668,9 +3791,22 @@ def step(
             target_ids=target_ids,
             coverage=coverage,
             unmodeled_clauses=unmodeled,
+            **spell_cast_extra,
         )
 
         spell_name = str(spell.get("name") or spell_slug)
+
+        for b_tid in blocked_aoe_targets:
+            b_name = s["combatants"][b_tid]["name"]
+            tracker.emit(
+                "spell_target_blocked",
+                actor_id=actor_id,
+                target_id=b_tid,
+                spell=spell_slug,
+                reason="total_cover",
+                origin=copy.deepcopy(aoe_origin),
+            )
+            tracker.hook(f"{b_name} has total cover from {spell_name} and is unaffected.")
 
         # 1. Teleport (Misty Step).
         buffs = list(spell.get("buffs") or [])
@@ -3853,10 +3989,11 @@ def step(
 
         # A Self-origin spell with no one else to affect (#67, #81 MF1): legal, and nothing to roll.
         elif resolution in ("attack", "save") and castable_without_target and not target_ids:
-            if harmful_self_area:
-                tracker.hook(f"{actor['name']} casts {spell_name}; no other creature is in its area.")
-            else:
-                tracker.hook(f"{actor['name']} casts {spell_name}; it has no other creature to affect yet.")
+            if not blocked_aoe_targets:
+                if harmful_self_area:
+                    tracker.hook(f"{actor['name']} casts {spell_name}; no other creature is in its area.")
+                else:
+                    tracker.hook(f"{actor['name']} casts {spell_name}; it has no other creature to affect yet.")
 
         # 5. Spell attack resolution (`fire-bolt`, `scorching-ray`, `eldritch-blast`, `guiding-bolt`, `ray-of-frost`, etc.).
         elif resolution == "attack":
@@ -4042,24 +4179,28 @@ def step(
         # 6. Saving throw spells (`fireball`, `lightning-bolt`, `sacred-flame`, `hold-person`, `bane`, `vicious-mockery`).
         elif resolution == "save":
             if not target_ids:
-                return _invalid(copy.deepcopy(state), f"Spell '{spell_slug}' requires at least one target.", rules)
+                if not (blocked_aoe_targets or explicit_aoe_origin):
+                    return _invalid(copy.deepcopy(state), f"Spell '{spell_slug}' requires at least one target.", rules)
             save_ir = spell.get("save") or {}
             save_ab = strip_prefix(save_ir.get("ability") or "dex")
             on_success = str(save_ir.get("on_success") or "none").lower()
+            save_source_pos = aoe_origin if aoe_origin is not None else actor["position"]
+            ignore_cov = spell_slug in COVER_IGNORING_SPELLS
 
             # Roll damage once across AoE targets.
             rolled_parts: list[dict[str, Any]] = []
-            for d_idx, d in enumerate(dmg_list):
-                base_d = str(d["dice"])
-                if spell_level == 0:
-                    eff_d = _cantrip_scaled_dice(base_d, scaling, caster_level)
-                elif d_idx == 0 and upcast > 0 and scaling.get("slot_damage_per_level"):
-                    eff_d = scale_dice_expr(base_d, scaling["slot_damage_per_level"], upcast)
-                else:
-                    eff_d = base_d
-                res_d = rng.roll_dice_expr(eff_d, crit=False)
-                amt = max(0, int(res_d["total"]) + (spell_mod if d.get("add_spell_mod") else 0))
-                rolled_parts.append({"amount": amt, "type": strip_prefix(d["type"]), "dice": eff_d, "rolls": res_d["rolls"]})
+            if target_ids:
+                for d_idx, d in enumerate(dmg_list):
+                    base_d = str(d["dice"])
+                    if spell_level == 0:
+                        eff_d = _cantrip_scaled_dice(base_d, scaling, caster_level)
+                    elif d_idx == 0 and upcast > 0 and scaling.get("slot_damage_per_level"):
+                        eff_d = scale_dice_expr(base_d, scaling["slot_damage_per_level"], upcast)
+                    else:
+                        eff_d = base_d
+                    res_d = rng.roll_dice_expr(eff_d, crit=False)
+                    amt = max(0, int(res_d["total"]) + (spell_mod if d.get("add_spell_mod") else 0))
+                    rolled_parts.append({"amount": amt, "type": strip_prefix(d["type"]), "dice": eff_d, "rolls": res_d["rolls"]})
 
             for tid in target_ids:
                 t_name = s["combatants"][tid]["name"]
@@ -4072,11 +4213,17 @@ def step(
                     rng,
                     tracker,
                     reason=spell_slug,
-                    source_pos=actor["position"],
+                    source_pos=save_source_pos,
+                    ignore_cover=ignore_cov,
                 )
                 cov_save = save_ev.get("cover_save_bonus")
                 cov_kind = save_ev.get("cover")
-                cov_note = f" [{_COVER_LABELS[cov_kind]} +{cov_save} DEX save]" if (cov_save and cov_kind in _COVER_LABELS) else ""
+                if cov_save and cov_kind in _COVER_LABELS:
+                    cov_note = f" [{_COVER_LABELS[cov_kind]} +{cov_save} DEX save]"
+                elif save_ev.get("cover_ignored"):
+                    cov_note = " [cover ignored]"
+                else:
+                    cov_note = ""
                 save_dmg_hook_emitted = False
                 if rolled_parts:
                     if not save_ev["success"]:

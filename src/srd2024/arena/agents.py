@@ -669,6 +669,13 @@ def _obs_bounds_terrain(observation: dict[str, Any]) -> tuple[dict[str, int] | N
     return (bounds if isinstance(bounds, dict) else None), (terrain if isinstance(terrain, dict) else None)
 
 
+def _has_movement_obstacles(terrain: dict[str, Any] | None) -> bool:
+    """Return True iff `terrain` defines walls or difficult terrain that alter grid movement."""
+    if not isinstance(terrain, dict):
+        return False
+    return bool(terrain.get("walls") or terrain.get("difficult_terrain"))
+
+
 def _step_toward(
     origin: dict[str, int],
     target_pos: dict[str, int],
@@ -684,6 +691,7 @@ def _step_toward(
 
     Respects optional `occupied` (#53), `bounds`, `terrain` (walls & difficult terrain 2x cost),
     and `is_prone`. Never returns an out-of-bounds square, a wall tile, or another creature's square.
+    When neither walls nor difficult terrain exist, uses the exact pre-M6 straight-line geometry.
     """
     ox, oy = int(origin["x"]), int(origin["y"])
     tx, ty = int(target_pos["x"]), int(target_pos["y"])
@@ -692,8 +700,8 @@ def _step_toward(
     if (cur_dist <= desired_dist_ft and has_los) or max_move_ft < 5:
         return {"x": ox, "y": oy}
 
-    # When bounds or terrain are active, select from exact Dijkstra-reachable valid free squares.
-    if bounds is not None or terrain is not None:
+    # Use Dijkstra pathfinding ONLY when walls or difficult terrain are present in terrain.
+    if _has_movement_obstacles(terrain):
         reach_map = reachable_grid_costs(origin, max_move_ft, bounds, terrain, is_prone=is_prone)
         candidates = [
             (xy, cost)
@@ -750,9 +758,9 @@ def _step_toward(
         return {"x": ox, "y": oy}
 
     dest = _straight_step_toward(origin, target_pos, max_move_ft, desired_dist_ft=desired_dist_ft)
-    if _is_free(dest, occupied) or dest == {"x": ox, "y": oy}:
+    if (in_bounds(dest, bounds) and _is_free(dest, occupied)) or dest == {"x": ox, "y": oy}:
         return dest
-    return _nearest_free_toward(origin, target_pos, max_move_ft, desired_dist_ft, dest, occupied or set())
+    return _nearest_free_toward(origin, target_pos, max_move_ft, desired_dist_ft, dest, occupied or set(), bounds=bounds)
 
 
 def _nearest_free_toward(
@@ -762,6 +770,8 @@ def _nearest_free_toward(
     desired_dist_ft: int,
     ideal: dict[str, int],
     occupied: set[tuple[int, int]],
+    *,
+    bounds: dict[str, int] | None = None,
 ) -> dict[str, int]:
     """Best unoccupied square within reach of `origin` that gets closer to `target_pos`.
 
@@ -778,6 +788,8 @@ def _nearest_free_toward(
             if dxs == 0 and dys == 0:
                 continue
             cand = {"x": ox + dxs * 5, "y": oy + dys * 5}
+            if not in_bounds(cand, bounds):
+                continue
             if grid_square(cand) in occupied:
                 continue
             d_t = distance_ft(cand, target_pos)
@@ -868,7 +880,7 @@ def _best_kite_position(
                 if not has_line_of_sight(origin, cand, terrain):
                     continue
                 cand_list.append(cand)
-    elif bounds is not None or terrain is not None:
+    elif _has_movement_obstacles(terrain):
         reach_map = reachable_grid_costs(origin, max_move_ft, bounds, terrain, is_prone=is_prone)
         for (cx, cy) in sorted(reach_map.keys()):
             if (cx, cy) == (ox, oy):
@@ -881,6 +893,8 @@ def _best_kite_position(
                     continue
                 cand = {"x": ox + dx_s * 5, "y": oy + dy_s * 5}
                 if distance_ft(origin, cand) > max_move_ft:
+                    continue
+                if not in_bounds(cand, bounds):
                     continue
                 cand_list.append(cand)
 
@@ -1344,8 +1358,14 @@ class RandomDriver:
             buffs = list(sp_rec.get("buffs") or [])
             tp_buff = next((b for b in buffs if b.get("kind") == "teleport"), None)
             if tp_buff is not None:
-                occ = _occupied_squares(observation)
                 max_d = int(tp_buff.get("max_distance_ft", 30))
+                if bounds is None and terrain is None:
+                    step_d = min(15, max_d)
+                    sp_intent["destination"] = {"x": int(self_pos["x"]) - step_d, "y": int(self_pos["y"])}
+                    sp_intent["target_ids"] = [actor_id]
+                    candidates.append(sp_intent)
+                    continue
+                occ = _occupied_squares(observation)
                 tp_dest = _best_kite_position(
                     self_pos,
                     max_d,
@@ -1633,7 +1653,7 @@ class GreedyDriver:
 
         # Best raw damage option is currently out of range or blocked by wall: move toward nearest enemy.
         crawl_mult = 2 if is_prone else 1
-        max_step = rem_move if (bounds is not None or terrain is not None) else (rem_move // crawl_mult)
+        max_step = rem_move if _has_movement_obstacles(terrain) else (rem_move // crawl_mult)
         if rem_move >= 5 * crawl_mult and speed > 0 and "frightened" not in conds:
             nearest = min(enemies, key=lambda e: (distance_ft(self_pos, e["position"]), str(e["id"])))
             dest = _step_toward(
@@ -2525,16 +2545,19 @@ class HeuristicTacticalDriver:
                     if resolution == "auto_hit":
                         hit_prob = 1.0
                     elif resolution == "attack":
-                        hit_prob = max(0.20, 0.65 - 0.05 * cov_b)
+                        hit_prob = 0.65
                         if is_ranged_atk and adj_hostile:
-                            hit_prob = max(0.15, hit_prob - 0.23)
+                            hit_prob = 0.42
                         if sp_slug == "chill-touch" and dist > 5:
                             hit_prob = 0.40
+                        if cov_b > 0:
+                            hit_prob = max(0.15 if (is_ranged_atk and adj_hostile) else 0.20, hit_prob - 0.05 * cov_b)
                     else:
                         save_ab = strip_prefix(str((sp_rec.get("save") or {}).get("ability") or "dex"))
                         save_on_succ = str((sp_rec.get("save") or {}).get("on_success") or "none").lower()
-                        base_p = 0.78 if save_on_succ == "half" else 0.58
-                        hit_prob = max(0.30, base_p - (0.04 * cov_b if save_ab == "dex" else 0.0))
+                        hit_prob = 0.78 if save_on_succ == "half" else 0.58
+                        if cov_b > 0 and save_ab == "dex" and sp_slug != "sacred-flame":
+                            hit_prob = max(0.30, hit_prob - 0.04 * cov_b)
 
                     eff_dmg = dmg_e * hit_prob
                     bonus = 0.0

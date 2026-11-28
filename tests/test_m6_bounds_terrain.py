@@ -61,6 +61,27 @@ def _make_pc_spec(
     cantrips: list[str] | None = None,
     spells: list[str] | None = None,
 ) -> dict[str, Any]:
+    if cls == "cleric":
+        return {
+            "name": name,
+            "species": "human",
+            "subspecies": None,
+            "size": "Medium",
+            "background": "acolyte",
+            "background_asi": {"wis": 2, "con": 1},
+            "origin_feat": "magic-initiate",
+            "class": "cleric",
+            "subclass": "life-domain" if level >= 3 else None,
+            "level": level,
+            "ability_method": "standard_array",
+            "base_abilities": {"str": 13, "dex": 10, "con": 14, "int": 8, "wis": 15, "cha": 12},
+            "asi_choices": [{"level": 4, "type": "asi", "increases": {"wis": 2}}] if level >= 4 else [],
+            "skill_proficiencies": ["insight", "medicine", "religion"],
+            "equipment": {"armor": "chain-mail", "shield": True, "weapons": weapons or ["mace"]},
+            "cantrips": cantrips or ["sacred-flame", "guidance"],
+            "prepared_spells": spells or ["bless", "healing-word", "spirit-guardians"],
+            "hp_method": "fixed",
+        }
     if cls == "wizard":
         return {
             "name": name,
@@ -349,7 +370,11 @@ class TestM6LineOfSightAndCover(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.rules = RulesStore()
         cls.fighter_sb = compile_character(_make_pc_spec("Aldric"), cls.rules)["statblock"]
-        cls.wizard_sb = compile_character(_make_pc_spec("Lyra", cls="wizard"), cls.rules)["statblock"]
+        cls.wizard_sb = compile_character(
+            _make_pc_spec("Lyra", cls="wizard", spells=["fireball", "burning-hands", "magic-missile", "misty-step", "shield"]),
+            cls.rules,
+        )["statblock"]
+        cls.cleric_sb = compile_character(_make_pc_spec("Dorian", cls="cleric"), cls.rules)["statblock"]
 
     def test_walls_block_ranged_weapon_and_targeted_spells(self) -> None:
         terrain = {"walls": [[10, 0]], "difficult_terrain": [], "cover": []}
@@ -435,7 +460,8 @@ class TestM6LineOfSightAndCover(unittest.TestCase):
         self.assertFalse(atk_ev["hit"])
         self.assertTrue(any("half cover +2 AC" in h for h in r_atk["narrative_hooks"]))
 
-        # Spell attack & Fireball DEX save behind three-quarters cover (+5 AC / +5 DEX save)!
+        # Fireball DEX save behind three-quarters cover relative to AoE origin (+5 DEX save)!
+        # Origin at (5, 0), three-quarters cover at (10, 0), goblin at (20, 0).
         st_3q = _start_box(
             self.rules,
             [
@@ -446,10 +472,17 @@ class TestM6LineOfSightAndCover(unittest.TestCase):
             roll_overrides=[20, 1],
         )
         # Wizard spell DC is 15 (8 + 3 PB + 4 INT). Goblin DEX save is +2.
-        # Roll 8 on DEX save: 8 + 2 + 5 (three-quarters cover) = 15 >= DC 15 -> SUCCEEDS!
+        # Roll 8 on DEX save: 8 + 2 + 5 (three-quarters cover from origin) = 15 >= DC 15 -> SUCCEEDS!
         r_fb = step(
             st_3q,
-            {"type": "cast_spell", "actor_id": "pc-w", "spell": "fireball", "slot_level": 3, "target_ids": ["gob-1"]},
+            {
+                "type": "cast_spell",
+                "actor_id": "pc-w",
+                "spell": "fireball",
+                "slot_level": 3,
+                "origin": {"x": 5, "y": 0},
+                "target_ids": ["gob-1"],
+            },
             self.rules,
             roll_overrides=[1, 1, 1, 1, 1, 1, 1, 1, 8],
         )
@@ -462,11 +495,224 @@ class TestM6LineOfSightAndCover(unittest.TestCase):
         self.assertTrue(save_ev["success"])
         self.assertTrue(any("three-quarters cover +5 DEX save" in h for h in r_fb["narrative_hooks"]))
 
+    def test_sacred_flame_ignores_half_and_three_quarters_cover(self) -> None:
+        # Cleric spell DC is 15 (8 + 3 PB + 4 WIS). Goblin DEX save is +2.
+        # Half cover (+2) and three-quarters cover (+5) MUST grant +0 bonus vs Sacred Flame (SRD 5.2 RAW).
+        for cover_kind, d20_roll in (("half", 12), ("three_quarters", 10)):
+            with self.subTest(cover_kind=cover_kind):
+                terrain = {"walls": [], "difficult_terrain": [], "cover": [{"x": 10, "y": 0, "kind": cover_kind}]}
+                st = _start_box(
+                    self.rules,
+                    [
+                        {"id": "pc-c", "side": "party", "statblock": self.cleric_sb, "position": {"x": 0, "y": 0}},
+                        {"id": "gob-1", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 20, "y": 0}},
+                    ],
+                    terrain=terrain,
+                    roll_overrides=[20, 1],
+                )
+                # Without cover bonus: d20 + 2 < 15 -> FAILS! (With +2/+5 cover, it would be 16 or 17 >= 15.)
+                res = step(
+                    st,
+                    {"type": "cast_spell", "actor_id": "pc-c", "spell": "sacred-flame", "target_ids": ["gob-1"]},
+                    self.rules,
+                    roll_overrides=[3, 3, d20_roll],
+                )
+                self.assertEqual(res["status"], "ok", res.get("error"))
+                save_ev = [e for e in res["events"] if e["type"] == "saving_throw"][0]
+                self.assertEqual(save_ev["ability"], "dex")
+                self.assertEqual(save_ev["cover"], "none")
+                self.assertEqual(save_ev["cover_save_bonus"], 0)
+                self.assertTrue(save_ev["cover_ignored"])
+                self.assertEqual(save_ev["total"], d20_roll + 2)
+                self.assertFalse(save_ev["success"])
+
+        # Total cover (wall) still blocks Sacred Flame ("creature that you can see").
+        wall_terrain = {"walls": [[10, 0]], "difficult_terrain": [], "cover": []}
+        st_wall = _start_box(
+            self.rules,
+            [
+                {"id": "pc-c", "side": "party", "statblock": self.cleric_sb, "position": {"x": 0, "y": 0}},
+                {"id": "gob-1", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 20, "y": 0}},
+            ],
+            terrain=wall_terrain,
+            roll_overrides=[20, 1],
+        )
+        r_blocked = step(
+            st_wall,
+            {"type": "cast_spell", "actor_id": "pc-c", "spell": "sacred-flame", "target_ids": ["gob-1"]},
+            self.rules,
+        )
+        self.assertEqual(r_blocked["status"], "invalid_intent")
+        self.assertIn("line of sight", r_blocked["error"].lower())
+
+    def test_aoe_spells_measure_cover_and_los_from_origin_and_drop_walled_targets(self) -> None:
+        # 1. Cover between caster and target does NOT apply when Fireball origin is at target (20, 0).
+        tq_between = {"walls": [], "difficult_terrain": [], "cover": [{"x": 10, "y": 0, "kind": "three_quarters"}]}
+        st_cov = _start_box(
+            self.rules,
+            [
+                {"id": "pc-w", "side": "party", "statblock": self.wizard_sb, "position": {"x": 0, "y": 0}},
+                {"id": "gob-1", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 20, "y": 0}},
+            ],
+            terrain=tq_between,
+            roll_overrides=[20, 1],
+        )
+        # Default origin is primary target (20, 0) -> 0 cover between (20, 0) and (20, 0). Roll 10 + 2 = 12 < DC 15 -> FAILS!
+        r_no_cov = step(
+            st_cov,
+            {"type": "cast_spell", "actor_id": "pc-w", "spell": "fireball", "slot_level": 3, "target_ids": ["gob-1"]},
+            self.rules,
+            roll_overrides=[1, 1, 1, 1, 1, 1, 1, 1, 10],
+        )
+        self.assertEqual(r_no_cov["status"], "ok", r_no_cov.get("error"))
+        save_no_cov = [e for e in r_no_cov["events"] if e["type"] == "saving_throw"][0]
+        self.assertNotIn("cover_save_bonus", save_no_cov)
+        self.assertEqual(save_no_cov["total"], 12)
+        self.assertFalse(save_no_cov["success"])
+
+        # 2. Fireball around a corner:
+        #    - Caster at (0, 0) has LoS to blast origin (10, 10).
+        #    - Wall at (10, 0) blocks caster (0, 0) -> gob-open (20, 0),
+        #      but origin (10, 10) -> gob-open (20, 0) IS clear and crosses half cover at (15, 5)!
+        #    - Wall at (15, 15) blocks origin (10, 10) -> gob-walled (20, 20)!
+        #    Result: gob-open IS hit with half cover (+2 from origin), gob-walled is DROPPED (spared),
+        #    spell is NOT refused, and level-3 spell slot IS spent!
+        corner_terrain = {
+            "walls": [[10, 0], [15, 15]],
+            "difficult_terrain": [],
+            "cover": [{"x": 15, "y": 5, "kind": "half"}],
+        }
+        st_corner = _start_box(
+            self.rules,
+            [
+                {"id": "pc-w", "side": "party", "statblock": self.wizard_sb, "position": {"x": 0, "y": 0}},
+                {"id": "gob-open", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 20, "y": 0}},
+                {"id": "gob-walled", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 20, "y": 20}},
+            ],
+            terrain=corner_terrain,
+            roll_overrides=[20, 2, 1],
+        )
+        self.assertFalse(has_line_of_sight({"x": 0, "y": 0}, {"x": 20, "y": 0}, corner_terrain))
+        self.assertTrue(has_line_of_sight({"x": 0, "y": 0}, {"x": 10, "y": 10}, corner_terrain))
+        self.assertTrue(has_line_of_sight({"x": 10, "y": 10}, {"x": 20, "y": 0}, corner_terrain))
+        self.assertFalse(has_line_of_sight({"x": 10, "y": 10}, {"x": 20, "y": 20}, corner_terrain))
+
+        slots_before = int(st_corner["combatants"]["pc-w"]["spellcasting"]["slots"]["3"])
+        walled_hp_before = int(st_corner["combatants"]["gob-walled"]["hp"])
+        open_hp_before = int(st_corner["combatants"]["gob-open"]["hp"])
+        # Roll 8d6 = 8 damage; gob-open rolls 11 + 2 DEX + 2 half cover = 15 >= DC 15 -> succeeds (4 dmg).
+        r_corner = step(
+            st_corner,
+            {
+                "type": "cast_spell",
+                "actor_id": "pc-w",
+                "spell": "fireball",
+                "slot_level": 3,
+                "origin": {"x": 10, "y": 10},
+                "target_ids": ["gob-open", "gob-walled"],
+            },
+            self.rules,
+            roll_overrides=[1, 1, 1, 1, 1, 1, 1, 1, 11],
+        )
+        self.assertEqual(r_corner["status"], "ok", r_corner.get("error"))
+        self.assertEqual(int(r_corner["state"]["combatants"]["pc-w"]["spellcasting"]["slots"]["3"]), slots_before - 1)
+        self.assertEqual(int(r_corner["state"]["combatants"]["gob-walled"]["hp"]), walled_hp_before)
+        self.assertEqual(int(r_corner["state"]["combatants"]["gob-open"]["hp"]), open_hp_before - 4)
+        saves = [e for e in r_corner["events"] if e["type"] == "saving_throw"]
+        self.assertEqual([e["target_id"] for e in saves], ["gob-open"])
+        self.assertEqual(saves[0]["cover"], "half")
+        self.assertEqual(saves[0]["cover_save_bonus"], 2)
+        self.assertEqual(saves[0]["total"], 15)
+        blocked_evs = [e for e in r_corner["events"] if e["type"] == "spell_target_blocked"]
+        self.assertEqual([e["target_id"] for e in blocked_evs], ["gob-walled"])
+        self.assertEqual(blocked_evs[0]["reason"], "total_cover")
+
+        # 3. Fireball WITHOUT explicit origin, with walled target listed first:
+        #    origin defaults to first in-LoS target (gob-open); walled target is dropped, slot IS spent!
+        st_default = _start_box(
+            self.rules,
+            [
+                {"id": "pc-w", "side": "party", "statblock": self.wizard_sb, "position": {"x": 0, "y": 0}},
+                {"id": "gob-open", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 20, "y": 0}},
+                {"id": "gob-walled", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 30, "y": 0}},
+            ],
+            terrain={"walls": [[25, 0]], "difficult_terrain": [], "cover": []},
+            roll_overrides=[20, 2, 1],
+        )
+        r_default = step(
+            st_default,
+            {
+                "type": "cast_spell",
+                "actor_id": "pc-w",
+                "spell": "fireball",
+                "slot_level": 3,
+                "target_ids": ["gob-walled", "gob-open"],
+            },
+            self.rules,
+            roll_overrides=[1, 1, 1, 1, 1, 1, 1, 1, 5],
+        )
+        self.assertEqual(r_default["status"], "ok", r_default.get("error"))
+        self.assertEqual(
+            int(r_default["state"]["combatants"]["pc-w"]["spellcasting"]["slots"]["3"]),
+            int(st_default["combatants"]["pc-w"]["spellcasting"]["slots"]["3"]) - 1,
+        )
+        self.assertEqual(
+            int(r_default["state"]["combatants"]["gob-walled"]["hp"]),
+            int(st_default["combatants"]["gob-walled"]["hp"]),
+        )
+        self.assertLess(
+            int(r_default["state"]["combatants"]["gob-open"]["hp"]),
+            int(st_default["combatants"]["gob-open"]["hp"]),
+        )
+
+        # 4. Self-originated AoE (Burning Hands): measures cover & LoS from caster, drops only walled target.
+        st_cone = _start_box(
+            self.rules,
+            [
+                {"id": "pc-w", "side": "party", "statblock": self.wizard_sb, "position": {"x": 0, "y": 0}},
+                {"id": "gob-cov", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 15, "y": 0}},
+                {"id": "gob-wall", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 0, "y": 15}},
+            ],
+            terrain={"walls": [[0, 10]], "difficult_terrain": [], "cover": [{"x": 10, "y": 0, "kind": "half"}]},
+            roll_overrides=[20, 2, 1],
+        )
+        r_cone = step(
+            st_cone,
+            {
+                "type": "cast_spell",
+                "actor_id": "pc-w",
+                "spell": "burning-hands",
+                "slot_level": 1,
+                "target_ids": ["gob-cov", "gob-wall"],
+            },
+            self.rules,
+            roll_overrides=[2, 2, 2, 11],
+        )
+        self.assertEqual(r_cone["status"], "ok", r_cone.get("error"))
+        cone_saves = [e for e in r_cone["events"] if e["type"] == "saving_throw"]
+        self.assertEqual([e["target_id"] for e in cone_saves], ["gob-cov"])
+        self.assertEqual(cone_saves[0]["cover"], "half")
+        self.assertEqual(cone_saves[0]["cover_save_bonus"], 2)
+        self.assertEqual(
+            int(r_cone["state"]["combatants"]["gob-wall"]["hp"]),
+            int(st_cone["combatants"]["gob-wall"]["hp"]),
+        )
+
 
 class TestM6RuinedKeepDriversAndDST(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.rules = RulesStore()
+
+    def test_calibration_scenarios_stay_unbounded_while_ruined_keep_has_bounds_and_terrain(self) -> None:
+        for sid in ("goblin-ambush", "crypt-of-ghouls", "wyrmling-lair"):
+            scen = load_scenario(sid, self.rules)
+            self.assertNotIn("bounds", scen, f"Calibration scenario '{sid}' must remain unbounded.")
+            self.assertNotIn("terrain", scen, f"Calibration scenario '{sid}' must have no terrain.")
+
+        keep = load_scenario("ruined-keep", self.rules)
+        self.assertIn("bounds", keep)
+        self.assertIn("terrain", keep)
 
     def test_ruined_keep_runs_cleanly_and_replays_deterministically(self) -> None:
         scen = load_scenario("ruined-keep", self.rules)

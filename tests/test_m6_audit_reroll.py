@@ -165,6 +165,51 @@ class TestAuditHeroicInspirationRollback(unittest.TestCase):
             r"FAIL\s+\d+ checks\s+[1-9]\d* bad\s+Heroic Inspiration reroll preserves original bonus_dice",
         )
 
+    def test_shield_reaction_on_own_turn_opportunity_attack_audits_cleanly(self) -> None:
+        """SRD 5.2 RAW: Shield cast as a Reaction to an Opportunity Attack during the caster's own move is legal."""
+        scen = load_scenario("goblin-ambush", self.rules)
+        wiz = copy.deepcopy(next(c for c in scen["combatants"] if c["id"] == "pc-talia"))
+        wiz["position"] = {"x": 0, "y": 0}
+        # Goblin Warrior (+4 to hit) adjacent to Talia (AC 12 -> +5 Shield = 17).
+        # OA roll d20=10 -> total 14 hits AC 12, misses AC 17 -> triggers legal reactive Shield during Talia's move!
+        foe = {"id": "gob-oa", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 5, "y": 0}}
+        init_state = step(
+            None,
+            {"type": "start_encounter", "seed": 5, "combatants": [wiz, foe]},
+            self.rules,
+            roll_overrides=[20, 1],
+        )["state"]
+
+        move_intent = {"type": "move", "actor_id": "pc-talia", "to": {"x": -10, "y": 0}}
+        move_res = step(copy.deepcopy(init_state), move_intent, self.rules, roll_overrides=[10])
+        self.assertEqual(move_res["status"], "ok", move_res.get("error"))
+        evs = move_res["events"]
+        self.assertTrue(any(e.get("type") == "opportunity_attack" and e.get("target_id") == "pc-talia" for e in evs))
+        self.assertTrue(
+            any(e.get("type") == "spell_cast" and e.get("spell") == "shield" and e.get("as_reaction") for e in evs)
+        )
+        self.assertTrue(any(e.get("type") == "moved" and e.get("actor_id") == "pc-talia" for e in evs))
+
+        trace = {
+            "initial_state": init_state,
+            "actions": [
+                {"seq": 1, "actor_id": "pc-talia", "intent": move_intent, "events": evs},
+            ],
+        }
+        res = _audit(self._write("shield-on-oa-ok.json", trace))
+        self.assertEqual(res.returncode, 0, res.stdout)
+        self.assertRegex(res.stdout, r"ok\s+[1-9]\d* checks\s+0 bad\s+Shield is a reaction to being hit")
+        self.assertRegex(res.stdout, r"ok\s+[1-9]\d* checks\s+0 bad\s+Shield only when \+5 AC turns the hit into a miss")
+
+        # Tampering: removing the opportunity_attack event turns it into an illegal own-turn Shield and MUST fail.
+        bad_trace = copy.deepcopy(trace)
+        bad_trace["actions"][0]["events"] = [
+            e for e in bad_trace["actions"][0]["events"] if e.get("type") != "opportunity_attack"
+        ]
+        bad = _audit(self._write("shield-on-oa-bad.json", bad_trace))
+        self.assertEqual(bad.returncode, 1, bad.stdout)
+        self.assertRegex(bad.stdout, r"FAIL\s+\d+ checks\s+[1-9]\d* bad\s+Shield is a reaction to being hit")
+
     def test_committed_session_traces_pass_audit_with_zero_regressions(self) -> None:
         traces = sorted(SESSIONS_DIR.glob("*.trace.json"))
         self.assertTrue(traces, "expected committed traces under examples/sessions/")
