@@ -340,6 +340,12 @@ def _roll_bless_bane(
     roll_kind: str,
     rng: DeterministicRNG,
 ) -> tuple[int, list[dict[str, Any]]]:
+    # Heroic Inspiration (#85) rerolls one die, the d20. The reroll re-resolves the attack with the original
+    # roll's Bless/Bane dice pinned, one entry per attack roll in the action.
+    pinned = combatant.get("_pinned_bonus_dice")
+    if roll_kind == "attack" and isinstance(pinned, list) and pinned:
+        kept = [dict(d) for d in (pinned.pop(0) or [])]
+        return sum(int(d.get("delta", 0)) for d in kept), kept
     total_bonus = 0
     details: list[dict[str, Any]] = []
     for eff in combatant.get("active_effects", []):
@@ -356,6 +362,15 @@ def _roll_bless_bane(
         total_bonus += delta
         details.append({"kind": kind, "dice": dice_str, "rolls": res["rolls"], "delta": delta})
     return total_bonus, details
+
+
+def _action_bonus_dice(events: list[dict[str, Any]], actor_id: str, roll_type: str) -> list[list[dict[str, Any]]]:
+    """The Bless/Bane dice of each of `actor_id`'s own attack rolls in this action, in order (#85)."""
+    return [
+        copy.deepcopy(e.get("bonus_dice") or [])
+        for e in events
+        if e.get("type") == roll_type and e.get("actor_id") == actor_id and not e.get("reaction")
+    ]
 
 
 def _next_effect_id(state: dict[str, Any], prefix: str) -> str:
@@ -2621,6 +2636,7 @@ def step(
                 s["pending_reroll"] = {
                     "actor_id": actor_id,
                     "kind": "attack",
+                    "bonus_dice": _action_bonus_dice(tracker.events, actor_id, "attack_roll"),
                     "intent": copy.deepcopy(intent),
                     "previous_d20": int(last_ev["chosen"]),
                     "previous_total": int(last_ev["total"]),
@@ -2734,6 +2750,7 @@ def step(
             s["pending_reroll"] = {
                 "actor_id": actor_id,
                 "kind": "attack",
+                "bonus_dice": _action_bonus_dice(tracker.events, actor_id, "attack_roll"),
                 "intent": copy.deepcopy(intent),
                 "previous_d20": int(atk_res["chosen"]),
                 "previous_total": int(atk_res["total"]),
@@ -3674,6 +3691,7 @@ def step(
                 s["pending_reroll"] = {
                     "actor_id": actor_id,
                     "kind": "spell_attack",
+                    "bonus_dice": _action_bonus_dice(tracker.events, actor_id, "spell_attack_roll"),
                     "intent": copy.deepcopy(intent),
                     "previous_d20": int(last_ev["chosen"]),
                     "previous_total": int(last_ev["total"]),
@@ -4017,11 +4035,15 @@ def step(
         if actor_id not in s["combatants"]:
             return _invalid(copy.deepcopy(state), f"Invalid reroll rollback state for '{actor_id}'.", rules)
         s["combatants"][actor_id]["heroic_inspiration"] = False
+        # Only the d20 is rerolled (SRD 5.2: "reroll any one die"); the original Bless/Bane dice are kept (#85).
+        s["combatants"][actor_id]["_pinned_bonus_dice"] = copy.deepcopy(pending.get("bonus_dice") or [])
         s["pending_reroll"] = None
         if s.get("status") == "ended":
             s["status"] = "active"
 
         re_res = step(s, orig_intent, rules, roll_overrides=roll_overrides)
+        for comb in (re_res.get("state") or {}).get("combatants", {}).values():
+            comb.pop("_pinned_bonus_dice", None)
         if re_res.get("status") != "ok":
             return _invalid(
                 copy.deepcopy(state),
