@@ -2167,6 +2167,13 @@
           "seq": 5,
           "type": "combatant_defeated",
           "combatant_id": "goblin-2"
+        },
+        {
+          "seq": 6,
+          "type": "encounter_ended",
+          "encounter_id": "goblin-ambush",
+          "winner_side": "party",
+          "round": 2
         }
       ],
       "state_diff": {
@@ -2193,7 +2200,8 @@
       },
       "narrative_hooks": [
         "Talia Spark casts Magic Missile at Goblin Scout B for 11 force damage.",
-        "Goblin Scout B drops to 0 HP and is defeated."
+        "Goblin Scout B drops to 0 HP and is defeated.",
+        "Encounter 'goblin-ambush' ends: party victorious."
       ],
       "usage": {}
     }
@@ -2286,5 +2294,5 @@
       }
     }
   },
-  "digest": "41e39df7f2d6417cac232d290d94fa6ece796004fa4219f74a9764819ec8d25d"
+  "digest": "f9e476592902508cc9ceedd11e0276f0c2bdc04f4ed7e1c49b00f4b89349bfbe"
 }
