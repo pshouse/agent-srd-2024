@@ -4599,6 +4599,13 @@
           "mastery": "vex",
           "actor_id": "pc-bram",
           "target_id": "goblin-2"
+        },
+        {
+          "seq": 5,
+          "type": "encounter_ended",
+          "encounter_id": "goblin-ambush",
+          "winner_side": "party",
+          "round": 8
         }
       ],
       "state_diff": {
@@ -4629,7 +4636,8 @@
       "narrative_hooks": [
         "Goblin Scout B drops to 0 HP and is defeated.",
         "Bram Ironhand hits Goblin Scout B with Shortbow (CRITICAL HIT!) (24 vs AC 15) for 8 piercing damage.",
-        "Vex mastery grants Bram Ironhand Advantage on the next attack against Goblin Scout B."
+        "Vex mastery grants Bram Ironhand Advantage on the next attack against Goblin Scout B.",
+        "Encounter 'goblin-ambush' ends: party victorious."
       ],
       "usage": {
         "prompt_tokens": 3656,
@@ -4827,5 +4835,5 @@
       }
     }
   },
-  "digest": "f8b5592ea3aedebf618a8b3712bab276560e5d5d4ac4bd66a6b8b3be1727c2b2"
+  "digest": "841dcb2ed472ae8a39e1d493d71e87324bab67485ae52c93bc983d9b9f2722c3"
 }

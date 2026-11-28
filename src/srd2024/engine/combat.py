@@ -2905,14 +2905,26 @@ def _invalid(state: dict[str, Any], message: str, rules: RulesStore) -> dict[str
     }
 
 
-def _update_encounter_status(state: dict[str, Any]) -> None:
+def _update_encounter_status(state: dict[str, Any], tracker: _StepTracker | None = None) -> None:
+    """Flip `status` to "ended" once at most one side is still standing.
+
+    On the active -> ended flip, emit `encounter_ended` (with `winner_side`, None if no side is left) and a
+    narrative hook (#9). Before this the status changed silently.
+    """
     living_sides = {
         c.get("side")
         for c in state["combatants"].values()
         if c.get("alive") and (c.get("kind") == "pc" or int(c.get("hp", 0)) > 0)
     }
     if len(living_sides) <= 1 and len(state["combatants"]) > 1:
+        was_ended = state.get("status") == "ended"
         state["status"] = "ended"
+        if tracker is not None and not was_ended:
+            winner = str(next(iter(living_sides))) if living_sides else None
+            enc_id = str(state.get("encounter_id") or "enc-1")
+            tracker.emit("encounter_ended", encounter_id=enc_id, winner_side=winner, round=int(state.get("round", 0)))
+            outcome = f"{winner} victorious" if winner else "no side left standing"
+            tracker.hook(f"Encounter '{enc_id}' ends: {outcome}.")
 
 
 # ----------------------------------------------------------------------
@@ -3354,6 +3366,11 @@ def step(
     if actor_id not in s["combatants"]:
         return _invalid(copy.deepcopy(state), f"Unknown combatant '{actor_id}'.", rules)
 
+    # #9: once the encounter has ended, nothing but a fresh start_encounter is accepted. A pending Heroic
+    # Inspiration reroll is the one exception: rerolling the miss rewinds to before it, so it can reopen the fight.
+    if s.get("status") == "ended" and not (intent_type == "reroll" and s.get("pending_reroll")):
+        return _invalid(copy.deepcopy(state), "Encounter has ended.", rules)
+
     actor = s["combatants"][actor_id]
 
     # Enforce exhaustion 6 death check if externally mutated/initialized.
@@ -3361,7 +3378,7 @@ def step(
         s["pending_reroll"] = None
         _check_exhaustion_death(s, actor_id, tracker)
         s["rng"] = rng.to_dict()
-        _update_encounter_status(s)
+        _update_encounter_status(s, tracker)
         return {
             "status": "ok",
             "error": None,
@@ -3475,7 +3492,7 @@ def step(
                 actor["movement_remaining_ft"] = 0
                 tracker.hook(f"{actor['name']} is dropped before getting away; the move ends at ({old_pos['x']}, {old_pos['y']}).")
                 s["rng"] = rng.to_dict()
-                _update_encounter_status(s)
+                _update_encounter_status(s, tracker)
                 return {
                     "status": "ok",
                     "error": None,
@@ -3574,7 +3591,7 @@ def step(
             if not ok:
                 return _invalid(copy.deepcopy(state), err_msg or "Monster action failed.", rules)
             s["rng"] = rng.to_dict()
-            _update_encounter_status(s)
+            _update_encounter_status(s, tracker)
             atk_events = [e for e in tracker.events if e.get("type") == "attack_roll"]
             if (
                 atk_events
@@ -3703,7 +3720,7 @@ def step(
         )
 
         s["rng"] = rng.to_dict()
-        _update_encounter_status(s)
+        _update_encounter_status(s, tracker)
         if (
             not atk_res["hit"]
             and actor_id == active_id
@@ -4854,7 +4871,7 @@ def step(
                 tracker.hook(f"{actor['name']} casts {spell_name}.")
 
         s["rng"] = rng.to_dict()
-        _update_encounter_status(s)
+        _update_encounter_status(s, tracker)
         if resolution == "attack":
             spell_atk_events = [e for e in tracker.events if e.get("type") == "spell_attack_roll"]
             if (
@@ -5022,6 +5039,21 @@ def step(
 
         tracker.emit("turn_ended", actor_id=ending_id, round=cur_round)
 
+        # #9: if the fight ended during this turn (e.g. a state whose status wasn't flipped yet), stop here:
+        # don't advance active_index or round, and don't start another turn.
+        _update_encounter_status(s, tracker)
+        if s.get("status") == "ended":
+            s["rng"] = rng.to_dict()
+            return {
+                "status": "ok",
+                "error": None,
+                "events": tracker.events,
+                "state_diff": tracker.build_diff(s),
+                "state": s,
+                "legal_actions": compute_legal_actions(s, rules),
+                "narrative_hooks": tracker.hooks,
+            }
+
         # 3. Advance to next alive combatant.
         n = len(turn_order)
         cur_idx = int(s["active_index"]) % n
@@ -5152,7 +5184,7 @@ def step(
                         tracker.hook(_death_save_tally(new_actor, f"fails a Death Save ({val})"))
 
         s["rng"] = rng.to_dict()
-        _update_encounter_status(s)
+        _update_encounter_status(s, tracker)
         return {
             "status": "ok",
             "error": None,
@@ -5680,7 +5712,7 @@ def step(
             return _invalid(copy.deepcopy(state), f"Unsupported class feature '{feature}'.", rules)
 
         s["rng"] = rng.to_dict()
-        _update_encounter_status(s)
+        _update_encounter_status(s, tracker)
         return {
             "status": "ok",
             "error": None,

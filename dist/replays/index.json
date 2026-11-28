@@ -3,9 +3,9 @@
   "replays": [
     {
       "actions": 47,
-      "bytes": 128507,
+      "bytes": 128744,
       "composite_score": 90.67,
-      "digest": "f8b5592ea3aedebf618a8b3712bab276560e5d5d4ac4bd66a6b8b3be1727c2b2",
+      "digest": "841dcb2ed472ae8a39e1d493d71e87324bab67485ae52c93bc983d9b9f2722c3",
       "enemy_driver": "heuristic-tactical",
       "file": "2026-11-27-arena-1.sonnet-goblin-10.trace.json",
       "id": "2026-11-27-arena-1.sonnet-goblin-10",
@@ -14,16 +14,16 @@
       "scenario_id": "goblin-ambush",
       "scenario_name": "Goblin Ambush",
       "seed": 10,
-      "sha256": "c782d02407d422fbf5348bb30c2c2a030ce58e9e872c4407d2efe0924f7a7103",
+      "sha256": "641b702e25ef80f5ef557f8bbf29955a78ca8112801ac9ee7dfc8e60cb90890c",
       "source": "examples/sessions/2026-11-27-arena-1.sonnet-goblin-10.trace.json",
       "winner": "party",
       "writeup": "examples/sessions/2026-11-27-arena-1.md"
     },
     {
       "actions": 14,
-      "bytes": 60039,
+      "bytes": 60276,
       "composite_score": 96.35,
-      "digest": "41e39df7f2d6417cac232d290d94fa6ece796004fa4219f74a9764819ec8d25d",
+      "digest": "f9e476592902508cc9ceedd11e0276f0c2bdc04f4ed7e1c49b00f4b89349bfbe",
       "enemy_driver": "heuristic-tactical",
       "file": "2026-11-27-goblin-nl-1.trace.json",
       "id": "2026-11-27-goblin-nl-1",
@@ -32,7 +32,7 @@
       "scenario_id": "goblin-ambush",
       "scenario_name": "Goblin Ambush",
       "seed": 0,
-      "sha256": "1fa176577dd16b3893cd022b7497f016247c349edef8ae5497b28a07a28b7c90",
+      "sha256": "90df0804f0189cc2438a88809e49c789e6ab4665debc5724207d6508599964fd",
       "source": "examples/sessions/2026-11-27-goblin-nl-1.trace.json",
       "winner": "party",
       "writeup": "examples/sessions/2026-11-27-goblin-nl-1.md"
