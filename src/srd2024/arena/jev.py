@@ -110,8 +110,8 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
             seen.add(name)
             out.append((name, desc, intent))
 
-    # Weapon attacks (Attack action or remaining Extra Attacks), and the off-hand Light attack.
-    can_attack = bool(res.get("action")) or int(res.get("attacks_remaining", 0) or 0) > 0
+    # Weapon attacks (Attack action, Surge Action, or remaining Extra Attacks), and the off-hand Light attack.
+    can_attack = bool(res.get("action")) or bool(res.get("surge_action")) or int(res.get("attacks_remaining", 0) or 0) > 0
     can_offhand = (
         "offhand_attack" in (legal.get("bonus_actions") or [])
         and bool(res.get("light_attack_made"))
@@ -351,7 +351,79 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
                     {"type": "move", "actor_id": actor_id, "to": dest, "stand_up": stand},
                 )
 
-    if res.get("action"):
+    # Core 2024 Class Features (M6.3A).
+    legal_cf = set(legal.get("class_features") or [])
+    cr = me.get("class_resources") or {}
+    actor_lvl = int(me.get("level", 1))
+    if "second_wind" in legal_cf and int(me.get("hp", 0)) < int(me.get("hp_max", 1)):
+        add(
+            "second wind",
+            f"Use Second Wind (Bonus Action): regain 1d10+{actor_lvl} HP.",
+            {"type": "class_feature", "actor_id": actor_id, "feature": "second_wind"},
+        )
+    if "action_surge" in legal_cf and not res.get("action") and enemies:
+        add(
+            "action surge",
+            "Use Action Surge (free, 1/turn): gain one extra non-Magic action this turn.",
+            {"type": "class_feature", "actor_id": actor_id, "feature": "action_surge"},
+        )
+    if "lay_on_hands" in legal_cf:
+        loh_rem = int((cr.get("lay_on_hands") or {}).get("remaining", 0))
+        touch_pool = [
+            a
+            for a in downed + allies
+            if distance_ft(pos, a["position"]) <= 5 and has_line_of_sight(pos, a["position"], terrain)
+        ] + [{**me, "id": actor_id}]
+        for a in touch_pool:
+            a_hp = int(a.get("hp", 0))
+            a_max = int(a.get("hp_max", 1))
+            if a_hp < a_max and loh_rem >= 1:
+                amt = min(loh_rem, max(1, a_max - a_hp))
+                who = "yourself" if a["id"] == actor_id else _ally_label(a, pos)
+                add(
+                    f"lay on hands heal {a['id']}",
+                    f"Use Lay on Hands (Bonus Action): restore {amt} HP to {who} ({loh_rem} HP pool).",
+                    {
+                        "type": "class_feature",
+                        "actor_id": actor_id,
+                        "feature": "lay_on_hands",
+                        "mode": "heal",
+                        "target_id": str(a["id"]),
+                        "amount": amt,
+                    },
+                )
+            a_conds = {strip_prefix(str(c.get("condition") if isinstance(c, dict) else c)) for c in (a.get("conditions") or [])}
+            if "poisoned" in a_conds and loh_rem >= 5:
+                who = "yourself" if a["id"] == actor_id else _ally_label(a, pos)
+                add(
+                    f"lay on hands cure poison {a['id']}",
+                    f"Use Lay on Hands (Bonus Action, 5 HP): cure Poisoned on {who}.",
+                    {
+                        "type": "class_feature",
+                        "actor_id": actor_id,
+                        "feature": "lay_on_hands",
+                        "mode": "cure_poison",
+                        "target_id": str(a["id"]),
+                    },
+                )
+    if "preserve_life" in legal_cf:
+        bloodied_ids = [
+            str(a["id"])
+            for a in downed + allies
+            if distance_ft(pos, a["position"]) <= 30
+            and has_line_of_sight(pos, a["position"], terrain)
+            and int(a.get("hp", 0)) < int(a.get("hp_max", 1)) // 2
+        ]
+        if int(me.get("hp", 0)) < int(me.get("hp_max", 1)) // 2:
+            bloodied_ids.append(actor_id)
+        if bloodied_ids:
+            add(
+                f"preserve life on {'+'.join(bloodied_ids)}",
+                f"Use Channel Divinity: Preserve Life (Magic Action): split {5 * actor_lvl} HP among Bloodied allies {', '.join(bloodied_ids)} (up to half max HP).",
+                {"type": "class_feature", "actor_id": actor_id, "feature": "preserve_life", "target_ids": bloodied_ids},
+            )
+
+    if res.get("action") or res.get("surge_action"):
         add("dodge", "Take the Dodge action: attacks against you have Disadvantage until your next turn.",
             {"type": "dodge", "actor_id": actor_id})
         add("dash", "Take the Dash action: extra movement equal to your speed this turn.",

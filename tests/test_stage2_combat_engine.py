@@ -1020,27 +1020,27 @@ class TestSpellsConcentrationAndRevival(unittest.TestCase):
         st = _add_cond(st, "pc-1", "unconscious")
         st = _add_cond(st, "pc-1", "prone")
 
-        # Healing Word (bonus action, 2d4 + WIS mod) revives PC -> removes unconscious, KEEPS prone!
+        # Healing Word (bonus action, 2d4 + WIS mod + Disciple of Life 2+slot_level #34) revives PC -> removes unconscious, KEEPS prone!
         r_hw = step(
             st,
             {"type": "cast_spell", "actor_id": "clr-1", "spell": "healing-word", "slot_level": 1, "target_ids": ["pc-1"]},
             self.rules,
-            roll_overrides=[3, 4],  # 3 + 4 + 4 (WIS +4) = 11 HP
+            roll_overrides=[3, 4],  # 3 + 4 + 4 (WIS +4) + 3 (Disciple of Life, L1 slot #34) = 14 HP
         )
         self.assertEqual(r_hw["status"], "ok")
         pc = r_hw["state"]["combatants"]["pc-1"]
-        self.assertEqual(pc["hp"], 11)
+        self.assertEqual(pc["hp"], 14)
         self.assertNotIn("unconscious", _condition_names(pc))
         self.assertIn("prone", _condition_names(pc), "2024 RAW: reviving from Unconscious leaves creature Prone")
 
-        # Also verify Cure Wounds (2d8 + WIS mod)
+        # Also verify Cure Wounds (2d8 + WIS mod + Disciple of Life 2+slot_level #34)
         r_cw = step(
             st,
             {"type": "cast_spell", "actor_id": "clr-1", "spell": "cure-wounds", "slot_level": 1, "target_ids": ["pc-1"]},
             self.rules,
-            roll_overrides=[5, 6],  # 5 + 6 + 4 = 15 HP
+            roll_overrides=[5, 6],  # 5 + 6 + 4 + 3 (Disciple of Life, L1 slot #34) = 18 HP
         )
-        self.assertEqual(r_cw["state"]["combatants"]["pc-1"]["hp"], 15)
+        self.assertEqual(r_cw["state"]["combatants"]["pc-1"]["hp"], 18)
         self.assertNotIn("unconscious", _condition_names(r_cw["state"]["combatants"]["pc-1"]))
         self.assertIn("prone", _condition_names(r_cw["state"]["combatants"]["pc-1"]))
 

@@ -668,6 +668,12 @@ def compile_character(spec: dict[str, Any], rules: RulesStore) -> dict[str, Any]
 
     class_features: list[str] = []
     level_rec: dict[str, Any] | None = None
+    sc_levels_by_num: dict[int, dict[str, Any]] = {}
+    if subclass_slug:
+        all_levels = (rules.data.get("character_creation") or {}).get("levels") or {}
+        for lv_obj in all_levels.values():
+            if isinstance(lv_obj, dict) and _extract_slug(lv_obj.get("subclass")) == subclass_slug:
+                sc_levels_by_num[int(lv_obj.get("level", 0))] = lv_obj
     if class_rec is not None:
         for lv in range(1, level + 1):
             lv_entry = rules.get_level(f"{class_slug}-{lv}")
@@ -679,7 +685,7 @@ def compile_character(spec: dict[str, Any], rules: RulesStore) -> dict[str, Any]
                     if f_slug and f_slug not in class_features:
                         class_features.append(f_slug)
             if subclass_slug and lv >= 3:
-                sc_lv_entry = rules.get_level(f"{subclass_slug}-{lv}")
+                sc_lv_entry = sc_levels_by_num.get(lv) or rules.get_level(f"{subclass_slug}-{lv}")
                 if sc_lv_entry is not None:
                     for f in sc_lv_entry.get("features") or []:
                         f_slug = _extract_slug(f)
@@ -1519,6 +1525,37 @@ def compile_character(spec: dict[str, Any], rules: RulesStore) -> dict[str, Any]
             "prepared_spells": validated_prepared,
         }
 
+    # Class Resources Max (M6.3A — derived deterministically from class, level, and SRD class_specific).
+    level_cs = level_rec.get("class_specific") if (level_rec and isinstance(level_rec.get("class_specific"), dict)) else {}
+    class_resources_max: dict[str, dict[str, Any]] = {}
+    if class_slug == "fighter":
+        sw_raw = level_cs.get("second_wind_uses")
+        sw_max = int(sw_raw) if sw_raw is not None else (4 if level >= 10 else (3 if level >= 4 else 2))
+        class_resources_max["second_wind"] = {"max": sw_max, "recharge": "short_rest_one"}
+        if level >= 2:
+            class_resources_max["action_surge"] = {
+                "max": 2 if level >= 17 else 1,
+                "recharge": "short_rest_all",
+            }
+    elif class_slug == "paladin":
+        class_resources_max["lay_on_hands"] = {"max": 5 * level, "recharge": "long_rest"}
+        if level >= 3:
+            cd_raw = level_cs.get("channel_divinity_charges")
+            cd_max = int(cd_raw) if cd_raw is not None else (3 if level >= 11 else 2)
+            class_resources_max["channel_divinity"] = {"max": cd_max, "recharge": "short_rest_one"}
+    elif class_slug == "cleric":
+        if level >= 2:
+            cd_raw = level_cs.get("channel_divinity_charges")
+            cd_max = int(cd_raw) if cd_raw is not None else (4 if level >= 18 else (3 if level >= 6 else 2))
+            class_resources_max["channel_divinity"] = {"max": cd_max, "recharge": "short_rest_one"}
+    elif class_slug == "wizard":
+        class_resources_max["arcane_recovery"] = {
+            "max": 1,
+            "budget_levels": (level + 1) // 2,
+            "max_slot_level": 5,
+            "recharge": "long_rest",
+        }
+
     statblock: dict[str, Any] = {
         "name": name,
         "species": f"species:{species_slug}",
@@ -1549,6 +1586,7 @@ def compile_character(spec: dict[str, Any], rules: RulesStore) -> dict[str, Any]
         "traits": trait_slugs,
         "feats": chosen_feats,
         "extra_attacks": _extra_attacks_for_class(class_slug, level),
+        "class_resources_max": class_resources_max,
         "weapon_profiles": weapon_profiles,
         "spellcasting": spellcasting_out,
     }

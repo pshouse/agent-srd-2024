@@ -104,6 +104,15 @@ def _compile_classes(en_dir: Path, raw_levels: list[dict[str, Any]]) -> dict[str
     return compiled
 
 
+_MODELED_SUBCLASS_FEATURES: dict[str, tuple[str, ...]] = {
+    "life-domain": (
+        "life-disciple-of-life",
+        "life-preserve-life",
+        "life-blessed-healer",
+    ),
+}
+
+
 def _compile_subclasses(en_dir: Path, raw_levels: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     records = load_raw_json(en_dir, "5e-SRD-Subclasses.json")
     compiled: dict[str, dict[str, Any]] = {}
@@ -120,6 +129,15 @@ def _compile_subclasses(en_dir: Path, raw_levels: list[dict[str, Any]]) -> dict[
             for lv in sc_levels
             for f in lv.get("features", [])
         ]
+        modeled_set = set(_MODELED_SUBCLASS_FEATURES.get(slug, ()))
+        modeled_features = [f for f in features if f in modeled_set]
+        unmodeled_clauses = [f"feature:{f}" for f in features if f not in modeled_set]
+        if features and not unmodeled_clauses:
+            coverage = "full"
+        elif modeled_features:
+            coverage = "partial"
+        else:
+            coverage = "narrative"
         compiled[slug] = {
             "id": f"subclasses:{slug}",
             "slug": slug,
@@ -127,6 +145,14 @@ def _compile_subclasses(en_dir: Path, raw_levels: list[dict[str, Any]]) -> dict[
             "class": rec["class"]["index"],
             "feature_levels": feature_levels,
             "features": features,
+            "coverage": coverage,
+            "provenance": {
+                "source_id": f"subclasses:{slug}",
+                "source_file": "5e-SRD-Subclasses.json",
+                "parser": "structured",
+                "modeled_features": modeled_features,
+                "unmodeled_clauses": unmodeled_clauses,
+            },
         }
     return compiled
 

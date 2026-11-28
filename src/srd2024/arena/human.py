@@ -322,7 +322,7 @@ def build_human_action_menu(
         )
 
     # 2. Weapon Attacks (PC) or Monster Actions (Monster)
-    can_attack = bool(res.get("action")) or int(res.get("attacks_remaining", 0)) > 0
+    can_attack = bool(res.get("action")) or bool(res.get("surge_action")) or int(res.get("attacks_remaining", 0)) > 0
     if kind != "monster" and self_data.get("weapons") and enemies:
         if can_attack:
             for wp in self_data.get("weapons") or []:
@@ -376,13 +376,19 @@ def build_human_action_menu(
                         },
                     )
 
-        # Light off-hand / Nick follow-up when a Light weapon attack was already made this turn
-        if res.get("light_attack_made") and (res.get("bonus_action") or not res.get("nick_used")):
+        # Light off-hand / Nick follow-up when a Light weapon attack was already made this turn (#98).
+        # Once `nick_used` is True, the single per-turn Light extra attack has been spent: do NOT offer
+        # any further `offhand: True` Light/Nick attacks even if Bonus Action is still available.
+        has_nick_weapon = any(
+            wp.get("mastery") == "nick" and bool(wp.get("mastery_active"))
+            for wp in (self_data.get("weapons") or [])
+        )
+        if res.get("light_attack_made") and not res.get("nick_used") and (has_nick_weapon or res.get("bonus_action")):
             for wp in self_data.get("weapons") or []:
                 props = {strip_prefix(str(p)) for p in (wp.get("properties") or [])}
                 if "light" not in props:
                     continue
-                is_nick = wp.get("mastery") == "nick" and bool(wp.get("mastery_active")) and not res.get("nick_used")
+                is_nick = has_nick_weapon
                 if not is_nick and not res.get("bonus_action"):
                     continue
                 slug = str(wp.get("slug") or "")
@@ -935,8 +941,139 @@ def build_human_action_menu(
                             {"action_kind": "kite", "to": kite_dest, "cost_ft": move_cost},
                         )
 
+    # 3.5 Core 2024 Class Features (M6.3A: Second Wind, Action Surge, Lay on Hands, Preserve Life)
+    legal_cf = set(legal.get("class_features") or [])
+    cr = self_data.get("class_resources") or {}
+    actor_feats = {strip_prefix(str(f)) for f in (self_data.get("features") or [])}
+    actor_lvl = int(self_data.get("level", 1))
+    if "second_wind" in legal_cf:
+        sw_rem = int((cr.get("second_wind") or {}).get("remaining", 0))
+        _add(
+            "tactical",
+            f"Second Wind (1d10+{actor_lvl} HP, {sw_rem} use(s) left)",
+            "Bonus Action; self-heal",
+            {"type": "class_feature", "actor_id": actor_id, "feature": "second_wind"},
+            {"action_kind": "class_feature", "feature": "second_wind", "remaining": sw_rem},
+        )
+        if "fighter-tactical-shift" in actor_feats and speed >= 10 and enemies:
+            shift_budget = speed // 2
+            occ = _occupied_squares(observation)
+            shift_dest = _best_kite_position(
+                self_pos,
+                shift_budget,
+                enemies,
+                conscious_allies,
+                preferred_range_ft=15,
+                occupied=occ,
+                bounds=bounds,
+                terrain=terrain,
+                is_prone=is_prone,
+            )
+            if shift_dest is not None and shift_dest != self_pos:
+                s_cost, s_err = movement_path_cost(
+                    self_pos, shift_dest, bounds, terrain, is_prone=is_prone, max_cost=shift_budget
+                )
+                if s_err is None and s_cost is not None and s_cost <= shift_budget:
+                    _add(
+                        "tactical",
+                        f"Second Wind + Tactical Shift to {_fmt_pos(shift_dest)} (no OA, {sw_rem} use(s) left)",
+                        f"Bonus Action; 1d10+{actor_lvl} HP + free move up to {shift_budget} ft",
+                        {
+                            "type": "class_feature",
+                            "actor_id": actor_id,
+                            "feature": "second_wind",
+                            "move_to": shift_dest,
+                        },
+                        {"action_kind": "class_feature", "feature": "second_wind", "move_to": shift_dest},
+                    )
+    if "action_surge" in legal_cf:
+        as_rem = int((cr.get("action_surge") or {}).get("remaining", 0))
+        _add(
+            "tactical",
+            f"Action Surge (extra non-Magic action, {as_rem} use(s) left)",
+            "Free (1/turn); grants one additional non-Magic action",
+            {"type": "class_feature", "actor_id": actor_id, "feature": "action_surge"},
+            {"action_kind": "class_feature", "feature": "action_surge", "remaining": as_rem},
+        )
+    if "lay_on_hands" in legal_cf:
+        loh_rem = int((cr.get("lay_on_hands") or {}).get("remaining", 0))
+        touch_targets: list[dict[str, Any]] = []
+        for a in downed_allies + conscious_allies:
+            if distance_ft(self_pos, a["position"]) <= 5 and has_line_of_sight(self_pos, a["position"], terrain):
+                touch_targets.append(a)
+        touch_targets.append(
+            {
+                "id": actor_id,
+                "name": f"{self_data.get('name', actor_id)} (self)",
+                "position": self_pos,
+                "hp": int(self_data.get("hp", 0)),
+                "hp_max": int(self_data.get("hp_max", 1)),
+                "conditions": list(self_data.get("conditions") or []),
+            }
+        )
+        for tgt in touch_targets:
+            t_hp = int(tgt.get("hp", 0))
+            t_max = int(tgt.get("hp_max", 1))
+            if t_hp < t_max and loh_rem >= 1:
+                amt = min(loh_rem, max(1, t_max - t_hp))
+                _add(
+                    "tactical",
+                    f"Lay on Hands: Heal {tgt['name']} +{amt} HP ({loh_rem} HP pool)",
+                    "Bonus Action; Touch (<= 5 ft)",
+                    {
+                        "type": "class_feature",
+                        "actor_id": actor_id,
+                        "feature": "lay_on_hands",
+                        "mode": "heal",
+                        "target_id": str(tgt["id"]),
+                        "amount": amt,
+                    },
+                    {"action_kind": "class_feature", "feature": "lay_on_hands", "mode": "heal", "target_id": str(tgt["id"]), "amount": amt},
+                )
+            t_conds = _condition_set(tgt)
+            if "poisoned" in t_conds and loh_rem >= 5:
+                _add(
+                    "tactical",
+                    f"Lay on Hands: Cure Poisoned on {tgt['name']} (costs 5 HP, {loh_rem} pool)",
+                    "Bonus Action; Touch (<= 5 ft)",
+                    {
+                        "type": "class_feature",
+                        "actor_id": actor_id,
+                        "feature": "lay_on_hands",
+                        "mode": "cure_poison",
+                        "target_id": str(tgt["id"]),
+                    },
+                    {"action_kind": "class_feature", "feature": "lay_on_hands", "mode": "cure_poison", "target_id": str(tgt["id"])},
+                )
+    if "preserve_life" in legal_cf:
+        cd_rem = int((cr.get("channel_divinity") or {}).get("remaining", 0))
+        pl_pool = 5 * actor_lvl
+        bloodied_ids: list[str] = []
+        for a in downed_allies + conscious_allies:
+            if (
+                distance_ft(self_pos, a["position"]) <= 30
+                and has_line_of_sight(self_pos, a["position"], terrain)
+                and int(a.get("hp", 0)) < int(a.get("hp_max", 1)) // 2
+            ):
+                bloodied_ids.append(str(a["id"]))
+        if int(self_data.get("hp", 0)) < int(self_data.get("hp_max", 1)) // 2:
+            bloodied_ids.append(actor_id)
+        if bloodied_ids:
+            _add(
+                "tactical",
+                f"Channel Divinity: Preserve Life ({pl_pool} HP pool across {len(bloodied_ids)} Bloodied ally/allies)",
+                f"Magic Action; {cd_rem} Channel Divinity left, caps targets at half HP max",
+                {
+                    "type": "class_feature",
+                    "actor_id": actor_id,
+                    "feature": "preserve_life",
+                    "target_ids": bloodied_ids,
+                },
+                {"action_kind": "class_feature", "feature": "preserve_life", "target_ids": bloodied_ids, "remaining": cd_rem},
+            )
+
     # 5. Standard Tactical Actions (Dodge, Dash, Disengage, Help)
-    if res.get("action"):
+    if res.get("action") or res.get("surge_action"):
         _add(
             "tactical",
             "Dodge (impose Disadvantage on attacks against you)",
@@ -1172,6 +1309,8 @@ def render_tactical_hud(
     res_bits: list[str] = []
     if res.get("action"):
         res_bits.append("Action")
+    elif res.get("surge_action"):
+        res_bits.append("Surge Action")
     elif int(res.get("attacks_remaining", 0)) > 0:
         res_bits.append(f"Attacks:{int(res['attacks_remaining'])}")
     if res.get("bonus_action"):
@@ -1179,6 +1318,15 @@ def render_tactical_hud(
     if res.get("reaction"):
         res_bits.append("Reaction")
     res_str = ", ".join(res_bits) if res_bits else "none"
+
+    cr_data = self_data.get("class_resources") or {}
+    cr_bits: list[str] = []
+    for rname in ("second_wind", "action_surge", "lay_on_hands", "channel_divinity"):
+        rval = cr_data.get(rname)
+        if isinstance(rval, dict) and int(rval.get("max", 0)) > 0:
+            label = rname.replace("_", " ").title()
+            cr_bits.append(f"{label}:{int(rval.get('remaining', 0))}/{int(rval.get('max', 0))}")
+    cr_str = (" | Features: " + ", ".join(cr_bits)) if cr_bits else ""
 
     slots_str = ""
     if isinstance(sc_data, dict):
@@ -1210,7 +1358,7 @@ def render_tactical_hud(
         f"YOU: {actor_name} | HP {hp_str} | AC {eff_ac} | Pos {_fmt_pos(pos)} | Move {rem_move}/{speed} ft"
     )
     lines.append(
-        f"     Resources: [{res_str}] | Cond: {cond_str}{conc_str}{slots_str}{insp_str}"
+        f"     Resources: [{res_str}] | Cond: {cond_str}{conc_str}{slots_str}{cr_str}{insp_str}"
     )
 
     # Allies

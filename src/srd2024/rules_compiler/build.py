@@ -91,6 +91,8 @@ def build_rules(raw_dir: Path, out_dir: Path) -> dict[str, Any]:
         "traits": len(character_creation["traits"]),
     }
 
+    subclass_coverage = _domain_coverage_stats(character_creation["subclasses"])
+
     coverage_summary = {
         "total_compiled": total_compiled,
         "full": total_full,
@@ -99,6 +101,7 @@ def build_rules(raw_dir: Path, out_dir: Path) -> dict[str, Any]:
         "executable_pct": total_exec_pct,
         "by_domain": by_domain,
         "character_creation_counts": character_creation_counts,
+        "subclass_coverage": subclass_coverage,
     }
 
     content_license = provenance["content_license"]
@@ -134,6 +137,7 @@ def build_rules(raw_dir: Path, out_dir: Path) -> dict[str, Any]:
             name: _domain_coverage_entities(entries)
             for name, entries in domains.items()
         },
+        "subclass_entities": _domain_coverage_entities(character_creation["subclasses"]),
     }
 
     out_dir.mkdir(parents=True, exist_ok=True)
