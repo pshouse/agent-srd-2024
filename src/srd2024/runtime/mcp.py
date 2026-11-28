@@ -401,7 +401,7 @@ STAGE3_TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "default": "heuristic-tactical",
                     "description": (
                         "Party driver spec ('heuristic-tactical', 'greedy', 'random', "
-                        "'openai-compat:<model>', 'anthropic:<model>', 'gemini:<model>', 'typesafe:<model>')."
+                        "'openai-compat:<model>', 'anthropic:<model>', 'gemini:<model>', 'openai:<model>', 'xai:<model>', 'typesafe:<model>')."
                     ),
                 },
                 "enemy_agent": {
@@ -1242,7 +1242,7 @@ def main(argv: Sequence[str] | None = None, *, default_engine: bool = False) -> 
         default=False,
         help=(
             "Allow MCP arena calls to select a paid LLM driver "
-            "(openai-compat, anthropic, gemini, typesafe). Requires --arena. "
+            "(openai-compat, openai, xai, anthropic, gemini, typesafe). Requires --arena. "
             "Default: deterministic built-in drivers only."
         ),
     )

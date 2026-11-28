@@ -183,6 +183,16 @@ GEMINI_API_KEY=... ./bin/srd-arena run wyrmling-lair \
   --party-agent gemini:gemini-2.5-flash \
   --enemy-agent heuristic-tactical
 
+# OpenAI (current models: sends max_completion_tokens, no temperature)
+OPENAI_API_KEY=... ./bin/srd-arena run goblin-ambush \
+  --party-agent openai:gpt-6.2-astra \
+  --enemy-agent heuristic-tactical
+
+# xAI Grok (api.x.ai; reasoning-sized token and timeout floors)
+XAI_API_KEY=... ./bin/srd-arena run crypt-of-ghouls \
+  --party-agent xai:grok-4.7 \
+  --enemy-agent heuristic-tactical
+
 # TypeSafe AI Jev (calibrated choice over generated legal candidates; party seat only, no table talk)
 TYPESAFE_API_KEY=... ./bin/srd-arena run wyrmling-lair \
   --party-agent typesafe:jev-1.14.0 \

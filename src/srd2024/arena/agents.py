@@ -3055,6 +3055,52 @@ class OpenAICompatDriver(BaseLLMDriver):
         }
 
 
+class OpenAIDriver(OpenAICompatDriver):
+    """OpenAI Chat Completions with current-model request rules (`openai:<model>`).
+
+    Current OpenAI models (GPT-5.x, GPT-6.x, o-series) reject `max_tokens` ("use 'max_completion_tokens'")
+    and any `temperature` other than the default, so neither is sent. Reasoning tokens count toward
+    `max_completion_tokens`, so the cap has a floor. Use `openai-compat:<model>` for other OpenAI-style
+    endpoints (Ollama, vLLM, OpenRouter) that still expect `max_tokens` and `temperature`.
+    """
+
+    PROVIDER_PREFIX = "openai"
+    MIN_MAX_TOKENS = 4096
+
+    def _build_request(
+        self, system_prompt: str, user_prompt: str
+    ) -> tuple[str, dict[str, str], dict[str, Any]]:
+        url, headers, payload = super()._build_request(system_prompt, user_prompt)
+        payload.pop("temperature", None)
+        payload.pop("max_tokens", None)
+        payload["max_completion_tokens"] = max(self.max_tokens, self.MIN_MAX_TOKENS)
+        return url, headers, payload
+
+
+class XAIDriver(OpenAICompatDriver):
+    """xAI Grok via its OpenAI-compatible API (`xai:<model>`, e.g. `xai:grok-4.7`).
+
+    Grok reasoning tokens count toward `max_tokens`, so the cap has a floor.
+    """
+
+    DEFAULT_API_BASE = "https://api.x.ai/v1"
+    DEFAULT_API_KEY_ENV = "XAI_API_KEY"
+    PROVIDER_PREFIX = "xai"
+    MIN_MAX_TOKENS = 4096
+    MIN_TIMEOUT_S = 180.0  # grok-4.7 reasoning turns ran past the 60 s default
+
+    def __init__(self, model: str, **kwargs: Any) -> None:
+        super().__init__(model, **kwargs)
+        self.timeout_s = max(self.timeout_s, self.MIN_TIMEOUT_S)
+
+    def _build_request(
+        self, system_prompt: str, user_prompt: str
+    ) -> tuple[str, dict[str, str], dict[str, Any]]:
+        url, headers, payload = super()._build_request(system_prompt, user_prompt)
+        payload["max_tokens"] = max(self.max_tokens, self.MIN_MAX_TOKENS)
+        return url, headers, payload
+
+
 class AnthropicDriver(BaseLLMDriver):
     """Anthropic Messages API driver (`POST /v1/messages`)."""
 
@@ -3162,6 +3208,12 @@ class GeminiDriver(BaseLLMDriver):
     DEFAULT_API_BASE = "https://generativelanguage.googleapis.com"
     DEFAULT_API_KEY_ENV = "GEMINI_API_KEY"
     PROVIDER_PREFIX = "gemini"
+    MIN_MAX_TOKENS = 16384  # gemini-4-neon used up a 4096 cap on thinking in the Arena (finishReason MAX_TOKENS)
+    MIN_TIMEOUT_S = 180.0  # gemini-4-neon timed out 23 times in 9 smoke games at the 60 s default
+
+    def __init__(self, model: str, **kwargs: Any) -> None:
+        super().__init__(model, **kwargs)
+        self.timeout_s = max(self.timeout_s, self.MIN_TIMEOUT_S)
 
     def _build_request(
         self, system_prompt: str, user_prompt: str
@@ -3178,7 +3230,8 @@ class GeminiDriver(BaseLLMDriver):
             "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
             "generationConfig": {
                 "temperature": self.temperature,
-                "maxOutputTokens": self.max_tokens,
+                # Thinking tokens count toward maxOutputTokens on Gemini 2.5+ (and Gemini 4), so keep headroom.
+                "maxOutputTokens": max(self.max_tokens, self.MIN_MAX_TOKENS),
             },
         }
         return url, headers, payload
@@ -3192,8 +3245,11 @@ class GeminiDriver(BaseLLMDriver):
         raw_text = "".join(
             str(p.get("text", ""))
             for p in parts
-            if isinstance(p, dict) and "text" in p
+            if isinstance(p, dict) and "text" in p and not p.get("thought")
         )
+        finish = candidates[0].get("finishReason")
+        if not raw_text.strip() and finish not in (None, "STOP"):
+            raise ValueError(f"Gemini response has no text (finishReason={finish!r}).")
         u = response.get("usageMetadata") or {}
         prompt_t = int(u.get("promptTokenCount", 0) or 0)
         cand_t = int(u.get("candidatesTokenCount", 0) or 0)
@@ -3237,7 +3293,9 @@ def create_driver(
     - `"heuristic-tactical"`
     - `"human"`
     - `"replay"` (requires `replay_transcript`)
-    - `"openai-compat:<model>"`
+    - `"openai-compat:<model>"` (any OpenAI-style endpoint; sends `max_tokens` and `temperature`)
+    - `"openai:<model>"` (api.openai.com with current-model rules; `OPENAI_API_KEY`)
+    - `"xai:<model>"` (Grok at api.x.ai; `XAI_API_KEY`)
     - `"anthropic:<model>"`
     - `"gemini:<model>"`
     - `"typesafe:<model>"` (TypeSafe AI Jev, e.g. `typesafe:jev-1.14.0`; party seat only, see `arena/jev.py`)
@@ -3319,6 +3377,18 @@ def create_driver(
                 timeout_s=timeout_s,
                 http_transport=http_transport,
             )
+        if p_low in ("openai", "xai"):
+            cls = OpenAIDriver if p_low == "openai" else XAIDriver
+            return cls(
+                model,
+                api_base=api_base,
+                api_key_env=api_key_env,
+                api_key=api_key,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout_s=timeout_s,
+                http_transport=http_transport,
+            )
         if p_low == "anthropic":
             return AnthropicDriver(
                 model,
@@ -3356,8 +3426,8 @@ def create_driver(
 
     raise ValueError(
         f"Unknown driver spec {spec!r}. Expected one of: 'random', 'greedy', "
-        "'heuristic-tactical', 'human', 'replay', 'openai-compat:<model>', "
-        "'anthropic:<model>', 'gemini:<model>', 'typesafe:<model>'."
+        "'heuristic-tactical', 'human', 'replay', 'openai-compat:<model>', 'openai:<model>', "
+        "'xai:<model>', 'anthropic:<model>', 'gemini:<model>', 'typesafe:<model>'."
     )
 
 
@@ -3370,10 +3440,12 @@ __all__ = [
     "GreedyDriver",
     "HeuristicTacticalDriver",
     "OpenAICompatDriver",
+    "OpenAIDriver",
     "RandomDriver",
     "ReplayDriver",
     "build_system_prompt",
     "build_user_prompt",
     "create_driver",
     "extract_decision_json",
+    "XAIDriver",
 ]
