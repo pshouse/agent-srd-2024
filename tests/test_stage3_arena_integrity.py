@@ -504,6 +504,167 @@ _CALIBRATION_ENEMIES: dict[str, list[dict[str, Any]]] = {
 }
 
 
+_NOOP_SPELLS = ("light", "divine-favor", "hunters-mark", "hex")
+
+
+def _noop_cast_scenario(sid: str, rules: RulesStore, *, temp_hp: int | None = None) -> dict[str, Any]:
+    """A built-in scenario where every PC also knows Light and three per-hit riders the engine doesn't resolve."""
+    from srd2024.arena.scenarios import _BUILTIN_SCENARIOS
+    from srd2024.engine.character import compile_character
+
+    raw = copy.deepcopy(_BUILTIN_SCENARIOS[sid])
+    raw["id"] = f"{sid}-noop-cast"
+    for entry in raw["party"]:
+        sb = compile_character(entry.pop("spec"), rules)["statblock"]
+        sc = sb.get("spellcasting") or {"ability": "wis", "spell_save_dc": 13, "spell_attack_bonus": 5, "is_pact_magic": False}
+        sc["cantrips"] = list(sc.get("cantrips") or []) + ["light"]
+        sc["prepared_spells"] = list(sc.get("prepared_spells") or []) + [
+            "divine-favor", "hunters-mark", "hex", "false-life", "cure-wounds", "misty-step",
+        ]
+        sc["slots"] = {**(sc.get("slots") or {}), "1": 20, "2": 20}
+        sb["spellcasting"] = sc
+        entry["statblock"] = sb
+        if temp_hp is not None:
+            entry["temp_hp"] = temp_hp
+    return raw
+
+
+class _NoopCaster:
+    """Issue #75 exploit: spend every turn on legal casts that do nothing (Light, unresolved rider damage).
+
+    Before #75 every successful cast counted as a productive turn, so this scored 42.25 on all three
+    scenarios with 0 damage and 0 wins, against random's ~25-32.
+    """
+
+    name = "noop-caster"
+
+    def reset(self, seed: int | None = None) -> None:
+        return
+
+    def decide(self, observation: dict[str, Any]) -> AgentDecision:
+        me = observation["self"]
+        res = me.get("turn_resources") or {}
+        sc = me.get("spellcasting") or {}
+        slots = sorted(int(k) for k, v in (sc.get("slots") or {}).items() if int(v) > 0)
+        for spell in _NOOP_SPELLS:
+            cantrip = spell == "light"
+            econ = "action" if cantrip else "bonus_action"
+            if not res.get(econ) or (not cantrip and not slots):
+                continue
+            intent: dict[str, Any] = {"type": "cast_spell", "actor_id": me["id"], "spell": spell, "target_ids": [me["id"]]}
+            if not cantrip:
+                intent["slot_level"] = slots[0]
+            return AgentDecision(intent=intent, rationale="no-op cast")
+        return AgentDecision(intent={"type": "end_turn", "actor_id": me["id"]}, rationale="idle")
+
+
+class _FriendlyNoop:
+    """#77 MF1 exploits: friendly casts that change nothing.
+
+    `false-life` re-casts while temp HP is at least 12, the most False Life can give; `heal-full` heals an ally who is at full HP; `misty-self`
+    teleports onto your own square. Before the fix these scored 59.15, 40.12 and 45.25 on goblin.
+    """
+
+    def __init__(self, mode: str) -> None:
+        self.mode = mode
+        self.name = f"friendly-noop-{mode}"
+
+    def reset(self, seed: int | None = None) -> None:
+        return
+
+    def decide(self, observation: dict[str, Any]) -> AgentDecision:
+        me = observation["self"]
+        res = me.get("turn_resources") or {}
+        end = AgentDecision(intent={"type": "end_turn", "actor_id": me["id"]}, rationale="idle")
+        if self.mode == "false-life" and res.get("action") and int(me.get("temp_hp") or 0) >= 12:
+            return AgentDecision(intent={"type": "cast_spell", "actor_id": me["id"], "spell": "false-life", "slot_level": 1,
+                                         "target_ids": [me["id"]]}, rationale="noop")
+        if self.mode == "heal-full" and res.get("action"):
+            full = [a for a in [me, *observation.get("allies", [])]
+                    if int(a.get("hp", 0)) > 0 and int(a.get("hp", 0)) >= int(a.get("hp_max", 0) or 0)]
+            if full:
+                return AgentDecision(intent={"type": "cast_spell", "actor_id": me["id"], "spell": "cure-wounds", "slot_level": 1,
+                                             "target_ids": [full[0]["id"]]}, rationale="noop")
+        if self.mode == "misty-self" and res.get("bonus_action"):
+            return AgentDecision(intent={"type": "cast_spell", "actor_id": me["id"], "spell": "misty-step", "slot_level": 2,
+                                         "destination": dict(me["position"])}, rationale="noop")
+        return end
+
+
+class TestNoopCastRegression(unittest.TestCase):
+    """#75: casts with no modeled effect earn no productive-turn credit."""
+
+    def test_friendly_noop_casts_score_at_or_below_random(self) -> None:
+        rules = RulesStore()
+        scen = _noop_cast_scenario("goblin-ambush", rules)
+        # PCs start with 50 temp HP, so a False Life re-cast (2d4 + 4, at most 12) can't raise it.
+        scen_temp = _noop_cast_scenario("goblin-ambush", rules, temp_hp=50)
+        rand = []
+        for seed in _SEEDS:
+            r = run_match(scen, party_driver=RandomDriver(seed=seed), enemy_driver=HeuristicTacticalDriver(rules), rules=rules, seed=seed)
+            rand.append(float(r["scorecard"]["composite_score"]))
+        rand_mean = sum(rand) / len(rand)
+        for mode in ("false-life", "heal-full", "misty-self"):
+            with self.subTest(probe=mode):
+                scores, wins, casts = [], 0, 0
+                for seed in _SEEDS:
+                    t = run_match(scen_temp if mode == "false-life" else scen, party_driver=_FriendlyNoop(mode),
+                                  enemy_driver=HeuristicTacticalDriver(rules), rules=rules, seed=seed)
+                    casts += sum(1 for a in t["actions"] if a["side"] == "party" and a["intent"].get("type") == "cast_spell")
+                    scores.append(float(t["scorecard"]["composite_score"]))
+                    wins += t["winner"] == "party"
+                self.assertGreater(casts, 0, "the probe must actually cast")
+                self.assertEqual(wins, 0)
+                self.assertLessEqual(sum(scores) / len(scores), rand_mean, f"{mode}: {sum(scores) / len(scores):.2f} vs random {rand_mean:.2f}")
+
+    def test_noop_caster_scores_at_or_below_random_with_zero_wins(self) -> None:
+        rules = RulesStore()
+        noop_scores, rand_scores, noop_wins, noop_damage = [], [], 0, 0
+        for sid in ("goblin-ambush", "crypt-of-ghouls", "wyrmling-lair"):
+            scen = _noop_cast_scenario(sid, rules)
+            for seed in _SEEDS:
+                t = run_match(scen, party_driver=_NoopCaster(), enemy_driver=HeuristicTacticalDriver(rules), rules=rules, seed=seed)
+                casts = sum(1 for a in t["actions"] if a["side"] == "party" and a["intent"].get("type") == "cast_spell")
+                self.assertGreater(casts, 0, "the probe must actually cast")
+                noop_scores.append(float(t["scorecard"]["composite_score"]))
+                noop_wins += t["winner"] == "party"
+                noop_damage += int(t["scorecard"]["metrics"].get("effective_damage_dealt", 0))
+                r = run_match(scen, party_driver=RandomDriver(seed=seed), enemy_driver=HeuristicTacticalDriver(rules), rules=rules, seed=seed)
+                rand_scores.append(float(r["scorecard"]["composite_score"]))
+        noop, rand = sum(noop_scores) / len(noop_scores), sum(rand_scores) / len(rand_scores)
+        self.assertEqual(noop_wins, 0)
+        self.assertEqual(noop_damage, 0)
+        self.assertLessEqual(noop, rand, f"no-op caster {noop:.2f} vs random {rand:.2f}")
+
+    def test_cast_credit_rules(self) -> None:
+        from srd2024.arena.scoring import _cast_had_effect
+
+        side = {"pc-a", "pc-b"}
+        base = {"state_diff": {"effect_changes": []}}
+        self.assertFalse(_cast_had_effect({**base, "events": [{"type": "spell_cast"}, {"type": "spell_damage_unresolved"}]}, side, {}))
+        self.assertFalse(_cast_had_effect({**base, "events": [{"type": "spell_cast_narrative"}]}, side, {}))
+        self.assertTrue(_cast_had_effect({**base, "events": [{"type": "spell_attack_roll", "target_id": "gob"}]}, side, {}))
+        self.assertTrue(_cast_had_effect({**base, "events": [{"type": "saving_throw", "target_id": "gob", "reason": "fireball"}]}, side, {}))
+        # Damage only to your own side (#67's self-hit) isn't credit.
+        self.assertFalse(_cast_had_effect({**base, "events": [{"type": "damage_applied", "target_id": "pc-a"}]}, side, {}))
+        self.assertTrue(_cast_had_effect({**base, "events": [{"type": "healing_applied", "target_id": "pc-b", "hp_before": 4, "hp_after": 11}]}, side, {}))
+        buff = {"events": [{"type": "spell_cast"}], "state_diff": {"effect_changes": [{"id": "pc-a", "added": ["mage_armor"], "removed": []}]}}
+        self.assertTrue(_cast_had_effect(buff, side, {"effects": {"pc-a": set()}}))
+        self.assertFalse(_cast_had_effect(buff, side, {"effects": {"pc-a": {"mage_armor"}}}), "re-cast of an active buff")
+        self.assertTrue(_cast_had_effect({"intent": {"type": "cast_spell"}}, side, {}), "synthetic transcript keeps credit")
+        # #77 MF1: friendly events that changed nothing earn nothing.
+        heal_full = {**base, "events": [{"type": "healing_applied", "target_id": "pc-b", "hp_before": 12, "hp_after": 12, "revived": False}]}
+        self.assertFalse(_cast_had_effect(heal_full, side, {}), "healing at full HP")
+        revive = {**base, "events": [{"type": "healing_applied", "target_id": "pc-b", "hp_before": 0, "hp_after": 0, "revived": True}]}
+        self.assertTrue(_cast_had_effect(revive, side, {}))
+        temp = {**base, "events": [{"type": "temp_hp_applied", "target_id": "pc-a", "temp_hp_after": 7}]}
+        self.assertTrue(_cast_had_effect(temp, side, {"temp_hp": {"pc-a": 0}}))
+        self.assertFalse(_cast_had_effect(temp, side, {"temp_hp": {"pc-a": 7}}), "False Life re-cast, temp HP unchanged")
+        tele = {"type": "teleported", "actor_id": "pc-a", "from_pos": {"x": 0, "y": 0}}
+        self.assertTrue(_cast_had_effect({**base, "events": [{**tele, "to_pos": {"x": 30, "y": 0}}]}, side, {}))
+        self.assertFalse(_cast_had_effect({**base, "events": [{**tele, "to_pos": {"x": 0, "y": 0}}]}, side, {}), "zero-distance teleport")
+
+
 class TestTalkSpamRegression(unittest.TestCase):
     """CTO (Phase 3): talk-spam must stay at or under ~0.6x a random policy, and never win.
 
