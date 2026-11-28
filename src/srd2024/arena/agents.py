@@ -2955,11 +2955,16 @@ class ProviderUnavailable(RuntimeError):
 
 
 class RetryableLLMError(RuntimeError):
-    """A transient provider failure (rate limit, 5xx, overloaded, timeout, connection) worth retrying."""
+    """A transient provider failure (rate limit, 5xx, overloaded, timeout, connection) worth retrying.
 
-    def __init__(self, message: str, retry_after_s: float | None = None) -> None:
+    `billed` says whether the provider may have done (and charged for) the work: true for timeouts and 5xx, false
+    for 429/409/425 rejections and connection failures. The budget meter charges billed attempts their worst case.
+    """
+
+    def __init__(self, message: str, retry_after_s: float | None = None, *, billed: bool = False) -> None:
         super().__init__(message)
         self.retry_after_s = retry_after_s
+        self.billed = billed
 
 
 # Provider error codes/types that mean "no credits or quota left", checked in the error body. The body itself is
@@ -2986,7 +2991,7 @@ def _classify_http_error(code: int, body: bytes, retry_after: str | None) -> Run
             wait = float(retry_after) if retry_after else None
         except ValueError:
             wait = None
-        return RetryableLLMError(f"LLM HTTP {code}", retry_after_s=wait)
+        return RetryableLLMError(f"LLM HTTP {code}", retry_after_s=wait, billed=code >= 500 or code == 408)
     if code in (401, 403):
         return ProviderUnavailable("unavailable", f"LLM provider rejected the credentials (HTTP {code}).")
     return RuntimeError(f"LLM HTTP {code}")
@@ -3052,7 +3057,7 @@ def _default_http_transport(
     except urllib.error.URLError:
         raise RetryableLLMError("LLM connection failed.") from None
     except TimeoutError:
-        raise RetryableLLMError("LLM request timed out.") from None
+        raise RetryableLLMError("LLM request timed out.", billed=True) from None
     except RuntimeError:
         raise
 
@@ -3101,6 +3106,8 @@ class BaseLLMDriver:
         self._transport: HttpTransport = http_transport or _default_http_transport
         self._sleep: Callable[[float], None] = time.sleep
         self._consecutive_failures = 0
+        # Set by the bench for paid contenders: a budget.MatchMeter checked before and charged after every attempt.
+        self.meter: Any = None
 
     def _resolve_api_key(self, *, allow_empty_local: bool = False) -> str:
         key = self._explicit_api_key if self._explicit_api_key is not None else os.environ.get(self.api_key_env, "")
@@ -3135,19 +3142,39 @@ class BaseLLMDriver:
     BACKOFF_S = (2.0, 8.0, 30.0)
     MAX_CONSECUTIVE_FAILURES = 3
 
-    def _send(self, url: str, headers: dict[str, str], payload: dict[str, Any]) -> dict[str, Any]:
-        """Call the transport with retries; raise ProviderUnavailable when the provider can't serve us."""
+    @staticmethod
+    def _max_output_tokens(payload: dict[str, Any]) -> int:
+        """The output cap this request sends (reasoning and thinking count toward it). 0 if it has none."""
+        for key in ("max_completion_tokens", "max_tokens"):
+            if isinstance(payload.get(key), int):
+                return int(payload[key])
+        gen = payload.get("generationConfig")
+        if isinstance(gen, dict) and isinstance(gen.get("maxOutputTokens"), int):
+            return int(gen["maxOutputTokens"])
+        return 0
+
+    def _send(self, url: str, headers: dict[str, str], payload: dict[str, Any]) -> tuple[dict[str, Any], float]:
+        """Call the transport with retries, metered; raise ProviderUnavailable when the provider can't serve us.
+
+        Returns (response, worst-case cost of one attempt). With a meter, every attempt is checked against the
+        match's limit first (MatchBudgetExceeded aborts before the call), and billed failures are charged.
+        """
         secret_values = [self._explicit_api_key or "", os.environ.get(self.api_key_env, "")]
+        bound = self.meter.call_bound_usd(payload, self._max_output_tokens(payload)) if self.meter is not None else 0.0
         last: Exception | None = None
         for attempt in range(self.MAX_ATTEMPTS):
+            if self.meter is not None:
+                self.meter.check(bound)
             try:
                 resp = self._transport(url, headers, payload, self.timeout_s)
                 self._consecutive_failures = 0
-                return resp
+                return resp, bound
             except ProviderUnavailable:
                 raise
             except RetryableLLMError as exc:
                 last = exc
+                if self.meter is not None and exc.billed:
+                    self.meter.charge_bound(bound)
                 if attempt + 1 < self.MAX_ATTEMPTS:
                     wait = self.BACKOFF_S[min(attempt, len(self.BACKOFF_S) - 1)]
                     if exc.retry_after_s is not None:
@@ -3170,8 +3197,15 @@ class BaseLLMDriver:
         user_prompt = build_user_prompt(observation)
         url, headers, payload = self._build_request(system_prompt, user_prompt)
         _assert_safe_llm_url(url)
-        resp_json = self._send(url, headers, payload)
-        raw_text, usage = self._parse_response(resp_json)
+        resp_json, bound = self._send(url, headers, payload)
+        try:
+            raw_text, usage = self._parse_response(resp_json)
+        except Exception:
+            if self.meter is not None:
+                self.meter.charge_bound(bound)  # can't read the usage: charge the worst case (fail closed)
+            raise
+        if self.meter is not None:
+            self.meter.charge_usage(usage, bound)
         parsed = extract_decision_json(raw_text)
 
         intent = parsed["intent"]

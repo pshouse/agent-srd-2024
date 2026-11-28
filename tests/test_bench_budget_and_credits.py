@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import io
 import json
+import multiprocessing
 import tempfile
+import time
 import unittest
 import urllib.error
 from email.message import Message
@@ -24,7 +26,15 @@ from srd2024.arena.agents import (
     _classify_http_error,
     create_driver,
 )
-from srd2024.arena.budget import BudgetLedger, contender_price, match_cost, parse_price
+from srd2024.arena.budget import (
+    BudgetLedger,
+    LedgerError,
+    MatchBudgetExceeded,
+    MatchMeter,
+    contender_price,
+    match_cost,
+    parse_price,
+)
 from srd2024.engine.store import RulesStore
 from srd2024.runtime.arena_bridge import make_bench_progress
 
@@ -106,7 +116,7 @@ class TestRetriesAndBreaker(unittest.TestCase):
             return _chat("pc-bram")
 
         d = self._driver(transport)
-        self.assertEqual(d._send("https://x.test", {}, {}), _chat("pc-bram"))
+        self.assertEqual(d._send("https://x.test", {}, {})[0], _chat("pc-bram"))
         self.assertEqual(d.sleeps, [2.0, 20.0])  # backoff, then the server's Retry-After
 
     def test_persistent_failure_trips_the_breaker(self) -> None:
@@ -178,27 +188,6 @@ class TestBenchStopsGracefully(unittest.TestCase):
         self.assertTrue(all(m["violations"] == 0 for m in paid_matches))
         self.assertIn("Stopped Contenders", render_benchmark_markdown(rep))
 
-    def test_budget_cap_stops_new_paid_matches(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            ledger = Path(tmp) / "ledger.jsonl"
-            budget = BudgetLedger(5.0, ledger, reserve_usd=1.0)
-            # gpt-6.2-astra: $8 per million input tokens; 100k prompt tokens a call = $0.80 a decision.
-            paid = {"driver": "openai:gpt-6.2-astra", "api_key": "k", "http_transport": _Transport(prompt_tokens=100_000)}
-            rep = run_benchmark(scenarios=["goblin-ambush"], contenders=[paid, "random"], seeds=list(range(1, 9)),
-                                rules=self.rules, budget=budget)
-            stopped = rep["aborted_contenders"]
-            self.assertEqual([s["reason"] for s in stopped], ["budget_cap"])
-            costs = [m["cost_usd"] for m in rep["matches"] if m["contender"] == stopped[0]["label"]]
-            self.assertTrue(costs and all(c > 0 for c in costs))
-            running = 0.0
-            for c in costs:  # every paid match started below cap - reserve
-                self.assertLess(running + budget.reserve_usd, budget.cap_usd)
-                running += c
-            self.assertAlmostEqual(budget.spent(), round(sum(costs), 6), places=5)
-            self.assertEqual(len([m for m in rep["matches"] if m["contender"] == "random"]), 8)
-            self.assertTrue(all(m["cost_usd"] == 0 for m in rep["matches"] if m["contender"] == "random"))
-            self.assertIn("Budget:", render_benchmark_markdown(rep))
-
     def test_missing_api_key_stops_the_contender_instead_of_scoring_violations(self) -> None:
         with mock.patch.dict("os.environ", {"XAI_API_KEY": ""}):
             rep = run_benchmark(scenarios=["goblin-ambush"], contenders=["xai:grok-4.7", "random"], seeds=[1, 2],
@@ -209,9 +198,228 @@ class TestBenchStopsGracefully(unittest.TestCase):
 
     def test_unpriced_paid_model_is_refused_up_front(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            budget = BudgetLedger(5.0, Path(tmp) / "l.jsonl", reserve_usd=1.0)
+            budget = BudgetLedger.init(5.0, Path(tmp) / "l.jsonl", match_limit_usd=1.0)
             with self.assertRaises(ValueError):
                 run_benchmark(scenarios=["goblin-ambush"], contenders=["xai:grok-9"], seeds=[1], rules=self.rules, budget=budget)
+
+
+
+def _settled_ledger(path: Path, cap: float, settled: float, limit: float = 5.0) -> BudgetLedger:
+    """A ledger that already has `settled` dollars of finished matches."""
+    led = BudgetLedger.init(cap, path, match_limit_usd=limit)
+    remaining = settled
+    while remaining > 1e-9:
+        chunk = min(limit, remaining)
+        rid = led.reserve({"contender": "seed"})
+        led.settle(rid, chunk, {"contender": "seed"})
+        remaining -= chunk
+    return led
+
+
+def _race_worker(path: str, cap: float, limit: float, out: Any) -> None:
+    led = BudgetLedger(cap, path, match_limit_usd=limit)
+    rid = led.reserve({"contender": "racer"})
+    if rid is not None:
+        time.sleep(0.2)  # "play" the match while the others try to start
+        led.settle(rid, limit, {"contender": "racer"})  # worst case: spend the whole reservation
+    out.put(rid is not None)
+
+
+class TestLedgerReservations(unittest.TestCase):
+    def test_concurrent_starts_cannot_overrun_the_cap(self) -> None:
+        """CTO repro: cap $150 with $139 spent, 8 processes start at once. Only 2 may start (139 + 5 + 5 <= 150)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ledger.jsonl"
+            led = _settled_ledger(path, 150.0, 139.0)
+            ctx = multiprocessing.get_context("fork")
+            q = ctx.Queue()
+            procs = [ctx.Process(target=_race_worker, args=(str(path), 150.0, 5.0, q)) for _ in range(8)]
+            for pr in procs:
+                pr.start()
+            for pr in procs:
+                pr.join(timeout=30)
+            started = sum(q.get(timeout=5) for _ in procs)
+            self.assertEqual(started, 2)
+            self.assertLessEqual(led.spent(), 150.0)
+            self.assertAlmostEqual(led.spent(), 149.0)
+            self.assertAlmostEqual(led.committed(), 149.0)
+
+    def test_open_reservations_count_until_settled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            led = BudgetLedger.init(12.0, Path(tmp) / "l.jsonl", match_limit_usd=5.0)
+            a, b = led.reserve({}), led.reserve({})
+            self.assertIsNotNone(a)
+            self.assertIsNotNone(b)
+            self.assertIsNone(led.reserve({}), "5 + 5 reserved; a third 5 would pass 12")
+            self.assertEqual((led.spent(), led.committed()), (0.0, 10.0))
+            led.settle(a, 0.75, {})
+            self.assertEqual((led.spent(), led.committed()), (0.75, 5.75))
+            self.assertIsNotNone(led.reserve({}))  # 0.75 + 5 + 5 <= 12
+            # A crashed process never settles: its reservation stays counted at full value.
+            self.assertEqual(led.committed(), 10.75)
+
+
+class TestLedgerFailsClosed(unittest.TestCase):
+    def _ledger(self, tmp: str) -> tuple[BudgetLedger, Path]:
+        path = Path(tmp) / "l.jsonl"
+        led = BudgetLedger.init(20.0, path, match_limit_usd=5.0)
+        led.settle(led.reserve({"contender": "x"}), 1.0, {})
+        return led, path
+
+    def test_missing_ledger_is_refused_and_never_recreated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(LedgerError):
+                BudgetLedger(20.0, Path(tmp) / "nope.jsonl")  # not created implicitly
+            led, path = self._ledger(tmp)
+            path.unlink()
+            with self.assertRaises(LedgerError):
+                led.reserve({})
+            self.assertFalse(path.exists())
+            with self.assertRaises(LedgerError):
+                BudgetLedger.init(20.0, self._ledger(tmp)[1])  # init refuses to overwrite
+
+    def test_corrupt_truncated_negative_and_wrong_cap_are_refused(self) -> None:
+        bad_tails = {
+            "corrupt": "{not json\n",
+            "truncated": '{"type": "reserve", "id": "z", "amount_usd": 5.0}',
+            "negative": '{"type": "settle", "id": "q", "amount_usd": -1.0}\n',
+            "missing amount": '{"type": "reserve", "id": "m"}\n',
+            "settle unknown id": '{"type": "settle", "id": "never-reserved", "amount_usd": 1.0}\n',
+        }
+        for name, tail in bad_tails.items():
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as tmp:
+                led, path = self._ledger(tmp)
+                with path.open("a", encoding="utf-8") as fh:
+                    fh.write(tail)
+                for op in (led.spent, led.committed, lambda: led.reserve({})):
+                    with self.assertRaises(LedgerError):
+                        op()
+        with tempfile.TemporaryDirectory() as tmp:
+            _, path = self._ledger(tmp)
+            with self.assertRaises(LedgerError):
+                BudgetLedger(999.0, path)  # created for a $20 cap
+            with self.assertRaises(LedgerError):
+                BudgetLedger(20.0, path).settle("x", -0.5, {})
+
+    def test_corrupt_ledger_stops_paid_contenders_but_not_free_ones(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            led, path = self._ledger(tmp)
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write("garbage\n")
+            paid = {"driver": "openai:gpt-6.2-astra", "api_key": "k", "http_transport": _Transport()}
+            rep = run_benchmark(scenarios=["goblin-ambush"], contenders=[paid, "random"], seeds=[1, 2],
+                                rules=RulesStore(), budget=led)
+            self.assertEqual([a["reason"] for a in rep["aborted_contenders"]], ["ledger_error"])
+            self.assertEqual(len([m for m in rep["matches"] if m["contender"] == "random"]), 2)
+            self.assertIn("ledger_error", rep["budget"])
+
+
+class TestMeterFailsClosed(unittest.TestCase):
+    def test_missing_or_negative_usage_is_charged_the_worst_case(self) -> None:
+        m = MatchMeter((8.0, 40.0), 5.0)
+        for usage in (None, {}, {"prompt_tokens": 10}, {"prompt_tokens": -5, "completion_tokens": 3},
+                      {"prompt_tokens": "10", "completion_tokens": 3}, {"prompt_tokens": True, "completion_tokens": 3}):
+            with self.subTest(usage=usage):
+                before = m.spent_usd
+                m.charge_usage(usage, 0.25)
+                self.assertAlmostEqual(m.spent_usd - before, 0.25)
+        self.assertEqual(m.worst_case_charges, 6)
+
+    def test_check_blocks_the_call_that_could_cross_the_limit(self) -> None:
+        m = MatchMeter((8.0, 40.0), 1.0)
+        m.charge_bound(0.8)
+        m.check(0.2)  # exactly at the limit is fine
+        with self.assertRaises(MatchBudgetExceeded):
+            m.check(0.21)
+
+    def test_driver_charges_billed_retries_and_unparseable_replies(self) -> None:
+        def make(transport) -> OpenAIDriver:
+            d = create_driver("openai:gpt-6.2-astra", api_key="k", http_transport=transport)
+            d._sleep = lambda _s: None
+            d.meter = MatchMeter((8.0, 40.0), 5.0)
+            return d
+
+        obs = {"self": {"id": "pc-bram"}, "retry_feedback": None}
+        seq = [RetryableLLMError("LLM request timed out.", billed=True), RetryableLLMError("LLM HTTP 429"), _chat("pc-bram")]
+
+        def flaky(*_a):
+            item = seq.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        d = make(flaky)
+        d.decide(obs)
+        bound = d.meter.call_bound_usd(d._build_request("s", "u")[2], 4096)
+        self.assertEqual(d.meter.worst_case_charges, 1, "the timeout is billed at the worst case; the 429 isn't")
+        self.assertGreater(d.meter.spent_usd, 0)
+
+        d = make(lambda *_a: {"choices": "not-a-list"})
+        with self.assertRaises(Exception):
+            d.decide(obs)
+        self.assertEqual(d.meter.worst_case_charges, 1, "an unparseable reply is charged the worst case")
+        self.assertGreater(bound, 0)
+
+    def test_driver_refuses_a_call_that_could_pass_the_match_limit(self) -> None:
+        calls = []
+
+        def transport(*_a):
+            calls.append(1)
+            return _chat("pc-bram")
+
+        d = create_driver("openai:gpt-6.2-astra", api_key="k", http_transport=transport)
+        d.meter = MatchMeter((8.0, 40.0), 0.01)  # less than one call's worst case
+        with self.assertRaises(MatchBudgetExceeded):
+            d.decide({"self": {"id": "pc-bram"}, "retry_feedback": None})
+        self.assertEqual(calls, [], "the call is never made")
+
+
+class TestBenchBudget(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.rules = RulesStore()
+
+    def test_cap_stops_new_paid_matches_and_spend_stays_under_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            led = BudgetLedger.init(1.0, Path(tmp) / "l.jsonl", match_limit_usd=0.3)
+            paid = {"driver": "openai:gpt-6.2-astra", "api_key": "k", "http_transport": _Transport(prompt_tokens=1000)}
+            rep = run_benchmark(scenarios=["goblin-ambush"], contenders=[paid, "random"], seeds=list(range(1, 9)),
+                                rules=self.rules, budget=led)
+            stopped = {a["reason"] for a in rep["aborted_contenders"]}
+            self.assertTrue(stopped <= {"budget_cap", "match_budget"} and stopped, rep.get("aborted_contenders"))
+            self.assertLessEqual(led.spent(), 1.0)
+            self.assertEqual(led.committed(), led.spent(), "every reservation settled")
+            paid_costs = [m["cost_usd"] for m in rep["matches"] if m["contender"] != "random"]
+            self.assertTrue(all(0 < c <= 0.3 for c in paid_costs))
+            self.assertEqual(len([m for m in rep["matches"] if m["contender"] == "random"]), 8)
+            self.assertIn("Budget:", render_benchmark_markdown(rep))
+
+    def test_per_match_limit_aborts_an_expensive_match_and_records_its_spend(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "l.jsonl"
+            led = BudgetLedger.init(50.0, path, match_limit_usd=0.5)
+            # 20k prompt tokens a call at $8/M = $0.16 a call, so the third call's worst case can't fit in $0.50.
+            paid = {"driver": "openai:gpt-6.2-astra", "api_key": "k", "http_transport": _Transport(prompt_tokens=20_000)}
+            rep = run_benchmark(scenarios=["wyrmling-lair"], contenders=[paid], seeds=[1], rules=self.rules, budget=led)
+            self.assertEqual([a["reason"] for a in rep["aborted_contenders"]], ["match_budget"])
+            self.assertEqual(rep["matches"], [], "the aborted match isn't scored")
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            settles = [r for r in rows if r["type"] == "settle"]
+            self.assertEqual(len(settles), 1)
+            self.assertEqual(settles[0]["outcome"], "aborted:match_budget")
+            self.assertGreater(settles[0]["amount_usd"], 0)
+            self.assertLessEqual(settles[0]["amount_usd"], 0.5)
+
+    def test_out_of_credits_match_is_settled_with_its_partial_spend(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "l.jsonl"
+            led = BudgetLedger.init(50.0, path)
+            transport = _Transport(fail_after=4, fail=ProviderUnavailable("out_of_credits", "no credits (HTTP 402)."))
+            paid = {"driver": "openai:gpt-6.2-astra", "api_key": "k", "http_transport": transport}
+            run_benchmark(scenarios=["goblin-ambush"], contenders=[paid], seeds=[1, 2], rules=self.rules, budget=led)
+            settles = [json.loads(l) for l in path.read_text().splitlines() if '"settle"' in l]
+            self.assertTrue(any(r["outcome"] == "aborted:out_of_credits" and r["amount_usd"] > 0 for r in settles))
+            self.assertEqual(led.committed(), led.spent())
 
 
 class TestBudgetPieces(unittest.TestCase):
@@ -222,32 +430,26 @@ class TestBudgetPieces(unittest.TestCase):
         self.assertIsNone(contender_price("xai:grok-9"))
         self.assertEqual(contender_price("xai:grok-9", {"grok-9": (1.0, 2.0)}), (1.0, 2.0))
         self.assertEqual(parse_price("gemini-4-neon=3/15"), ("gemini-4-neon", (3.0, 15.0)))
+        with self.assertRaises(ValueError):
+            parse_price("grok-4.7=-2/6")
         t = {"actions": [
             {"side": "party", "usage": {"prompt_tokens": 1_000_000, "completion_tokens": 10, "billable_output_tokens": 100_000}},
             {"side": "enemy", "usage": {"prompt_tokens": 5_000_000}},
             {"side": "party", "usage": {"prompt_tokens": 0, "completion_tokens": 100_000}},
         ]}
         self.assertAlmostEqual(match_cost(t, (2.0, 6.0)), 2.0 + 0.6 + 0.6)
+        with self.assertRaises(LedgerError):
+            match_cost({"actions": [{"side": "party", "seq": 3, "usage": {"prompt_tokens": -1}}]}, (2.0, 6.0))
 
-    def test_ledger_is_shared_between_processes(self) -> None:
+    def test_progress_line_shows_committed_spend(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "l.jsonl"
-            a, b = BudgetLedger(10, path, reserve_usd=1), BudgetLedger(10, path, reserve_usd=1)
-            a.record({"cost_usd": 4.5})
-            self.assertTrue(b.can_start_paid_match())  # 4.5 + 1 reserve < 10
-            b.record({"cost_usd": 4.6})
-            self.assertAlmostEqual(a.spent(), 9.1)
-            self.assertFalse(b.can_start_paid_match())  # 9.1 + 1 reserve >= 10
-
-    def test_progress_line_shows_spend(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            budget = BudgetLedger(150, Path(tmp) / "l.jsonl")
-            budget.record({"cost_usd": 12.345})
+            led = BudgetLedger.init(150, Path(tmp) / "l.jsonl")
+            led.settle(led.reserve({}), 12.345, {})
             out = io.StringIO()
-            cb = make_bench_progress(stream=out, budget=budget, clock=iter([0.0, 5.0]).__next__)
+            cb = make_bench_progress(stream=out, budget=led, clock=iter([0.0, 5.0]).__next__)
             cb({"contender": "c", "scenario_id": "s", "seed": 1, "winner": "enemy", "rounds": 1,
                 "composite_score": 1.0, "violations": 0}, 1, 2)
-            self.assertIn("spent $12.35 of $150.00", out.getvalue())
+            self.assertIn("committed $12.35 of $150.00", out.getvalue())
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ from srd2024.engine.dice import DeterministicRNG
 from srd2024.engine.store import RulesStore, strip_prefix
 
 from .agents import AgentDriver, ProviderUnavailable, ReplayDriver, create_driver, scrub_secrets
-from .budget import match_cost
+from .budget import LedgerError, MatchBudgetExceeded, MatchMeter
 from .scenarios import BUILTIN_SCENARIO_IDS, load_scenario
 from .scoring import score_match
 
@@ -699,9 +699,9 @@ def run_match(
                     if not isinstance(raw_intent, dict) or not raw_intent.get("type"):
                         raise ValueError("Driver decision intent must be a dict with a non-empty 'type'.")
                     intent = copy.deepcopy(raw_intent)
-                except ProviderUnavailable:
-                    # Out of credits, or failing persistently: the match can't be played fairly. Let the bench stop
-                    # this contender instead of recording violations and forcing end_turn.
+                except (ProviderUnavailable, MatchBudgetExceeded):
+                    # Out of credits, failing persistently, or out of this match's budget: the match can't be played
+                    # fairly. Let the bench stop this contender instead of recording violations and forcing end_turn.
                     raise
                 except Exception as exc:
                     err_msg = scrub_secrets(str(exc) or type(exc).__name__)
@@ -1209,10 +1209,13 @@ def run_benchmark(
     a long LLM bench shows where it is and keeps finished matches if it's interrupted. It doesn't affect results.
 
     A contender stops cleanly, keeping its finished matches and listed under `aborted_contenders`, when:
-    - its provider reports no credits or quota, or keeps failing after retries (`ProviderUnavailable`); the
-      unfinished match is dropped;
-    - `budget` (a `BudgetLedger`) is set, the contender is paid, and the next match could pass the cap.
-    Other contenders carry on. With `budget`, each match summary gets `cost_usd` and is recorded in the ledger.
+    - its provider reports no credits or quota, or keeps failing after retries (`ProviderUnavailable`);
+    - `budget` (a `BudgetLedger`) is set and the contender is paid, and the ledger can't reserve the next match's
+      limit under the cap (`budget_cap`), or a match would go over its own limit (`match_budget`), or the ledger is
+      missing or corrupt (`ledger_error`, which also stops every later paid contender).
+    An unfinished match is dropped, not scored. Every paid match reserves its limit before it starts and settles to
+    its metered cost when it ends, finished or aborted (see budget.py). Other contenders carry on. With `budget`,
+    each match summary gets `cost_usd`.
     """
     scenario_list = list(BUILTIN_SCENARIO_IDS) if scenarios is None else list(scenarios)
     contender_list = (
@@ -1228,6 +1231,7 @@ def run_benchmark(
     leaderboard_rows: list[dict[str, Any]] = []
     total_matches = len(contender_list) * len(compiled_scenarios) * len(seed_list)
     aborted_contenders: list[dict[str, Any]] = []
+    ledger_broken: str | None = None
     prices: dict[str, tuple[float, float]] = {}
     if budget is not None:
         for contender in contender_list:
@@ -1268,12 +1272,29 @@ def run_benchmark(
             sc_wasted_immune = 0
 
             for seed in seed_list:
-                if paid and not budget.can_start_paid_match():
-                    stop = ("budget_cap", f"spent ${budget.spent():.2f} of the ${budget.cap_usd:.2f} cap "
-                                          f"(${budget.reserve_usd:.2f} reserve)")
-                    break
+                meta = {"contender": label, "scenario_id": sc_id, "seed": int(seed)}
+                rid: str | None = None
+                meter: MatchMeter | None = None
+                if paid:
+                    if ledger_broken is not None:
+                        stop = ("ledger_error", ledger_broken)
+                        break
+                    try:
+                        rid = budget.reserve(meta)
+                    except LedgerError as exc:
+                        ledger_broken = str(exc)
+                        stop = ("ledger_error", ledger_broken)
+                        break
+                    if rid is None:
+                        stop = ("budget_cap", f"${budget.committed():.2f} of the ${budget.cap_usd:.2f} cap is spent or "
+                                              f"reserved; the next match needs ${budget.match_limit_usd:.2f}")
+                        break
+                    meter = MatchMeter(price, budget.match_limit_usd)
                 p_drv = create_driver(contender, rules=rules, seed=seed)
+                if meter is not None:
+                    p_drv.meter = meter
                 e_drv = create_driver(enemy_agent, rules=rules, seed=seed + 10000)
+                outcome = "finished"
                 try:
                     transcript = run_match(
                         compiled_sc,
@@ -1286,7 +1307,20 @@ def run_benchmark(
                         max_retries_per_action=max_retries_per_action,
                     )
                 except ProviderUnavailable as exc:
+                    outcome = f"aborted:{exc.reason}"
                     stop = (exc.reason, scrub_secrets(str(exc)))
+                except MatchBudgetExceeded as exc:
+                    outcome = f"aborted:{exc.reason}"
+                    stop = (exc.reason, str(exc))
+                finally:
+                    if rid is not None and meter is not None:
+                        try:
+                            budget.settle(rid, meter.spent_usd, {**meta, "outcome": outcome, "calls": meter.calls,
+                                                                 "worst_case_charges": meter.worst_case_charges})
+                        except LedgerError as exc:
+                            ledger_broken = str(exc)
+                            stop = stop or ("ledger_error", ledger_broken)
+                if stop is not None:
                     break
                 sc_card = transcript["scorecard"]
                 metrics = sc_card["metrics"]
@@ -1338,10 +1372,7 @@ def run_benchmark(
                     "digest": transcript["digest"],
                 }
                 if budget is not None:
-                    match_summary["cost_usd"] = match_cost(transcript, price)
-                    if paid:
-                        budget.record({"contender": label, "scenario_id": sc_id, "seed": int(seed),
-                                       "cost_usd": match_summary["cost_usd"]})
+                    match_summary["cost_usd"] = round(meter.spent_usd, 6) if meter is not None else 0.0
                 if include_traces:
                     match_summary["transcript"] = transcript
                 all_match_summaries.append(match_summary)
@@ -1412,6 +1443,13 @@ def run_benchmark(
     if aborted_contenders:
         report["aborted_contenders"] = aborted_contenders
     if budget is not None:
-        report["budget"] = {"cap_usd": budget.cap_usd, "reserve_usd": budget.reserve_usd,
-                            "spent_usd_ledger_total": budget.spent()}
+        try:
+            spent, committed = budget.spent(), budget.committed()
+        except LedgerError as exc:
+            spent = committed = float("nan")
+            ledger_broken = ledger_broken or str(exc)
+        report["budget"] = {"cap_usd": budget.cap_usd, "match_limit_usd": budget.match_limit_usd,
+                            "spent_usd_ledger_total": spent, "committed_usd_ledger_total": committed}
+        if ledger_broken is not None:
+            report["budget"]["ledger_error"] = ledger_broken
     return report

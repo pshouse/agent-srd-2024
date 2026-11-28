@@ -282,7 +282,7 @@ def make_bench_progress(
             f"[bench {done}/{total}] {summary['contender']} {summary['scenario_id']} seed {summary['seed']}: "
             f"{summary['winner']} in {summary['rounds']} rounds, composite {summary['composite_score']:.2f}, "
             f"{summary['violations']} violations | {_fmt_duration(elapsed)} elapsed, ETA {_fmt_duration(eta)}"
-            + (f" | spent ${budget.spent():.2f} of ${budget.cap_usd:.2f}" if budget is not None else "")
+            + (f" | committed ${budget.committed():.2f} of ${budget.cap_usd:.2f}" if budget is not None else "")
             + "\n"
         )
         out.flush()
@@ -551,20 +551,28 @@ def add_arena_subcommands(
         dest="budget_usd",
         type=float,
         default=None,
-        help="Spend cap in USD for paid LLM contenders. A paid match isn't started once spent + reserve reaches it.",
+        help="Spend cap in USD for paid LLM contenders, shared through --budget-ledger. Can't be exceeded.",
     )
     p_bench.add_argument(
         "--budget-ledger",
         dest="budget_ledger",
         default=None,
-        help="JSONL spend ledger (required with --budget-usd). Share one path across parallel bench processes.",
+        help="JSONL spend ledger (required with --budget-usd). Share one path across parallel bench processes. "
+        "It must already exist (create it once with --budget-ledger-init).",
     )
     p_bench.add_argument(
-        "--budget-reserve-usd",
-        dest="budget_reserve_usd",
+        "--budget-ledger-init",
+        dest="budget_ledger_init",
+        action="store_true",
+        help="Create --budget-ledger for --budget-usd. Refuses if the file already exists.",
+    )
+    p_bench.add_argument(
+        "--budget-match-usd",
+        dest="budget_match_usd",
         type=float,
-        default=10.0,
-        help="Headroom kept below the cap for matches still running elsewhere (default: 10).",
+        default=5.0,
+        help="Per-match spend limit, reserved before each paid match starts. A match that would pass it is "
+        "stopped (default: 5).",
     )
     p_bench.add_argument(
         "--price",
@@ -751,10 +759,11 @@ def run_arena_cli_command(
             if not getattr(args, "budget_ledger", None):
                 raise ValueError("--budget-usd needs --budget-ledger PATH (share it across parallel benches).")
             overrides = dict(parse_price(p) for p in (args.prices or []))
-            budget = BudgetLedger(
+            make = BudgetLedger.init if getattr(args, "budget_ledger_init", False) else BudgetLedger
+            budget = make(
                 args.budget_usd,
                 Path(args.budget_ledger).expanduser(),
-                reserve_usd=args.budget_reserve_usd,
+                match_limit_usd=args.budget_match_usd,
                 price_overrides=overrides,
             )
         progress = make_bench_progress(

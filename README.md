@@ -161,16 +161,25 @@ Both `./bin/srd-arena <subcommand>` and `./bin/srd arena <subcommand>` support i
 stdout keeps only the report. Add `--matches-jsonl PATH` to append each match summary as soon as it finishes, so a
 long LLM bench keeps its finished matches if it's stopped. `--quiet` turns the progress lines off.
 
-Paid LLM contenders can be capped: `--budget-usd 150 --budget-ledger runs/ledger.jsonl`. Each match is priced from
-its recorded token usage, including reasoning or thinking tokens where the provider bills them, using the table in
-`src/srd2024/arena/budget.py`. Override a price with `--price MODEL=IN/OUT` (USD per million tokens). The ledger can
-be shared by parallel bench processes. A paid match isn't started once spent + `--budget-reserve-usd` (default 10)
-reaches the cap.
+Paid LLM contenders can be capped so spend can't go over:
+```sh
+bin/srd-arena bench ... --budget-usd 150 --budget-ledger runs/ledger.jsonl --budget-ledger-init   # first process
+bin/srd-arena bench ... --budget-usd 150 --budget-ledger runs/ledger.jsonl                        # the others
+```
+- Before each paid match starts, its `--budget-match-usd` (default 5) is reserved in the shared ledger, under a lock.
+  The reservation succeeds only if spent plus reserved plus the new reservation stays within the cap.
+- Every API attempt is checked first against its worst case: input bounded by the request's size, output by its
+  `max_tokens` cap. A match that would pass its limit is stopped before the call.
+- When the match ends, finished or stopped, its reservation settles to the metered cost.
+- Usage that's missing or invalid, unparseable replies, timeouts and 5xx retries are charged at the worst case.
+- The ledger fails closed. A missing, corrupt or truncated file, a negative amount or a different cap stops paid work.
+- Prices come from `src/srd2024/arena/budget.py`; override them with `--price MODEL=IN/OUT` (USD per million tokens).
 
-A contender stops cleanly, its finished matches kept and listed under "Stopped Contenders", if:
+A contender stops cleanly, with its finished matches kept and listed under "Stopped Contenders", if:
 - its provider reports no credits or quota (HTTP 402, or a quota or billing error), or
 - its API key is missing, or
-- it fails three decisions in a row even after retries. 429, 5xx and timeouts are retried with backoff.
+- it fails three decisions in a row even after retries (429, 5xx and timeouts are retried with backoff), or
+- the budget can't cover its next match.
 
 The other contenders keep running.
 
