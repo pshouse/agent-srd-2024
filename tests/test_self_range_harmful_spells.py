@@ -15,7 +15,7 @@ import unittest
 from typing import Any
 
 from srd2024.arena import load_scenario
-from srd2024.engine.combat import step
+from srd2024.engine.combat import SELF_LINE_SPELLS, SELF_NO_TARGET_OK, step
 from srd2024.engine.store import RulesStore
 
 
@@ -78,18 +78,42 @@ class TestSelfRangeHarmfulSpells(unittest.TestCase):
     def test_empty_area_is_a_legal_cast_and_single_target_is_refused(self) -> None:
         for slug in self.spells:
             rec = self.rules.get_spell(slug)
-            area = (rec.get("targeting") or {}).get("mode") == "aoe"
-            with self.subTest(spell=slug, area=area):
+            area = (rec.get("targeting") or {}).get("mode") == "aoe" or slug in SELF_LINE_SPELLS
+            no_target_ok = slug in SELF_NO_TARGET_OK
+            with self.subTest(spell=slug, area=area, no_target_ok=no_target_ok):
                 res = self._cast(slug, ["pc-lyra"])
-                if area:
+                if area or no_target_ok:
                     self.assertEqual(res["status"], "ok", res.get("error"))
-                    self.assertIn("no other creature is in its area", " ".join(res["narrative_hooks"]))
+                    text = " ".join(res["narrative_hooks"])
+                    self.assertIn("no other creature is in its area" if area else "no other creature to affect yet", text)
+                    self.assertEqual(self._hits_caster(res), [])
                     slots_before = sum(self.state["combatants"]["pc-lyra"]["spellcasting"]["slots"].values())
                     slots_after = sum(res["state"]["combatants"]["pc-lyra"]["spellcasting"]["slots"].values())
                     self.assertEqual(slots_after, slots_before - (1 if rec["level"] > 0 else 0))
                 else:
                     self.assertEqual(res["status"], "invalid_intent")
                     self.assertIn("other than its caster", res["error"])
+
+    def test_cto_mf1_lists(self) -> None:
+        """SRD 5.2: these seven are castable with no other creature; these five still need a target."""
+        castable = {"produce-flame", "flame-blade", "detect-thoughts", "dispel-evil-and-good", "gust-of-wind",
+                    "sunbeam", "magic-jar"}
+        refused = {"true-strike", "vampiric-touch", "eyebite", "searing-smite", "ensnaring-strike"}
+        self.assertTrue(castable <= set(self.spells) and refused <= set(self.spells))
+        for slug in sorted(castable):
+            for targets in (None, [], ["pc-lyra"]):
+                with self.subTest(spell=slug, targets=targets):
+                    res = self._cast(slug, targets)
+                    self.assertEqual(res["status"], "ok", res.get("error"))
+                    self.assertEqual(self._hits_caster(res), [])
+            with self.subTest(spell=slug, targets=["hound-1"]):
+                res = self._cast(slug, ["hound-1"])
+                self.assertEqual(res["status"], "ok", res.get("error"))
+        for slug in ("gust-of-wind", "sunbeam"):
+            self.assertIn("no other creature is in its area", " ".join(self._cast(slug, [])["narrative_hooks"]))
+        for slug in sorted(refused):
+            with self.subTest(spell=slug):
+                self.assertEqual(self._cast(slug, [])["status"], "invalid_intent")
 
     def test_spirit_guardians_with_an_enemy_targets_only_the_enemy(self) -> None:
         res = self._cast("spirit-guardians", ["pc-lyra", "hound-1"])

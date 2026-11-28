@@ -118,6 +118,15 @@ def _knows_on_hit_smite(combatant: dict[str, Any]) -> bool:
     return bool(known & set(ON_HIT_SMITES))
 
 
+# Self-range spells the compiler doesn't grade as areas but that are lines in SRD 5.2 (#81 MF1).
+SELF_LINE_SPELLS: frozenset[str] = frozenset({"gust-of-wind", "sunbeam"})
+# Self-range spells that SRD 5.2 lets you cast with no other creature (a held flame, a blade, a lasting detection
+# or ward, Magic Jar's container): legal, and nothing to resolve yet (#81 MF1).
+SELF_NO_TARGET_OK: frozenset[str] = frozenset(
+    {"produce-flame", "flame-blade", "detect-thoughts", "dispel-evil-and-good", "magic-jar"}
+)
+
+
 SIZE_RANK: dict[str, int] = {
     "tiny": 0,
     "small": 1,
@@ -2882,10 +2891,14 @@ def step(
         # before enemies arrive). A single-target one with no target is refused, like Fire Bolt with no target.
         self_range = str(spell.get("range_kind") or "").lower() == "self"
         harmful_self_area = False
+        castable_without_target = False
         if self_range and str(spell.get("resolution") or "").lower() in ("attack", "save"):
             target_ids = [t for t in target_ids if t != actor_id]
-            harmful_self_area = str((spell.get("targeting") or {}).get("mode") or "") == "aoe"
-            if not target_ids and not harmful_self_area:
+            harmful_self_area = (
+                str((spell.get("targeting") or {}).get("mode") or "") == "aoe" or spell_slug in SELF_LINE_SPELLS
+            )
+            castable_without_target = harmful_self_area or spell_slug in SELF_NO_TARGET_OK
+            if not target_ids and not castable_without_target:
                 return _invalid(
                     copy.deepcopy(state),
                     f"'{spell_slug}' needs a target other than its caster.",
@@ -3121,6 +3134,13 @@ def step(
                 )
             tracker.hooks[pre_auto_hooks:pre_auto_hooks] = auto_hooks
 
+        # A Self-origin spell with no one else to affect (#67, #81 MF1): legal, and nothing to roll.
+        elif resolution in ("attack", "save") and castable_without_target and not target_ids:
+            if harmful_self_area:
+                tracker.hook(f"{actor['name']} casts {spell_name}; no other creature is in its area.")
+            else:
+                tracker.hook(f"{actor['name']} casts {spell_name}; it has no other creature to affect yet.")
+
         # 5. Spell attack resolution (`fire-bolt`, `scorching-ray`, `eldritch-blast`, `guiding-bolt`, `ray-of-frost`, etc.).
         elif resolution == "attack":
             if not target_ids:
@@ -3294,9 +3314,6 @@ def step(
                             )
 
         # 6. Saving throw spells (`fireball`, `lightning-bolt`, `sacred-flame`, `hold-person`, `bane`, `vicious-mockery`).
-        elif resolution == "save" and harmful_self_area and not target_ids:
-            # A Self-origin area with no one else in it (#67): legal, and nothing to roll.
-            tracker.hook(f"{actor['name']} casts {spell_name}; no other creature is in its area.")
         elif resolution == "save":
             if not target_ids:
                 return _invalid(copy.deepcopy(state), f"Spell '{spell_slug}' requires at least one target.", rules)
