@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -943,7 +944,8 @@ class TestBugfixes97And98AndAuditRules(unittest.TestCase):
             "Blessed Healer self-heals 2 + slot_level when healing another living creature",
             "cover-ignoring spell applies +0 cover save bonus",
         ):
-            self.assertRegex(res.stdout, rf"ok\s+[1-9]\d* checks\s+0 bad\s+{rule.replace('+', r'\+').replace('(', r'\(').replace(')', r'\)')}")
+            escaped = re.escape(rule)
+            self.assertRegex(res.stdout, rf"ok\s+[1-9]\d* checks\s+0 bad\s+{escaped}")
 
         # Also audit Preserve Life cleanly + tampered violation!
         pl_init = _start(
