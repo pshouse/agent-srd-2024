@@ -74,6 +74,26 @@ test("stepping through every committed trace reproduces final_state", () => {
   }
 });
 
+test("a PC who dies (combatant_died) is shown dead from that step on", () => {
+  let deaths = 0;
+  for (const { row, trace } of committed) {
+    const result = buildReplay(trace);
+    assert.equal(result.ok, true, `${row.id}: ${result.errors.join("; ")}`);
+    trace.actions.forEach((action, i) => {
+      for (const e of action.events) {
+        if (e.type !== "combatant_died") continue;
+        deaths += 1;
+        for (const frame of result.replay.frames.slice(i + 1)) {
+          const unit = frame.units.find((u) => u.id === e.combatant_id);
+          assert.equal(unit.alive, false, `${row.id} seq ${action.seq}: ${e.combatant_id} (${e.reason}) still alive`);
+        }
+      }
+    });
+  }
+  // The re-recorded opus-wyrmling-8 (#67) has PC deaths; keep at least one in the committed set.
+  assert.ok(deaths > 0, "no committed trace has a combatant_died event");
+});
+
 test("intermediate frames follow each action's state_diff", () => {
   const { replay } = buildReplay(goblin.trace);
   goblin.trace.actions.forEach((action, i) => {
