@@ -27,6 +27,22 @@ from .store import RulesStore, strip_prefix
 
 ABILITY_KEYS: tuple[str, ...] = ("str", "dex", "con", "int", "wis", "cha")
 
+# Spells whose damage rides on a melee hit made earlier this turn (#6). "bonus_vs" adds dice against those
+# creature types (Divine Smite: +1d8 against Fiends and Undead).
+ON_HIT_SMITES: dict[str, dict[str, Any]] = {
+    "divine-smite": {"bonus_vs": {"fiend", "undead"}, "bonus_dice": "1d8"},
+    "shining-smite": {},
+}
+
+
+def _knows_on_hit_smite(combatant: dict[str, Any]) -> bool:
+    sc = combatant.get("spellcasting")
+    if not isinstance(sc, dict):
+        return False
+    known = {strip_prefix(str(x)) for x in list(sc.get("prepared_spells") or []) + list(sc.get("cantrips") or [])}
+    return bool(known & set(ON_HIT_SMITES))
+
+
 SIZE_RANK: dict[str, int] = {
     "tiny": 0,
     "small": 1,
@@ -1295,6 +1311,13 @@ def _resolve_single_weapon_attack(
         f"{attacker['name']} hits {target['name']} with {weapon['name']}{crit_txt} "
         f"({total_to_hit} vs AC {target_ac}) for {eff_dmg} {dmg_type} damage."
     )
+    # A smite (#6) can follow a melee hit on the attacker's own turn. Recorded only for casters who know one,
+    # so nobody else's state changes. Cleared when turn_resources reset at the start of the next turn.
+    if not is_ranged and _knows_on_hit_smite(attacker):
+        order = state.get("turn_order") or []
+        active = order[int(state.get("active_index", 0)) % len(order)] if order else None
+        if active == attacker_id:
+            attacker["turn_resources"]["last_melee_hit"] = {"target_id": target_id, "crit": bool(crit)}
 
     # Trigger on-hit 2024 Weapon Masteries.
     if mastery == "push":
@@ -2695,6 +2718,27 @@ def step(
             if tid not in s["combatants"]:
                 return _invalid(copy.deepcopy(state), f"Unknown spell target '{tid}'.", rules)
 
+        smite = ON_HIT_SMITES.get(spell_slug)
+        if smite is not None:
+            last_hit = (actor.get("turn_resources") or {}).get("last_melee_hit")
+            if not isinstance(last_hit, dict):
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"{spell.get('name', spell_slug)} must be cast right after you hit with a melee weapon this turn.",
+                    rules,
+                )
+            smite_tid = str(last_hit["target_id"])
+            if target_ids not in ([], [actor_id], [smite_tid]):
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"{spell.get('name', spell_slug)} must target the creature you just hit ({smite_tid}).",
+                    rules,
+                )
+            smite_target = s["combatants"].get(smite_tid)
+            if not smite_target or not smite_target.get("alive") or int(smite_target.get("hp", 0)) <= 0:
+                return _invalid(copy.deepcopy(state), f"{smite_tid} is already down.", rules)
+            target_ids = [smite_tid]
+
         # Default self-targeting for self buff/reaction spells like shield/mage-armor/false-life/misty-step.
         if not target_ids and str(spell.get("range_kind") or "").lower() == "self":
             target_ids = [actor_id]
@@ -3206,6 +3250,34 @@ def step(
                     tracker.hook(f"{t_name} is affected by {spell_name}: {', '.join(applied_notes)}.")
 
         # 7. Auto-apply / Buff spells (`shield`, `mage-armor`, `shield-of-faith`, `barkskin`, `bless`, `longstrider`, `haste`).
+        elif smite is not None:
+            last_hit = actor["turn_resources"].pop("last_melee_hit")
+            tid = target_ids[0]
+            t = s["combatants"][tid]
+            crit = bool(last_hit.get("crit"))
+            per_lvl = scaling.get("slot_damage_per_level")
+            exprs = [(str(d.get("dice") or "1"), strip_prefix(d.get("type") or "radiant")) for d in dmg_list]
+            if per_lvl and exprs:
+                exprs += [(str(per_lvl), exprs[0][1])] * upcast
+            ctype = ""
+            if t.get("kind") == "monster":
+                m_rec = rules.get_monster(str(t.get("source_id") or "")) or {}
+                ctype = str(m_rec.get("creature_type") or "").lower()
+            bonus_txt = ""
+            if smite.get("bonus_vs") and ctype in smite["bonus_vs"] and exprs:
+                exprs.append((str(smite["bonus_dice"]), exprs[0][1]))
+                bonus_txt = f" (+{smite['bonus_dice']} vs {ctype.title()})"
+            parts = [
+                {"amount": max(0, int(rng.roll_dice_expr(dx, crit=crit)["total"])), "type": dt} for dx, dt in exprs
+            ]
+            hook_idx = len(tracker.hooks)
+            eff = _apply_damage_parts(s, tid, parts, rules, rng, tracker, source_id=actor_id, is_crit=crit)
+            crit_txt = " (critical: dice doubled)" if crit else ""
+            tracker.hooks.insert(
+                hook_idx,
+                f"{actor['name']} casts {spell_name} on {t['name']}{crit_txt}{bonus_txt} for {eff} "
+                f"{exprs[0][1] if exprs else ''} damage.",
+            )
         else:
             apply_targets = target_ids or [actor_id]
             bless_targets: list[str] = []
@@ -3376,6 +3448,11 @@ def step(
                     f"{actor['name']} casts {spell_name} on {', '.join(bless_targets)} "
                     f"({sign_sym}{bless_dice} to attacks and saves)."
                 )
+            if dmg_list and resolution == "auto_apply":
+                # Safety net (#6): this spell has damage the engine doesn't apply (e.g. a per-hit rider).
+                # Say so, rather than spending the slot silently.
+                tracker.emit("spell_damage_unresolved", actor_id=actor_id, spell=spell_slug, damage=copy.deepcopy(dmg_list))
+                tracker.hook(f"{actor['name']} casts {spell_name}; its damage isn't modeled by the engine (resolve at the table).")
             if not tracker.hooks:
                 tracker.hook(f"{actor['name']} casts {spell_name}.")
 
