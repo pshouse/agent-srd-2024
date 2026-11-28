@@ -25,6 +25,7 @@ import random
 import re
 import shutil
 import subprocess
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -2940,6 +2941,57 @@ def _assert_safe_llm_url(url: str) -> None:
     raise RuntimeError("LLM endpoint must use https (http is allowed only on loopback).")
 
 
+class ProviderUnavailable(RuntimeError):
+    """An LLM provider can't serve this contender any more: out of credits or quota, or failing persistently.
+
+    The arena stops that contender cleanly (its finished matches are kept and it's marked aborted) instead of
+    recording every failed call as a rules violation and playing on with forced end_turns.
+    `reason` is "out_of_credits" or "unavailable".
+    """
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+class RetryableLLMError(RuntimeError):
+    """A transient provider failure (rate limit, 5xx, overloaded, timeout, connection) worth retrying."""
+
+    def __init__(self, message: str, retry_after_s: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after_s = retry_after_s
+
+
+# Provider error codes/types that mean "no credits or quota left", checked in the error body. The body itself is
+# never echoed: it can contain account details.
+_QUOTA_MARKERS = (
+    "insufficient_quota",
+    "billing",
+    "credit",
+    "exceeded your current quota",
+    "quota exceeded",
+    "resource_exhausted",
+    "payment required",
+)
+_RETRYABLE_HTTP = {408, 409, 425, 429, 500, 502, 503, 504, 529}
+
+
+def _classify_http_error(code: int, body: bytes, retry_after: str | None) -> RuntimeError:
+    text = body.decode("utf-8", errors="replace").lower()
+    if code == 402 or (code in (400, 403, 429) and any(m in text for m in _QUOTA_MARKERS)):
+        return ProviderUnavailable("out_of_credits", f"LLM provider reports no remaining credits or quota (HTTP {code}).")
+    if code in _RETRYABLE_HTTP:
+        wait = None
+        try:
+            wait = float(retry_after) if retry_after else None
+        except ValueError:
+            wait = None
+        return RetryableLLMError(f"LLM HTTP {code}", retry_after_s=wait)
+    if code in (401, 403):
+        return ProviderUnavailable("unavailable", f"LLM provider rejected the credentials (HTTP {code}).")
+    return RuntimeError(f"LLM HTTP {code}")
+
+
 class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
     """Refuse every redirect so Authorization and API-key headers cannot follow."""
 
@@ -2988,15 +3040,19 @@ def _default_http_transport(
         with _LLM_OPENER.open(req, timeout=float(timeout_s)) as resp:
             raw_bytes = _read_bounded(resp)
     except urllib.error.HTTPError as exc:
+        body = b""
         try:
-            exc.read(8192)
+            body = exc.read(8192) or b""
         except Exception:
             pass
         if exc.code in (301, 302, 303, 307, 308):
             raise RuntimeError("LLM redirect refused.") from None
-        raise RuntimeError(f"LLM HTTP {exc.code}") from None
+        retry_after = exc.headers.get("retry-after") if getattr(exc, "headers", None) is not None else None
+        raise _classify_http_error(int(exc.code), body, retry_after) from None
     except urllib.error.URLError:
-        raise RuntimeError("LLM connection failed.") from None
+        raise RetryableLLMError("LLM connection failed.") from None
+    except TimeoutError:
+        raise RetryableLLMError("LLM request timed out.") from None
     except RuntimeError:
         raise
 
@@ -3043,6 +3099,8 @@ class BaseLLMDriver:
         self.max_tokens: int = int(max_tokens)
         self.timeout_s: float = float(timeout_s)
         self._transport: HttpTransport = http_transport or _default_http_transport
+        self._sleep: Callable[[float], None] = time.sleep
+        self._consecutive_failures = 0
 
     def _resolve_api_key(self, *, allow_empty_local: bool = False) -> str:
         key = self._explicit_api_key if self._explicit_api_key is not None else os.environ.get(self.api_key_env, "")
@@ -3052,8 +3110,10 @@ class BaseLLMDriver:
                 return ""
             if self._transport is not _default_http_transport:
                 return ""
-            raise RuntimeError(
-                f"{self.__class__.__name__} requires an API key via 'api_key' or env var '{self.api_key_env}'."
+            # A missing key can't fix itself mid-bench: stop this contender instead of failing every decision.
+            raise ProviderUnavailable(
+                "unavailable",
+                f"{self.__class__.__name__} requires an API key via 'api_key' or env var '{self.api_key_env}'.",
             )
         return key
 
@@ -3068,17 +3128,49 @@ class BaseLLMDriver:
     def reset(self, seed: int | None = None) -> None:
         return None
 
+    # Transient failures (rate limit, 5xx, overloaded, timeout) are retried with backoff. After
+    # MAX_CONSECUTIVE_FAILURES decisions in a row that still failed, the provider counts as unavailable (e.g. a usage
+    # limit), and ProviderUnavailable stops this contender instead of forcing end_turn for the rest of the bench.
+    MAX_ATTEMPTS = 4
+    BACKOFF_S = (2.0, 8.0, 30.0)
+    MAX_CONSECUTIVE_FAILURES = 3
+
+    def _send(self, url: str, headers: dict[str, str], payload: dict[str, Any]) -> dict[str, Any]:
+        """Call the transport with retries; raise ProviderUnavailable when the provider can't serve us."""
+        secret_values = [self._explicit_api_key or "", os.environ.get(self.api_key_env, "")]
+        last: Exception | None = None
+        for attempt in range(self.MAX_ATTEMPTS):
+            try:
+                resp = self._transport(url, headers, payload, self.timeout_s)
+                self._consecutive_failures = 0
+                return resp
+            except ProviderUnavailable:
+                raise
+            except RetryableLLMError as exc:
+                last = exc
+                if attempt + 1 < self.MAX_ATTEMPTS:
+                    wait = self.BACKOFF_S[min(attempt, len(self.BACKOFF_S) - 1)]
+                    if exc.retry_after_s is not None:
+                        wait = max(wait, min(float(exc.retry_after_s), 120.0))
+                    self._sleep(wait)
+            except Exception as exc:
+                cleaned = scrub_secrets(str(exc) or "LLM request failed.", secret_values)
+                raise RuntimeError(cleaned or "LLM request failed.") from None
+        self._consecutive_failures += 1
+        msg = scrub_secrets(str(last) or "LLM request failed.", secret_values) or "LLM request failed."
+        if self._consecutive_failures >= self.MAX_CONSECUTIVE_FAILURES:
+            raise ProviderUnavailable(
+                "unavailable",
+                f"LLM provider failed {self._consecutive_failures} decisions in a row after retries ({msg}).",
+            )
+        raise RuntimeError(f"{msg} (after {self.MAX_ATTEMPTS} attempts)")
+
     def decide(self, observation: dict[str, Any]) -> AgentDecision:
         system_prompt = build_system_prompt()
         user_prompt = build_user_prompt(observation)
         url, headers, payload = self._build_request(system_prompt, user_prompt)
         _assert_safe_llm_url(url)
-        secret_values = [self._explicit_api_key or "", os.environ.get(self.api_key_env, "")]
-        try:
-            resp_json = self._transport(url, headers, payload, self.timeout_s)
-        except Exception as exc:
-            cleaned = scrub_secrets(str(exc) or "LLM request failed.", secret_values)
-            raise RuntimeError(cleaned or "LLM request failed.") from None
+        resp_json = self._send(url, headers, payload)
         raw_text, usage = self._parse_response(resp_json)
         parsed = extract_decision_json(raw_text)
 
@@ -3142,11 +3234,18 @@ class OpenAICompatDriver(BaseLLMDriver):
         prompt_t = int(u.get("prompt_tokens", 0) or 0)
         comp_t = int(u.get("completion_tokens", 0) or 0)
         total_t = int(u.get("total_tokens", prompt_t + comp_t) or (prompt_t + comp_t))
+        reasoning_t = int(((u.get("completion_tokens_details") or {}).get("reasoning_tokens", 0)) or 0)
         return raw_text, {
             "prompt_tokens": prompt_t,
             "completion_tokens": comp_t,
             "total_tokens": total_t,
+            "reasoning_tokens": reasoning_t,
+            # OpenAI counts reasoning inside completion_tokens (#budget).
+            "billable_output_tokens": self._billable_output(comp_t, reasoning_t),
         }
+
+    def _billable_output(self, completion_tokens: int, reasoning_tokens: int) -> int:
+        return completion_tokens
 
 
 class OpenAIDriver(OpenAICompatDriver):
@@ -3181,6 +3280,11 @@ class XAIDriver(OpenAICompatDriver):
     DEFAULT_API_KEY_ENV = "XAI_API_KEY"
     PROVIDER_PREFIX = "xai"
     MIN_MAX_TOKENS = 4096
+
+    def _billable_output(self, completion_tokens: int, reasoning_tokens: int) -> int:
+        # xAI reports reasoning tokens separately from completion_tokens (prompt + completion + reasoning = total)
+        # and bills them as output.
+        return completion_tokens + reasoning_tokens
     MIN_TIMEOUT_S = 180.0  # grok-4.7 reasoning turns ran past the 60 s default
 
     def __init__(self, model: str, **kwargs: Any) -> None:
@@ -3255,8 +3359,9 @@ class AnthropicDriver(BaseLLMDriver):
             try:
                 key = self._resolve_api_key(allow_empty_local=True)
             except RuntimeError as exc:
-                raise RuntimeError(
-                    f"{exc} Or sign in once with the Anthropic CLI (`ant auth login`), or set {self.AUTH_TOKEN_ENV}."
+                raise ProviderUnavailable(
+                    "unavailable",
+                    f"{exc} Or sign in once with the Anthropic CLI (`ant auth login`), or set {self.AUTH_TOKEN_ENV}.",
                 ) from None
         if key:
             _reject_control_chars_in_secret(key)
@@ -3293,6 +3398,7 @@ class AnthropicDriver(BaseLLMDriver):
             "prompt_tokens": inp_t,
             "completion_tokens": out_t,
             "total_tokens": inp_t + out_t,
+            "billable_output_tokens": out_t,  # includes thinking
         }
 
 
@@ -3347,11 +3453,15 @@ class GeminiDriver(BaseLLMDriver):
         u = response.get("usageMetadata") or {}
         prompt_t = int(u.get("promptTokenCount", 0) or 0)
         cand_t = int(u.get("candidatesTokenCount", 0) or 0)
+        thoughts_t = int(u.get("thoughtsTokenCount", 0) or 0)
         total_t = int(u.get("totalTokenCount", prompt_t + cand_t) or (prompt_t + cand_t))
         return raw_text, {
             "prompt_tokens": prompt_t,
             "completion_tokens": cand_t,
             "total_tokens": total_t,
+            "reasoning_tokens": thoughts_t,
+            # Thinking tokens are billed as output on top of the candidates.
+            "billable_output_tokens": cand_t + thoughts_t,
         }
 
 

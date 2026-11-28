@@ -361,6 +361,21 @@ def render_benchmark_markdown(report: dict[str, Any]) -> str:
         f"- **Seeds:** `{seeds}`",
         f"- **Enemy Agent:** `{enemy_agent}`",
         "",
+    ]
+    budget = report.get("budget")
+    if isinstance(budget, dict):
+        lines += [f"- **Budget:** ${float(budget.get('cap_usd', 0)):.2f} cap, "
+                  f"${float(budget.get('spent_usd_ledger_total', 0)):.2f} spent (ledger total)", ""]
+    aborted = list(report.get("aborted_contenders") or [])
+    if aborted:
+        lines += ["## Stopped Contenders", "",
+                  "These stopped early. Their rows below cover only the matches they finished.", "",
+                  "| Contender | Reason | Matches finished | Detail |", "|---|---|---:|---|"]
+        for row in aborted:
+            lines.append(f"| `{row.get('label', '')}` | {row.get('reason', '')} "
+                         f"| {row.get('matches_completed', 0)}/{row.get('matches_planned', 0)} | {row.get('message', '')} |")
+        lines.append("")
+    lines += [
         "## Ranked Leaderboard",
         "",
         "| Rank | Contender | W-L-D | Win Rate | Composite | Outcome | Legality | Tactical | Coord | Avg Rnds | Violations | Wasted Immune |",

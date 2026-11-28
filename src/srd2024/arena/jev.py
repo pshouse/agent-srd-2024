@@ -355,11 +355,7 @@ class JevDriver(BaseLLMDriver):
             return self._pick(retry=False)
         criteria = {name: desc for name, desc, _ in candidates}
         url, headers, payload = self._request(observation, criteria)
-        secret_values = [self._explicit_api_key or "", os.environ.get(self.api_key_env, "")]
-        try:
-            resp = self._transport(url, headers, payload, self.timeout_s)
-        except Exception as exc:
-            raise RuntimeError(scrub_secrets(str(exc) or "Jev request failed.", secret_values) or "Jev request failed.") from None
+        resp = self._send(url, headers, payload)
         answer = (resp.get("answers") or {}).get(QUESTION_ID)
         if not isinstance(answer, dict) or not isinstance(answer.get("probabilities"), dict):
             raise ValueError("Jev response missing answers.next_action.probabilities.")

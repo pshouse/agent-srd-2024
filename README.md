@@ -161,6 +161,19 @@ Both `./bin/srd-arena <subcommand>` and `./bin/srd arena <subcommand>` support i
 stdout keeps only the report. Add `--matches-jsonl PATH` to append each match summary as soon as it finishes, so a
 long LLM bench keeps its finished matches if it's stopped. `--quiet` turns the progress lines off.
 
+Paid LLM contenders can be capped: `--budget-usd 150 --budget-ledger runs/ledger.jsonl`. Each match is priced from
+its recorded token usage, including reasoning or thinking tokens where the provider bills them, using the table in
+`src/srd2024/arena/budget.py`. Override a price with `--price MODEL=IN/OUT` (USD per million tokens). The ledger can
+be shared by parallel bench processes. A paid match isn't started once spent + `--budget-reserve-usd` (default 10)
+reaches the cap.
+
+A contender stops cleanly, its finished matches kept and listed under "Stopped Contenders", if:
+- its provider reports no credits or quota (HTTP 402, or a quota or billing error), or
+- its API key is missing, or
+- it fails three decisions in a row even after retries. 429, 5xx and timeouts are retried with backoff.
+
+The other contenders keep running.
+
 ### 2. Evaluate Live LLM Drivers (Zero External SDKs — Pure Stdlib `urllib.request`)
 
 The value of `--api-key-env` (or the provider's default key variable) is sent only to `--api-base`. Use `https` except on loopback (`127.0.0.1`, `localhost`, `::1`). Redirects are refused, and these calls ignore `HTTP_PROXY` / `HTTPS_PROXY`. Put the key in a dedicated variable, not a general cloud secret.
