@@ -109,5 +109,52 @@ class TestNarrationHooks(unittest.TestCase):
         self.assertEqual(compute_transcript_digest(g2), g["digest"])
 
 
+_DEATH_SAVE_LEAK = re.compile(r"Death Save\s*\(|\d+\s*/\s*3\s+(?:successes|failures)", re.IGNORECASE)
+
+
+class _Recorder:
+    """Wraps the heuristic and records every hook line its seat is shown."""
+
+    def __init__(self, rules: RulesStore, seen: list[tuple[str, str]]) -> None:
+        self.inner, self.seen, self.name = HeuristicTacticalDriver(rules), seen, "heuristic-tactical"
+
+    def reset(self, seed=None) -> None:
+        self.inner.reset(seed)
+
+    def decide(self, observation: dict[str, Any]):
+        for line in observation.get("recent_events") or []:
+            self.seen.append((observation["self"]["id"], line))
+        return self.inner.decide(observation)
+
+
+class TestDeathSaveLinesStayPrivate(unittest.TestCase):
+    """#73 MF1: death-save rolls and tallies must not reach other seats' observations."""
+
+    def test_observer_filter_strips_roll_and_tally(self) -> None:
+        from srd2024.arena.runner import _observer_event_text as f
+
+        self.assertEqual(f("Lyra Starweave succeeds on a Death Save (12): 1/3 successes, 0/3 failures."),
+                         "Lyra Starweave succeeds on a Death Save.")
+        self.assertEqual(f("Lyra Starweave fails a Death Save (7): 0/3 successes, 2/3 failures."),
+                         "Lyra Starweave fails a Death Save.")
+        self.assertEqual(f("Lyra rolls a Natural 1 on a Death Save (two failures): 0/3 successes, 2/3 failures."),
+                         "Lyra rolls a Natural 1 on a Death Save.")
+        self.assertEqual(f("Dorian succeeds on a Death Save (15) and stabilizes."), "Dorian succeeds on a Death Save and stabilizes.")
+        self.assertEqual(f("Dorian fails a Death Save (3) and dies."), "Dorian fails a Death Save and dies.")
+
+    def test_no_seat_sees_a_death_save_roll_or_tally(self) -> None:
+        rules = RulesStore()
+        seen: list[tuple[str, str]] = []
+        death_saves = 0
+        for seed in range(1, 9):
+            rec = _Recorder(rules, seen)
+            t = run_match("crypt-of-ghouls", party_driver=rec, enemy_driver=rec, rules=rules, seed=seed)
+            death_saves += sum(1 for a in t["actions"] for e in a["events"] if e["type"] == "death_save")
+        self.assertGreater(death_saves, 0, "no death saves in the sample")
+        self.assertTrue(any("Death Save" in line for _, line in seen), "death-save lines should still be visible")
+        leaks = [(who, line) for who, line in seen if _DEATH_SAVE_LEAK.search(line)]
+        self.assertEqual(leaks, [])
+
+
 if __name__ == "__main__":
     unittest.main()
