@@ -4,6 +4,7 @@
  *
  * - `#/` explorer
  * - `#/e/<type>:<slug>` card
+ * - `#/replay` and `#/replay/<id>` arena replay viewer
  *
  * @param {string} hash
  * @returns {{ name: "explorer", unknown: boolean } | { name: "card", type: string, slug: string, id: string, unknown: false }}
@@ -22,6 +23,12 @@ export function parseRoute(hash) {
     if (!id) return { name: "explorer", unknown: true };
     return { name: "later", view: head, id, unknown: false };
   }
+  if (head === "replay" && parts.length <= 3) {
+    if (parts.length === 2) return { name: "replay", id: "", unknown: false };
+    const id = decodePart(parts[2]).toLowerCase();
+    if (!REPLAY_ID.test(id)) return { name: "explorer", unknown: true };
+    return { name: "replay", id, unknown: false };
+  }
   if (head === "e" && parts.length === 3) {
     const decoded = decodePart(parts[2]).toLowerCase();
     const match = /^([a-z0-9-]+):([a-z0-9-]+)$/.exec(decoded);
@@ -31,6 +38,30 @@ export function parseRoute(hash) {
     return { name: "card", type: match[1], slug: match[2], id, unknown: false };
   }
   return { name: "explorer", unknown: true };
+}
+
+/** Built-in replay ids are trace file stems, such as `2026-11-27-goblin-nl-1`. */
+const REPLAY_ID = /^[a-z0-9][a-z0-9._-]{0,120}$/;
+
+/**
+ * @param {string} id built-in replay id, or "" for the loader
+ * @returns {string}
+ */
+export function replayHash(id) {
+  return id ? `#/replay/${id}` : "#/replay";
+}
+
+/**
+ * Optional `?step=N` on a replay route, so a moment in a combat can be linked.
+ * @param {string} hash
+ * @returns {number} 0 when absent or not a non-negative integer
+ */
+export function replayStepFromHash(hash) {
+  const raw = String(hash ?? "");
+  const at = raw.indexOf("?");
+  if (at === -1) return 0;
+  const value = new URLSearchParams(raw.slice(at + 1)).get("step") || "";
+  return /^\d{1,6}$/.test(value) ? Number(value) : 0;
 }
 
 const BLOCKED_IDS = new Set(["__proto__", "constructor", "prototype"]);

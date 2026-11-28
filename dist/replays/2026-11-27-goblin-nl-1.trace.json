@@ -1,0 +1,2289 @@
+{
+  "schema_version": "4",
+  "dataset_id": "srd-2024-5.2",
+  "scenario": {
+    "id": "goblin-ambush",
+    "name": "Goblin Ambush",
+    "tier": 1,
+    "party_level": 1,
+    "max_rounds": 10,
+    "description": "Tier 1 5e 2024 (SRD 5.2) skirmish: two Level 1 adventurers (Fighter and Wizard) repel a pair of Goblin Warriors testing reach vs. ranged positioning, 2024 Weapon Masteries (Sap, Vex, Slow), Shield/Mage Armor economy, and focus fire.",
+    "party_ids": [
+      "pc-bram",
+      "pc-talia"
+    ],
+    "enemy_ids": [
+      "goblin-1",
+      "goblin-2"
+    ]
+  },
+  "config": {
+    "seed": 0,
+    "max_rounds": 10,
+    "max_actions_per_turn": 6,
+    "max_retries_per_action": 2,
+    "party_driver": {
+      "pc-bram": "human",
+      "pc-talia": "heuristic-tactical"
+    },
+    "enemy_driver": {
+      "goblin-1": "heuristic-tactical",
+      "goblin-2": "heuristic-tactical"
+    }
+  },
+  "winner": "party",
+  "rounds": 2,
+  "initial_state": {
+    "schema_version": "2",
+    "encounter_id": "goblin-ambush",
+    "status": "active",
+    "round": 1,
+    "turn_order": [
+      "pc-bram",
+      "pc-talia",
+      "goblin-2",
+      "goblin-1"
+    ],
+    "active_index": 0,
+    "rng": {
+      "seed": 0,
+      "draw_index": 4
+    },
+    "pending_reroll": null,
+    "combatants": {
+      "pc-bram": {
+        "id": "pc-bram",
+        "name": "Bram Ironhand",
+        "side": "party",
+        "kind": "pc",
+        "source_id": "classes:fighter",
+        "level": 1,
+        "size": "Medium",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "hp": 12,
+        "hp_max": 12,
+        "temp_hp": 0,
+        "ac": 19,
+        "wearing_armor": true,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 4,
+        "abilities": {
+          "str": 17,
+          "dex": 14,
+          "con": 15,
+          "int": 8,
+          "wis": 12,
+          "cha": 8
+        },
+        "ability_mods": {
+          "str": 3,
+          "dex": 2,
+          "con": 2,
+          "int": -1,
+          "wis": 1,
+          "cha": -1
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": 5,
+          "dex": 2,
+          "con": 4,
+          "int": -1,
+          "wis": 1,
+          "cha": -1
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": true,
+        "extra_attacks": 1,
+        "feats": [
+          "savage-attacker",
+          "alert",
+          "defense"
+        ],
+        "turn_resources": {
+          "action": true,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [
+          {
+            "weapon_id": "equipment:longsword",
+            "slug": "longsword",
+            "name": "Longsword",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 5,
+            "damage_dice": "1d8",
+            "damage_bonus": 3,
+            "damage_type": "slashing",
+            "versatile_dice": "1d10",
+            "properties": [
+              "versatile"
+            ],
+            "mastery": "sap",
+            "mastery_active": true,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:shortbow",
+            "slug": "shortbow",
+            "name": "Shortbow",
+            "proficient": true,
+            "weapon_range": "ranged",
+            "attack_ability": "dex",
+            "attack_bonus": 4,
+            "damage_dice": "1d6",
+            "damage_bonus": 2,
+            "damage_type": "piercing",
+            "versatile_dice": null,
+            "properties": [
+              "ammunition",
+              "two-handed"
+            ],
+            "mastery": "vex",
+            "mastery_active": true,
+            "reach_ft": null,
+            "range_normal_ft": 80,
+            "range_long_ft": 320,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:javelin",
+            "slug": "javelin",
+            "name": "Javelin",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 5,
+            "damage_dice": "1d6",
+            "damage_bonus": 3,
+            "damage_type": "piercing",
+            "versatile_dice": null,
+            "properties": [
+              "thrown"
+            ],
+            "mastery": "slow",
+            "mastery_active": true,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": {
+              "long_ft": 120,
+              "normal_ft": 30
+            }
+          }
+        ],
+        "monster_actions": [],
+        "spellcasting": null,
+        "initiative": 19
+      },
+      "pc-talia": {
+        "id": "pc-talia",
+        "name": "Talia Spark",
+        "side": "party",
+        "kind": "pc",
+        "source_id": "classes:wizard",
+        "level": 1,
+        "size": "Medium",
+        "position": {
+          "x": 0,
+          "y": 15
+        },
+        "hp": 8,
+        "hp_max": 8,
+        "temp_hp": 0,
+        "ac": 12,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 2,
+        "abilities": {
+          "str": 8,
+          "dex": 14,
+          "con": 14,
+          "int": 17,
+          "wis": 12,
+          "cha": 10
+        },
+        "ability_mods": {
+          "str": -1,
+          "dex": 2,
+          "con": 2,
+          "int": 3,
+          "wis": 1,
+          "cha": 0
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": -1,
+          "dex": 2,
+          "con": 2,
+          "int": 5,
+          "wis": 3,
+          "cha": 0
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [
+          "magic-initiate"
+        ],
+        "turn_resources": {
+          "action": true,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [
+          {
+            "weapon_id": "equipment:quarterstaff",
+            "slug": "quarterstaff",
+            "name": "Quarterstaff",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 1,
+            "damage_dice": "1d6",
+            "damage_bonus": -1,
+            "damage_type": "bludgeoning",
+            "versatile_dice": "1d8",
+            "properties": [
+              "versatile"
+            ],
+            "mastery": "topple",
+            "mastery_active": false,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:dagger",
+            "slug": "dagger",
+            "name": "Dagger",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "dex",
+            "attack_bonus": 4,
+            "damage_dice": "1d4",
+            "damage_bonus": 2,
+            "damage_type": "piercing",
+            "versatile_dice": null,
+            "properties": [
+              "finesse",
+              "light",
+              "thrown"
+            ],
+            "mastery": "nick",
+            "mastery_active": false,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": {
+              "long_ft": 60,
+              "normal_ft": 20
+            }
+          }
+        ],
+        "monster_actions": [],
+        "spellcasting": {
+          "ability": "int",
+          "spell_save_dc": 13,
+          "spell_attack_bonus": 5,
+          "slots": {
+            "1": 2
+          },
+          "is_pact_magic": false,
+          "cantrips": [
+            "fire-bolt",
+            "ray-of-frost",
+            "acid-splash"
+          ],
+          "prepared_spells": [
+            "shield",
+            "magic-missile",
+            "mage-armor",
+            "burning-hands"
+          ]
+        },
+        "initiative": 11
+      },
+      "goblin-1": {
+        "id": "goblin-1",
+        "name": "Goblin Scout A",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:goblin-warrior",
+        "level": 1,
+        "size": "Small",
+        "position": {
+          "x": 20,
+          "y": 0
+        },
+        "hp": 10,
+        "hp_max": 10,
+        "temp_hp": 0,
+        "ac": 15,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 2,
+        "abilities": {
+          "str": 8,
+          "dex": 15,
+          "con": 10,
+          "int": 10,
+          "wis": 8,
+          "cha": 8
+        },
+        "ability_mods": {
+          "str": -1,
+          "dex": 2,
+          "con": 0,
+          "int": 0,
+          "wis": -1,
+          "cha": -1
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": -1,
+          "dex": 2,
+          "con": 0,
+          "int": 0,
+          "wis": -1,
+          "cha": -1
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": true,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "slashing"
+              },
+              {
+                "conditional": "advantage",
+                "dice": "1d4",
+                "type": "slashing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 5 (1d6 + 2) Slashing damage, plus 2 (1d4) Slashing damage if the attack roll had Advantage.",
+            "kind": "attack",
+            "name": "Scimitar",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "ranged",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "piercing"
+              },
+              {
+                "conditional": "advantage",
+                "dice": "1d4",
+                "type": "piercing"
+              }
+            ],
+            "desc": "Ranged Attack Roll: +4, range 80/320 ft. Hit: 5 (1d6 + 2) Piercing damage, plus 2 (1d4) Piercing damage if the attack roll had Advantage.",
+            "kind": "attack",
+            "name": "Shortbow",
+            "range_long_ft": 320,
+            "range_normal_ft": 80,
+            "reach_ft": null,
+            "save": null,
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 5
+      },
+      "goblin-2": {
+        "id": "goblin-2",
+        "name": "Goblin Scout B",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:goblin-warrior",
+        "level": 1,
+        "size": "Small",
+        "position": {
+          "x": 25,
+          "y": 15
+        },
+        "hp": 10,
+        "hp_max": 10,
+        "temp_hp": 0,
+        "ac": 15,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 2,
+        "abilities": {
+          "str": 8,
+          "dex": 15,
+          "con": 10,
+          "int": 10,
+          "wis": 8,
+          "cha": 8
+        },
+        "ability_mods": {
+          "str": -1,
+          "dex": 2,
+          "con": 0,
+          "int": 0,
+          "wis": -1,
+          "cha": -1
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": -1,
+          "dex": 2,
+          "con": 0,
+          "int": 0,
+          "wis": -1,
+          "cha": -1
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": true,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "slashing"
+              },
+              {
+                "conditional": "advantage",
+                "dice": "1d4",
+                "type": "slashing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 5 (1d6 + 2) Slashing damage, plus 2 (1d4) Slashing damage if the attack roll had Advantage.",
+            "kind": "attack",
+            "name": "Scimitar",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "ranged",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "piercing"
+              },
+              {
+                "conditional": "advantage",
+                "dice": "1d4",
+                "type": "piercing"
+              }
+            ],
+            "desc": "Ranged Attack Roll: +4, range 80/320 ft. Hit: 5 (1d6 + 2) Piercing damage, plus 2 (1d4) Piercing damage if the attack roll had Advantage.",
+            "kind": "attack",
+            "name": "Shortbow",
+            "range_long_ft": 320,
+            "range_normal_ft": 80,
+            "reach_ft": null,
+            "save": null,
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 7
+      }
+    }
+  },
+  "final_state": {
+    "schema_version": "2",
+    "encounter_id": "goblin-ambush",
+    "status": "ended",
+    "round": 2,
+    "turn_order": [
+      "pc-bram",
+      "pc-talia",
+      "goblin-2",
+      "goblin-1"
+    ],
+    "active_index": 1,
+    "rng": {
+      "seed": 0,
+      "draw_index": 14
+    },
+    "pending_reroll": null,
+    "combatants": {
+      "pc-bram": {
+        "id": "pc-bram",
+        "name": "Bram Ironhand",
+        "side": "party",
+        "kind": "pc",
+        "source_id": "classes:fighter",
+        "level": 1,
+        "size": "Medium",
+        "position": {
+          "x": 25,
+          "y": 10
+        },
+        "hp": 12,
+        "hp_max": 12,
+        "temp_hp": 0,
+        "ac": 19,
+        "wearing_armor": true,
+        "speed_ft": 30,
+        "movement_remaining_ft": 20,
+        "initiative_bonus": 4,
+        "abilities": {
+          "str": 17,
+          "dex": 14,
+          "con": 15,
+          "int": 8,
+          "wis": 12,
+          "cha": 8
+        },
+        "ability_mods": {
+          "str": 3,
+          "dex": 2,
+          "con": 2,
+          "int": -1,
+          "wis": 1,
+          "cha": -1
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": 5,
+          "dex": 2,
+          "con": 4,
+          "int": -1,
+          "wis": 1,
+          "cha": -1
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [
+          "savage-attacker",
+          "alert",
+          "defense"
+        ],
+        "turn_resources": {
+          "action": false,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [
+          {
+            "weapon_id": "equipment:longsword",
+            "slug": "longsword",
+            "name": "Longsword",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 5,
+            "damage_dice": "1d8",
+            "damage_bonus": 3,
+            "damage_type": "slashing",
+            "versatile_dice": "1d10",
+            "properties": [
+              "versatile"
+            ],
+            "mastery": "sap",
+            "mastery_active": true,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:shortbow",
+            "slug": "shortbow",
+            "name": "Shortbow",
+            "proficient": true,
+            "weapon_range": "ranged",
+            "attack_ability": "dex",
+            "attack_bonus": 4,
+            "damage_dice": "1d6",
+            "damage_bonus": 2,
+            "damage_type": "piercing",
+            "versatile_dice": null,
+            "properties": [
+              "ammunition",
+              "two-handed"
+            ],
+            "mastery": "vex",
+            "mastery_active": true,
+            "reach_ft": null,
+            "range_normal_ft": 80,
+            "range_long_ft": 320,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:javelin",
+            "slug": "javelin",
+            "name": "Javelin",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 5,
+            "damage_dice": "1d6",
+            "damage_bonus": 3,
+            "damage_type": "piercing",
+            "versatile_dice": null,
+            "properties": [
+              "thrown"
+            ],
+            "mastery": "slow",
+            "mastery_active": true,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": {
+              "long_ft": 120,
+              "normal_ft": 30
+            }
+          }
+        ],
+        "monster_actions": [],
+        "spellcasting": null,
+        "initiative": 19
+      },
+      "pc-talia": {
+        "id": "pc-talia",
+        "name": "Talia Spark",
+        "side": "party",
+        "kind": "pc",
+        "source_id": "classes:wizard",
+        "level": 1,
+        "size": "Medium",
+        "position": {
+          "x": 0,
+          "y": 15
+        },
+        "hp": 8,
+        "hp_max": 8,
+        "temp_hp": 0,
+        "ac": 12,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 2,
+        "abilities": {
+          "str": 8,
+          "dex": 14,
+          "con": 14,
+          "int": 17,
+          "wis": 12,
+          "cha": 10
+        },
+        "ability_mods": {
+          "str": -1,
+          "dex": 2,
+          "con": 2,
+          "int": 3,
+          "wis": 1,
+          "cha": 0
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": -1,
+          "dex": 2,
+          "con": 2,
+          "int": 5,
+          "wis": 3,
+          "cha": 0
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [
+          {
+            "id": "mage_armor-2",
+            "kind": "mage_armor",
+            "source_id": "pc-talia",
+            "target_id": "pc-talia",
+            "value": 13,
+            "expires": "spell_duration",
+            "created_round": 1,
+            "concentration_spell": null
+          }
+        ],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [
+          "magic-initiate"
+        ],
+        "turn_resources": {
+          "action": false,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": true,
+        "weapons": [
+          {
+            "weapon_id": "equipment:quarterstaff",
+            "slug": "quarterstaff",
+            "name": "Quarterstaff",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "str",
+            "attack_bonus": 1,
+            "damage_dice": "1d6",
+            "damage_bonus": -1,
+            "damage_type": "bludgeoning",
+            "versatile_dice": "1d8",
+            "properties": [
+              "versatile"
+            ],
+            "mastery": "topple",
+            "mastery_active": false,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": null
+          },
+          {
+            "weapon_id": "equipment:dagger",
+            "slug": "dagger",
+            "name": "Dagger",
+            "proficient": true,
+            "weapon_range": "melee",
+            "attack_ability": "dex",
+            "attack_bonus": 4,
+            "damage_dice": "1d4",
+            "damage_bonus": 2,
+            "damage_type": "piercing",
+            "versatile_dice": null,
+            "properties": [
+              "finesse",
+              "light",
+              "thrown"
+            ],
+            "mastery": "nick",
+            "mastery_active": false,
+            "reach_ft": 5,
+            "range_normal_ft": null,
+            "range_long_ft": null,
+            "throw_range": {
+              "long_ft": 60,
+              "normal_ft": 20
+            }
+          }
+        ],
+        "monster_actions": [],
+        "spellcasting": {
+          "ability": "int",
+          "spell_save_dc": 13,
+          "spell_attack_bonus": 5,
+          "slots": {
+            "1": 0
+          },
+          "is_pact_magic": false,
+          "cantrips": [
+            "fire-bolt",
+            "ray-of-frost",
+            "acid-splash"
+          ],
+          "prepared_spells": [
+            "shield",
+            "magic-missile",
+            "mage-armor",
+            "burning-hands"
+          ]
+        },
+        "initiative": 11
+      },
+      "goblin-1": {
+        "id": "goblin-1",
+        "name": "Goblin Scout A",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:goblin-warrior",
+        "level": 1,
+        "size": "Small",
+        "position": {
+          "x": 20,
+          "y": 0
+        },
+        "hp": 0,
+        "hp_max": 10,
+        "temp_hp": 0,
+        "ac": 15,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 20,
+        "initiative_bonus": 2,
+        "abilities": {
+          "str": 8,
+          "dex": 15,
+          "con": 10,
+          "int": 10,
+          "wis": 8,
+          "cha": 8
+        },
+        "ability_mods": {
+          "str": -1,
+          "dex": 2,
+          "con": 0,
+          "int": 0,
+          "wis": -1,
+          "cha": -1
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": -1,
+          "dex": 2,
+          "con": 0,
+          "int": 0,
+          "wis": -1,
+          "cha": -1
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [
+          {
+            "id": "sap-3",
+            "kind": "sap",
+            "source_id": "pc-bram",
+            "target_id": "goblin-1",
+            "value": true,
+            "expires": "start_of_source_next_turn",
+            "created_round": 2,
+            "concentration_spell": null
+          }
+        ],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": false,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": false,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "slashing"
+              },
+              {
+                "conditional": "advantage",
+                "dice": "1d4",
+                "type": "slashing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 5 (1d6 + 2) Slashing damage, plus 2 (1d4) Slashing damage if the attack roll had Advantage.",
+            "kind": "attack",
+            "name": "Scimitar",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "ranged",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "piercing"
+              },
+              {
+                "conditional": "advantage",
+                "dice": "1d4",
+                "type": "piercing"
+              }
+            ],
+            "desc": "Ranged Attack Roll: +4, range 80/320 ft. Hit: 5 (1d6 + 2) Piercing damage, plus 2 (1d4) Piercing damage if the attack roll had Advantage.",
+            "kind": "attack",
+            "name": "Shortbow",
+            "range_long_ft": 320,
+            "range_normal_ft": 80,
+            "reach_ft": null,
+            "save": null,
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 5
+      },
+      "goblin-2": {
+        "id": "goblin-2",
+        "name": "Goblin Scout B",
+        "side": "enemy",
+        "kind": "monster",
+        "source_id": "monsters:goblin-warrior",
+        "level": 1,
+        "size": "Small",
+        "position": {
+          "x": 25,
+          "y": 15
+        },
+        "hp": 0,
+        "hp_max": 10,
+        "temp_hp": 0,
+        "ac": 15,
+        "wearing_armor": false,
+        "speed_ft": 30,
+        "movement_remaining_ft": 30,
+        "initiative_bonus": 2,
+        "abilities": {
+          "str": 8,
+          "dex": 15,
+          "con": 10,
+          "int": 10,
+          "wis": 8,
+          "cha": 8
+        },
+        "ability_mods": {
+          "str": -1,
+          "dex": 2,
+          "con": 0,
+          "int": 0,
+          "wis": -1,
+          "cha": -1
+        },
+        "proficiency_bonus": 2,
+        "saves": {
+          "str": -1,
+          "dex": 2,
+          "con": 0,
+          "int": 0,
+          "wis": -1,
+          "cha": -1
+        },
+        "damage_resistances": [],
+        "damage_immunities": [],
+        "damage_vulnerabilities": [],
+        "condition_immunities": [],
+        "conditions": [],
+        "exhaustion_level": 0,
+        "concentration": null,
+        "active_effects": [],
+        "heroic_inspiration": false,
+        "extra_attacks": 1,
+        "feats": [],
+        "turn_resources": {
+          "action": false,
+          "bonus_action": true,
+          "reaction": true,
+          "attacks_remaining": 0,
+          "cleave_used": false,
+          "nick_used": false,
+          "disengaged": false,
+          "light_attack_made": false
+        },
+        "death_saves": {
+          "successes": 0,
+          "failures": 0
+        },
+        "alive": false,
+        "weapons": [],
+        "monster_actions": [
+          {
+            "attack_bonus": 4,
+            "attack_kind": "melee",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "slashing"
+              },
+              {
+                "conditional": "advantage",
+                "dice": "1d4",
+                "type": "slashing"
+              }
+            ],
+            "desc": "Melee Attack Roll: +4, reach 5 ft. Hit: 5 (1d6 + 2) Slashing damage, plus 2 (1d4) Slashing damage if the attack roll had Advantage.",
+            "kind": "attack",
+            "name": "Scimitar",
+            "range_long_ft": null,
+            "range_normal_ft": null,
+            "reach_ft": 5,
+            "save": null,
+            "usage": null
+          },
+          {
+            "attack_bonus": 4,
+            "attack_kind": "ranged",
+            "conditions_applied": [],
+            "damage_parts": [
+              {
+                "conditional": null,
+                "dice": "1d6+2",
+                "type": "piercing"
+              },
+              {
+                "conditional": "advantage",
+                "dice": "1d4",
+                "type": "piercing"
+              }
+            ],
+            "desc": "Ranged Attack Roll: +4, range 80/320 ft. Hit: 5 (1d6 + 2) Piercing damage, plus 2 (1d4) Piercing damage if the attack roll had Advantage.",
+            "kind": "attack",
+            "name": "Shortbow",
+            "range_long_ft": 320,
+            "range_normal_ft": 80,
+            "reach_ft": null,
+            "save": null,
+            "usage": null
+          }
+        ],
+        "spellcasting": null,
+        "initiative": 7
+      }
+    },
+    "_effect_seq": 3
+  },
+  "actions": [
+    {
+      "seq": 1,
+      "round": 1,
+      "turn_index": 0,
+      "action_index": 0,
+      "actor_id": "pc-bram",
+      "actor_name": "Bram Ironhand",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "pc-bram",
+        "target_id": "goblin-1",
+        "weapon": "javelin"
+      },
+      "rationale": "'The one directly in front' is Goblin Scout A at (20,0), straight ahead on Bram's line and the nearest foe at 20 ft. Javelin was named explicitly. This matches menu option 3 (Javelin, Mastery: slow).",
+      "table_talk": "Javelin's going into the goblin straight ahead. Should slow him down if it lands!",
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "pc-bram",
+          "target_id": "goblin-1",
+          "weapon": "javelin",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            1
+          ],
+          "chosen": 1,
+          "nat20": false,
+          "nat1": true,
+          "attack_bonus": 5,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 6,
+          "target_ac": 15,
+          "hit": false,
+          "crit": false
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Bram Ironhand misses Goblin Scout A with Javelin (6 vs AC 15)."
+      ],
+      "usage": {
+        "prompt_tokens": 1317,
+        "completion_tokens": 173,
+        "total_tokens": 1490
+      }
+    },
+    {
+      "seq": 2,
+      "round": 1,
+      "turn_index": 0,
+      "action_index": 1,
+      "actor_id": "pc-bram",
+      "actor_name": "Bram Ironhand",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "reroll",
+        "actor_id": "pc-bram"
+      },
+      "rationale": "Human spent Heroic Inspiration to reroll.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "heroic_inspiration_spent",
+          "actor_id": "pc-bram",
+          "previous_d20": 1,
+          "previous_total": 6,
+          "target_ac": 15,
+          "label": "Javelin"
+        },
+        {
+          "seq": 2,
+          "type": "attack_roll",
+          "actor_id": "pc-bram",
+          "target_id": "goblin-1",
+          "weapon": "javelin",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            13
+          ],
+          "chosen": 13,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 5,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 18,
+          "target_ac": 15,
+          "hit": true,
+          "crit": false
+        },
+        {
+          "seq": 3,
+          "type": "damage_applied",
+          "source_id": "pc-bram",
+          "target_id": "goblin-1",
+          "breakdown": [
+            {
+              "type": "piercing",
+              "raw": 4,
+              "effective": 4,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 4,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 4,
+          "hp_before": 10,
+          "hp_after": 6
+        },
+        {
+          "seq": 4,
+          "type": "mastery_triggered",
+          "mastery": "slow",
+          "actor_id": "pc-bram",
+          "target_id": "goblin-1",
+          "speed_penalty_ft": 10
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "goblin-1",
+            "before": 10,
+            "after": 6,
+            "delta": -4
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [
+          {
+            "id": "goblin-1",
+            "added": [
+              "slow"
+            ],
+            "removed": []
+          }
+        ],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Bram Ironhand spends Heroic Inspiration to reroll Javelin (previous total 6).",
+        "Bram Ironhand hits Goblin Scout A with Javelin (18 vs AC 15) for 4 piercing damage.",
+        "Slow mastery reduces Goblin Scout A's speed by 10 ft until start of Bram Ironhand's next turn."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 3,
+      "round": 1,
+      "turn_index": 0,
+      "action_index": 2,
+      "actor_id": "pc-bram",
+      "actor_name": "Bram Ironhand",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "move",
+        "actor_id": "pc-bram",
+        "to": {
+          "x": 15,
+          "y": 0
+        }
+      },
+      "rationale": "'Got him!' is ambiguous. It may be a celebration rather than a new action. I read it as pressing in on the nearest foe, Goblin Scout A (20 ft), and chose menu option 1 to close to 5 ft. No enemy is in reach yet, so an attack wasn't legal. If the player meant to end their turn, option 4 applies instead.",
+      "table_talk": "I'm on Scout A, moving in!",
+      "events": [
+        {
+          "seq": 1,
+          "type": "moved",
+          "actor_id": "pc-bram",
+          "from_pos": {
+            "x": 0,
+            "y": 0
+          },
+          "to_pos": {
+            "x": 15,
+            "y": 0
+          },
+          "distance_ft": 15,
+          "movement_cost_ft": 15,
+          "crawled": false
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [
+          {
+            "id": "pc-bram",
+            "before": {
+              "x": 0,
+              "y": 0
+            },
+            "after": {
+              "x": 15,
+              "y": 0
+            }
+          }
+        ],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Bram Ironhand moves 15 ft to (15, 0)."
+      ],
+      "usage": {
+        "prompt_tokens": 707,
+        "completion_tokens": 511,
+        "total_tokens": 1218
+      }
+    },
+    {
+      "seq": 4,
+      "round": 1,
+      "turn_index": 0,
+      "action_index": 3,
+      "actor_id": "pc-bram",
+      "actor_name": "Bram Ironhand",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "pc-bram"
+      },
+      "rationale": "Human chose [3]: End Turn",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "pc-bram",
+          "round": 1
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "pc-talia",
+          "round": 1
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 1: Talia Spark's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 5,
+      "round": 1,
+      "turn_index": 1,
+      "action_index": 0,
+      "actor_id": "pc-talia",
+      "actor_name": "Talia Spark",
+      "side": "party",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "cast_spell",
+        "actor_id": "pc-talia",
+        "spell": "mage-armor",
+        "slot_level": 1,
+        "target_ids": [
+          "pc-talia"
+        ]
+      },
+      "rationale": "Casting Mage Armor to raise unarmored AC to 13 + DEX.",
+      "table_talk": "Weaving Mage Armor before pressing the attack!",
+      "events": [
+        {
+          "seq": 1,
+          "type": "spell_cast",
+          "actor_id": "pc-talia",
+          "spell": "mage-armor",
+          "slot_level": 1,
+          "target_ids": [
+            "pc-talia"
+          ],
+          "coverage": "full",
+          "unmodeled_clauses": []
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [
+          {
+            "id": "pc-talia",
+            "slot_level": 1,
+            "before": 2,
+            "after": 1
+          }
+        ],
+        "effect_changes": [
+          {
+            "id": "pc-talia",
+            "added": [
+              "mage_armor"
+            ],
+            "removed": []
+          }
+        ],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Talia Spark casts Mage Armor on Talia Spark (AC 13 + DEX)."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 6,
+      "round": 1,
+      "turn_index": 1,
+      "action_index": 1,
+      "actor_id": "pc-talia",
+      "actor_name": "Talia Spark",
+      "side": "party",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "pc-talia"
+      },
+      "rationale": "Turn resources exhausted; ending turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "pc-talia",
+          "round": 1
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "goblin-2",
+          "round": 1
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 1: Goblin Scout B's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 7,
+      "round": 1,
+      "turn_index": 2,
+      "action_index": 0,
+      "actor_id": "goblin-2",
+      "actor_name": "Goblin Scout B",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "goblin-2",
+        "action": "Shortbow",
+        "target_ids": [
+          "pc-talia"
+        ]
+      },
+      "rationale": "Firing ranged Shortbow at Talia Spark.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "goblin-2",
+          "target_id": "pc-talia",
+          "action": "Shortbow",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            2
+          ],
+          "chosen": 2,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 4,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 6,
+          "target_ac": 15,
+          "hit": false,
+          "crit": false
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Goblin Scout B misses Talia Spark with Shortbow (6 vs AC 15)."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 8,
+      "round": 1,
+      "turn_index": 2,
+      "action_index": 1,
+      "actor_id": "goblin-2",
+      "actor_name": "Goblin Scout B",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "goblin-2"
+      },
+      "rationale": "Monster action spent; ending turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "goblin-2",
+          "round": 1
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "goblin-1",
+          "round": 1
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 1: Goblin Scout A's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 9,
+      "round": 1,
+      "turn_index": 3,
+      "action_index": 0,
+      "actor_id": "goblin-1",
+      "actor_name": "Goblin Scout A",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "goblin-1",
+        "action": "Scimitar",
+        "target_ids": [
+          "pc-bram"
+        ]
+      },
+      "rationale": "Attacking Bram Ironhand in melee with Scimitar.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "goblin-1",
+          "target_id": "pc-bram",
+          "action": "Scimitar",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            7
+          ],
+          "chosen": 7,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 4,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 11,
+          "target_ac": 19,
+          "hit": false,
+          "crit": false
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Goblin Scout A misses Bram Ironhand with Scimitar (11 vs AC 19)."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 10,
+      "round": 1,
+      "turn_index": 3,
+      "action_index": 1,
+      "actor_id": "goblin-1",
+      "actor_name": "Goblin Scout A",
+      "side": "enemy",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "goblin-1"
+      },
+      "rationale": "Monster action spent; ending turn.",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "goblin-1",
+          "round": 1
+        },
+        {
+          "seq": 2,
+          "type": "effect_expired",
+          "target_id": "goblin-1",
+          "kind": "slow",
+          "source_id": "pc-bram"
+        },
+        {
+          "seq": 3,
+          "type": "turn_started",
+          "actor_id": "pc-bram",
+          "round": 2
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [
+          {
+            "id": "goblin-1",
+            "added": [],
+            "removed": [
+              "slow"
+            ]
+          }
+        ],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 2: Bram Ironhand's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 11,
+      "round": 2,
+      "turn_index": 4,
+      "action_index": 0,
+      "actor_id": "pc-bram",
+      "actor_name": "Bram Ironhand",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "attack",
+        "actor_id": "pc-bram",
+        "target_id": "goblin-1",
+        "weapon": "longsword"
+      },
+      "rationale": "Human chose [1]: Attack Goblin Scout A with Longsword (5 ft, Mastery: sap)",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "attack_roll",
+          "actor_id": "pc-bram",
+          "target_id": "goblin-1",
+          "weapon": "longsword",
+          "mode": "normal",
+          "advantage_sources": [],
+          "disadvantage_sources": [],
+          "rolls": [
+            18
+          ],
+          "chosen": 18,
+          "nat20": false,
+          "nat1": false,
+          "attack_bonus": 5,
+          "exhaustion_penalty": 0,
+          "bonus_dice": [],
+          "total": 23,
+          "target_ac": 15,
+          "hit": true,
+          "crit": false
+        },
+        {
+          "seq": 2,
+          "type": "damage_applied",
+          "source_id": "pc-bram",
+          "target_id": "goblin-1",
+          "breakdown": [
+            {
+              "type": "slashing",
+              "raw": 6,
+              "effective": 6,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 6,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 6,
+          "hp_before": 6,
+          "hp_after": 0
+        },
+        {
+          "seq": 3,
+          "type": "combatant_defeated",
+          "combatant_id": "goblin-1"
+        },
+        {
+          "seq": 4,
+          "type": "mastery_triggered",
+          "mastery": "sap",
+          "actor_id": "pc-bram",
+          "target_id": "goblin-1"
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "goblin-1",
+            "before": 6,
+            "after": 0,
+            "delta": -6
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [
+          {
+            "id": "goblin-1",
+            "added": [
+              "sap"
+            ],
+            "removed": []
+          }
+        ],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Goblin Scout A drops to 0 HP and is defeated.",
+        "Bram Ironhand hits Goblin Scout A with Longsword (23 vs AC 15) for 6 slashing damage.",
+        "Sap mastery gives Goblin Scout A Disadvantage on its next attack roll."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 12,
+      "round": 2,
+      "turn_index": 4,
+      "action_index": 1,
+      "actor_id": "pc-bram",
+      "actor_name": "Bram Ironhand",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "move",
+        "actor_id": "pc-bram",
+        "to": {
+          "x": 25,
+          "y": 10
+        }
+      },
+      "rationale": "Bram has no block or interpose action, so the closest legal option is menu 1: move to (25,10), 5 ft from Goblin Scout B. This engages the goblin and puts Bram in its path, so leaving would provoke an opportunity attack. The move costs 10 ft of his 30.",
+      "table_talk": "I'm stepping up on the last goblin. Talia, stay behind me, it'll have to get past me first!",
+      "events": [
+        {
+          "seq": 1,
+          "type": "moved",
+          "actor_id": "pc-bram",
+          "from_pos": {
+            "x": 15,
+            "y": 0
+          },
+          "to_pos": {
+            "x": 25,
+            "y": 10
+          },
+          "distance_ft": 10,
+          "movement_cost_ft": 10,
+          "crawled": false
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [
+          {
+            "id": "pc-bram",
+            "before": {
+              "x": 15,
+              "y": 0
+            },
+            "after": {
+              "x": 25,
+              "y": 10
+            }
+          }
+        ],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Bram Ironhand moves 10 ft to (25, 10)."
+      ],
+      "usage": {
+        "prompt_tokens": 594,
+        "completion_tokens": 275,
+        "total_tokens": 869
+      }
+    },
+    {
+      "seq": 13,
+      "round": 2,
+      "turn_index": 4,
+      "action_index": 2,
+      "actor_id": "pc-bram",
+      "actor_name": "Bram Ironhand",
+      "side": "party",
+      "driver": "human",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "end_turn",
+        "actor_id": "pc-bram"
+      },
+      "rationale": "Human chose [2]: End Turn",
+      "table_talk": null,
+      "events": [
+        {
+          "seq": 1,
+          "type": "turn_ended",
+          "actor_id": "pc-bram",
+          "round": 2
+        },
+        {
+          "seq": 2,
+          "type": "turn_started",
+          "actor_id": "pc-talia",
+          "round": 2
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [],
+        "effect_changes": [],
+        "turn_changed": true
+      },
+      "narrative_hooks": [
+        "Round 2: Talia Spark's turn begins."
+      ],
+      "usage": {}
+    },
+    {
+      "seq": 14,
+      "round": 2,
+      "turn_index": 5,
+      "action_index": 0,
+      "actor_id": "pc-talia",
+      "actor_name": "Talia Spark",
+      "side": "party",
+      "driver": "heuristic-tactical",
+      "attempts": 1,
+      "first_attempt_legal": true,
+      "auto_skipped": false,
+      "auto_end_turn": false,
+      "forced_fallback": false,
+      "intent": {
+        "type": "cast_spell",
+        "actor_id": "pc-talia",
+        "spell": "magic-missile",
+        "target_ids": [
+          "goblin-2"
+        ],
+        "slot_level": 1
+      },
+      "rationale": "Casting magic-missile (slot 1) on Goblin Scout B (10.5 eff avg).",
+      "table_talk": "Focusing magic-missile on Goblin Scout B!",
+      "events": [
+        {
+          "seq": 1,
+          "type": "spell_cast",
+          "actor_id": "pc-talia",
+          "spell": "magic-missile",
+          "slot_level": 1,
+          "target_ids": [
+            "goblin-2"
+          ],
+          "coverage": "full",
+          "unmodeled_clauses": []
+        },
+        {
+          "seq": 2,
+          "type": "damage_applied",
+          "source_id": "pc-talia",
+          "target_id": "goblin-2",
+          "breakdown": [
+            {
+              "type": "force",
+              "raw": 3,
+              "effective": 3,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 3,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 3,
+          "hp_before": 10,
+          "hp_after": 7
+        },
+        {
+          "seq": 3,
+          "type": "damage_applied",
+          "source_id": "pc-talia",
+          "target_id": "goblin-2",
+          "breakdown": [
+            {
+              "type": "force",
+              "raw": 5,
+              "effective": 5,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 5,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 5,
+          "hp_before": 7,
+          "hp_after": 2
+        },
+        {
+          "seq": 4,
+          "type": "damage_applied",
+          "source_id": "pc-talia",
+          "target_id": "goblin-2",
+          "breakdown": [
+            {
+              "type": "force",
+              "raw": 3,
+              "effective": 3,
+              "modifier": "normal"
+            }
+          ],
+          "total_damage": 3,
+          "temp_hp_absorbed": 0,
+          "hp_damage": 3,
+          "hp_before": 2,
+          "hp_after": 0
+        },
+        {
+          "seq": 5,
+          "type": "combatant_defeated",
+          "combatant_id": "goblin-2"
+        }
+      ],
+      "state_diff": {
+        "hp_changes": [
+          {
+            "id": "goblin-2",
+            "before": 10,
+            "after": 0,
+            "delta": -10
+          }
+        ],
+        "condition_changes": [],
+        "position_changes": [],
+        "slot_changes": [
+          {
+            "id": "pc-talia",
+            "slot_level": 1,
+            "before": 1,
+            "after": 0
+          }
+        ],
+        "effect_changes": [],
+        "turn_changed": false
+      },
+      "narrative_hooks": [
+        "Talia Spark casts Magic Missile at Goblin Scout B for 11 force damage.",
+        "Goblin Scout B drops to 0 HP and is defeated."
+      ],
+      "usage": {}
+    }
+  ],
+  "violations": [],
+  "rejected_inputs": [],
+  "recharge_events": [],
+  "blackboard": {
+    "party": [
+      {
+        "round": 1,
+        "actor_id": "pc-bram",
+        "actor_name": "Bram Ironhand",
+        "message": "Javelin's going into the goblin straight ahead. Should slow him down if it lands!"
+      },
+      {
+        "round": 1,
+        "actor_id": "pc-bram",
+        "actor_name": "Bram Ironhand",
+        "message": "I'm on Scout A, moving in!"
+      },
+      {
+        "round": 1,
+        "actor_id": "pc-talia",
+        "actor_name": "Talia Spark",
+        "message": "Weaving Mage Armor before pressing the attack!"
+      },
+      {
+        "round": 2,
+        "actor_id": "pc-bram",
+        "actor_name": "Bram Ironhand",
+        "message": "I'm stepping up on the last goblin. Talia, stay behind me, it'll have to get past me first!"
+      },
+      {
+        "round": 2,
+        "actor_id": "pc-talia",
+        "actor_name": "Talia Spark",
+        "message": "Focusing magic-missile on Goblin Scout B!"
+      }
+    ],
+    "enemy": []
+  },
+  "scorecard": {
+    "side": "party",
+    "outcome_score": 99.0,
+    "rules_legality_score": 100.0,
+    "tactical_score": 94.0,
+    "coordination_score": 88.0,
+    "composite_score": 96.35,
+    "weights": {
+      "outcome": 0.35,
+      "rules_legality": 0.25,
+      "tactical": 0.25,
+      "coordination": 0.15
+    },
+    "metrics": {
+      "winner": "party",
+      "rounds": 2,
+      "max_rounds": 10,
+      "survivors": 2,
+      "total_allies": 2,
+      "hp_ratio": 1.0,
+      "effective_damage_dealt": 21,
+      "wasted_immune_hits": 0,
+      "wasted_immune_raw_damage": 0,
+      "mastery_triggers": 2,
+      "mastery_setup_triggers": 2,
+      "effective_buff_casts": 1,
+      "ally_revivals": 0,
+      "ally_heals": 0,
+      "ally_buff_targets": 0,
+      "help_actions": 0,
+      "effective_help_actions": 0,
+      "friendly_fire_incidents": 0,
+      "friendly_fire_damage": 0,
+      "table_talk_messages": 5,
+      "focus_fire_ratio": 1.0,
+      "active_turns": 4,
+      "productive_turns": 4,
+      "contribution": 1.0,
+      "productive_talk_turns": 4,
+      "total_decisions": 10,
+      "first_attempt_legal": 10,
+      "total_violations": 0,
+      "forced_fallbacks": 0,
+      "llm_usage_totals": {
+        "prompt_tokens": 2618,
+        "completion_tokens": 959,
+        "total_tokens": 3577
+      }
+    }
+  },
+  "digest": "d3d64f6101491a0a77bde2b82cf5bba9349e0a6a8a1713727213d644c11699e1"
+}

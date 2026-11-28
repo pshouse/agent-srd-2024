@@ -13,9 +13,9 @@ import {
   valuesForFacet,
 } from "./lib/facets.js";
 import { invalidateInspector } from "./lib/inspector-token.js";
-import { cardAssetUrl } from "./lib/paths.js";
+import { cardAssetUrl, distAssetUrl } from "./lib/paths.js";
 import { buildCatalog, openTarget, resolveIdentifier } from "./lib/resolve.js";
-import { readHashState } from "./lib/router.js";
+import { readHashState, replayStepFromHash } from "./lib/router.js";
 import { matchRanges, searchEntities } from "./lib/search.js";
 
 const PAGE = 10;
@@ -88,6 +88,7 @@ function mount(manifest, catalog) {
   let cardState = null;
   let cardGen = 0;
   let viewGen = 0;
+  let replayView = null;
 
   mainEl.replaceChildren();
   const hero = el("div", { class: "wrap hero" });
@@ -204,29 +205,66 @@ function mount(manifest, catalog) {
     }
   }
 
+  async function showReplay(state, gen) {
+    const mod = await import("./lib/replay-view.js");
+    replayView = mod;
+    if (gen !== viewGen) return;
+    try {
+      await mod.renderReplay(resultsCol, {
+        routeId: state.route.id,
+        step: replayStepFromHash(location.hash),
+        indexUrl: distAssetUrl(import.meta.url, "replays/index.json"),
+        setHash(next) {
+          if (location.hash !== next) location.hash = next;
+        },
+        replaceHash(next) {
+          const url = new URL(location.href);
+          url.hash = next;
+          history.replaceState(null, "", url);
+        },
+      });
+    } catch {
+      if (gen !== viewGen) return;
+      resultsCol.textContent = "This replay cannot be shown.";
+    }
+  }
+
   function render() {
     const gen = ++viewGen;
     invalidateInspector(resultsCol);
+    if (replayView) replayView.disposeReplay();
     const state = readState();
     syncNav(state.route);
     syncPlaceholder();
     const bundleRoute = state.route.name === "later" && state.route.view === "bundle";
     const graphRoute = state.route.name === "later" && state.route.view === "graph";
+    const replayRoute = state.route.name === "replay";
     mainEl.classList.toggle("mode-card", state.route.name === "card");
+    mainEl.classList.toggle("mode-replay", replayRoute);
     mainEl.classList.toggle("mode-bundle", bundleRoute);
     mainEl.classList.toggle("mode-graph", graphRoute);
     const openEntity = state.route.id ? catalog.byId.get(state.route.id) : null;
     const titlePrefix = graphRoute ? "References around " : bundleRoute ? "Bundle for " : "";
     document.title = openEntity
       ? `${titlePrefix}${openEntity.name} · 5e 2024 SRD Agent Pack`
-      : "5e 2024 SRD Agent Pack";
+      : replayRoute
+        ? "Replay · 5e 2024 SRD Agent Pack"
+        : "5e 2024 SRD Agent Pack";
     if (input.value !== state.q) input.value = state.q;
     const showTypo = /['"\u2018\u2019\u201C\u201D]/.test(state.q);
     typo.hidden = !showTypo;
     typo.textContent = showTypo
       ? "Matching \u201cDragon\u2019s\u201d and \u201cDragon's\u201d alike. Apostrophes and quotes are normalized."
       : "";
-    explorer.classList.toggle("solo", state.route.name === "later");
+    explorer.classList.toggle("solo", state.route.name === "later" || replayRoute);
+    if (replayRoute) {
+      explorer.classList.remove("has-card");
+      side.hidden = true;
+      cardSlot.hidden = true;
+      cardSlot.replaceChildren();
+      void showReplay(state, gen);
+      return;
+    }
     if (bundleRoute) {
       explorer.classList.remove("has-card");
       side.hidden = true;
@@ -852,6 +890,8 @@ function hashFor(state) {
   if (state.route && state.route.name === "card") path = `/e/${state.route.id}`;
   else if (state.route && state.route.name === "later") {
     path = `/${state.route.view}/${state.route.id || ""}`;
+  } else if (state.route && state.route.name === "replay") {
+    path = state.route.id ? `/replay/${state.route.id}` : "/replay";
   }
   return `#${path}${qs ? `?${qs}` : ""}`;
 }
@@ -859,7 +899,12 @@ function hashFor(state) {
 function syncNav(route) {
   for (const link of document.querySelectorAll(".nav a")) {
     const view = link.getAttribute("data-view");
-    const on = view === "explorer" ? route.name !== "later" : route.name === "later" && route.view === view;
+    const on =
+      view === "explorer"
+        ? route.name !== "later" && route.name !== "replay"
+        : view === "replay"
+          ? route.name === "replay"
+          : route.name === "later" && route.view === view;
     if (on) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
