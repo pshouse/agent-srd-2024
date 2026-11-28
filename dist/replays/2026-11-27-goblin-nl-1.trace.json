@@ -985,18 +985,7 @@
         "conditions": [],
         "exhaustion_level": 0,
         "concentration": null,
-        "active_effects": [
-          {
-            "id": "sap-3",
-            "kind": "sap",
-            "source_id": "pc-bram",
-            "target_id": "goblin-1",
-            "value": true,
-            "expires": "start_of_source_next_turn",
-            "created_round": 2,
-            "concentration_spell": null
-          }
-        ],
+        "active_effects": [],
         "heroic_inspiration": false,
         "extra_attacks": 1,
         "feats": [],
@@ -1199,7 +1188,7 @@
         "initiative": 7
       }
     },
-    "_effect_seq": 3
+    "_effect_seq": 2
   },
   "actions": [
     {
@@ -1914,10 +1903,11 @@
         },
         {
           "seq": 4,
-          "type": "mastery_triggered",
+          "type": "mastery_skipped",
           "mastery": "sap",
           "actor_id": "pc-bram",
-          "target_id": "goblin-1"
+          "target_id": "goblin-1",
+          "reason": "target_down"
         }
       ],
       "state_diff": {
@@ -1932,21 +1922,12 @@
         "condition_changes": [],
         "position_changes": [],
         "slot_changes": [],
-        "effect_changes": [
-          {
-            "id": "goblin-1",
-            "added": [
-              "sap"
-            ],
-            "removed": []
-          }
-        ],
+        "effect_changes": [],
         "turn_changed": false
       },
       "narrative_hooks": [
-        "Goblin Scout A drops to 0 HP and is defeated.",
         "Bram Ironhand hits Goblin Scout A with Longsword (23 vs AC 15) for 6 slashing damage.",
-        "Sap mastery gives Goblin Scout A Disadvantage on its next attack roll."
+        "Goblin Scout A drops to 0 HP and is defeated."
       ],
       "usage": {}
     },
@@ -2248,9 +2229,9 @@
     "side": "party",
     "outcome_score": 99.0,
     "rules_legality_score": 100.0,
-    "tactical_score": 94.0,
-    "coordination_score": 88.0,
-    "composite_score": 96.35,
+    "tactical_score": 91.0,
+    "coordination_score": 84.0,
+    "composite_score": 95.0,
     "weights": {
       "outcome": 0.35,
       "rules_legality": 0.25,
@@ -2267,8 +2248,8 @@
       "effective_damage_dealt": 21,
       "wasted_immune_hits": 0,
       "wasted_immune_raw_damage": 0,
-      "mastery_triggers": 2,
-      "mastery_setup_triggers": 2,
+      "mastery_triggers": 1,
+      "mastery_setup_triggers": 1,
       "effective_buff_casts": 1,
       "ally_revivals": 0,
       "ally_heals": 0,
@@ -2294,5 +2275,5 @@
       }
     }
   },
-  "digest": "f9e476592902508cc9ceedd11e0276f0c2bdc04f4ed7e1c49b00f4b89349bfbe"
+  "digest": "ed2e04f6b9a1f84798c8908cafffe84efde6e948435eb41590796c97725f6163"
 }

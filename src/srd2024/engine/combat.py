@@ -202,6 +202,10 @@ ON_HIT_SMITES: dict[str, dict[str, Any]] = {
 }
 
 
+# On-hit masteries that put an effect on (or move) the creature that was hit (#27).
+_TARGET_EFFECT_MASTERIES: frozenset[str] = frozenset({"push", "sap", "slow", "topple", "vex"})
+
+
 def _knows_on_hit_smite(combatant: dict[str, Any]) -> bool:
     sc = combatant.get("spellcasting")
     if not isinstance(sc, dict):
@@ -2184,8 +2188,19 @@ def _resolve_single_weapon_attack(
         if active == attacker_id:
             attacker["turn_resources"]["last_melee_hit"] = {"target_id": target_id, "crit": bool(crit)}
 
-    # Trigger on-hit 2024 Weapon Masteries.
-    if mastery == "push":
+    # Trigger on-hit 2024 Weapon Masteries. Push, Sap, Slow, Topple and Vex do nothing to a creature this hit
+    # just dropped (or that was already at 0 HP): there is no effect to put on it (#27). Cleave is about a
+    # second creature, so it still applies; Graze only works on a miss.
+    target_down = not target.get("alive") or int(target.get("hp", 0)) <= 0
+    if target_down and mastery in _TARGET_EFFECT_MASTERIES:
+        tracker.emit(
+            "mastery_skipped",
+            mastery=mastery,
+            actor_id=attacker_id,
+            target_id=target_id,
+            reason="target_down",
+        )
+    elif mastery == "push":
         t_size = str(target.get("size") or "Medium").strip().lower()
         if SIZE_RANK.get(t_size, 2) <= SIZE_RANK["large"]:
             dx = int(target["position"]["x"]) - int(attacker["position"]["x"])
