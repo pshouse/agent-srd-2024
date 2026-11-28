@@ -616,9 +616,10 @@ class TestInteractiveSessionsAndSeats(unittest.TestCase):
 
     def test_heroic_inspiration_reroll_on_round2_javelin_miss_talia_hooks_and_replay(self) -> None:
         # R1: Bram closes to (15,0) [5], attacks Goblin Scout A [1], end [e]; Talia casts Magic Missile at Scout A.
-        # R2: Bram throws Javelin at Goblin Scout B [2] -> misses (7 vs AC 15),
+        # R2: Bram throws Javelin at Goblin Scout B [2] -> misses (9 vs AC 15),
         #     sees Heroic Inspiration option #1 in HUD/menu, types 'r' to reroll; Talia casts Ray of Frost.
-        # (Seed 22 since #33: Talia no longer casts Shield on her own turn, which shifted seed 42's dice.)
+        # (Seed 22 since #33: Talia no longer casts Shield on her own turn, which shifted seed 42's dice. Seed 10 since
+        # #90: Talia no longer spends her opening turn on Mage Armor with a goblin in range.)
         # The menu script needs the original two-goblin line-up (before the difficulty retune added a Goblin Minion);
         # its replay then rebuilds the scenario from the trace, since the built-in line-up no longer matches.
         script = ["5", "1", "e", "2", "r", "e"] + ["1", "e"] * 15
@@ -630,7 +631,7 @@ class TestInteractiveSessionsAndSeats(unittest.TestCase):
             two_goblins,
             rules=self.rules,
             play_as="pc-bram",
-            seed=22,
+            seed=10,
             input_fn=in_fn,
             output_fn=out_fn,
         )
@@ -638,7 +639,7 @@ class TestInteractiveSessionsAndSeats(unittest.TestCase):
         joined_out = "\n".join(outputs)
         self.assertIn("Heroic Inspiration: Ready", joined_out)
         self.assertIn(
-            "Spend Heroic Inspiration — reroll Javelin vs Goblin Scout B (was 7)",
+            "Spend Heroic Inspiration — reroll Javelin vs Goblin Scout B (was 9)",
             joined_out,
         )
         self.assertIn("Bram Ironhand spends Heroic Inspiration to reroll Javelin", joined_out)

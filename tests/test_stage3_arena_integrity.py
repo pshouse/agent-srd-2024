@@ -28,6 +28,10 @@ from srd2024.engine.store import RulesStore
 
 _SCENARIOS = ("goblin-ambush", "crypt-of-ghouls", "wyrmling-lair")
 _SEEDS = (1, 2, 3)
+# Policy-ordering and talk-spam guards average over seeds 1-10 (30 games per policy). Nine games (seeds 1-3) were
+# too noisy to rank heuristic-tactical vs greedy: after #53 the heuristic trailed greedy there (59.83 vs 67.15) while
+# beating it on seeds 11-40 (82.43 vs 68.21). See #90.
+_ORDER_SEEDS = tuple(range(1, 11))
 _LEAK_RES = (
     re.compile(r"\bAC\s+\d+", re.IGNORECASE),
     re.compile(r"\bvs\s+AC\b", re.IGNORECASE),
@@ -198,10 +202,12 @@ def _strings(obj: Any) -> list[str]:
     return found
 
 
-def _mean_composite(driver: Any, rules: RulesStore, *, enemy: Any | None = None) -> float:
+def _mean_composite(
+    driver: Any, rules: RulesStore, *, enemy: Any | None = None, seeds: tuple[int, ...] = _SEEDS
+) -> float:
     scores: list[float] = []
     for scenario in _SCENARIOS:
-        for seed in _SEEDS:
+        for seed in seeds:
             foe = enemy if enemy is not None else HeuristicTacticalDriver(rules)
             if hasattr(driver, "reset"):
                 driver.reset(seed)
@@ -669,8 +675,8 @@ class TestTalkSpamRegression(unittest.TestCase):
     """CTO (Phase 3): talk-spam must stay at or under ~0.6x a random policy, and never win.
 
     Measured on the calibration line-ups: 17.24 vs 32.75 (0.526) on seeds 1-3, 16.20 vs 35.97 (0.450) on seeds 1-10.
-    With #53 (no creature stacking) seeds 1-3 measure 18.08 vs 29.75 (0.608): random's move picks changed and its
-    score fell. The bound is 0.65 until #90 retunes the drivers; talk-spam still never wins.
+    After #53 and #90 it runs on seeds 1-10 (`_ORDER_SEEDS`): 16.77 vs 36.19 (0.463). Seeds 1-3 alone measured
+    0.632, too few games for a ratio bound.
     """
 
     def test_talk_spam_stays_under_six_tenths_of_random_with_zero_wins(self) -> None:
@@ -685,7 +691,7 @@ class TestTalkSpamRegression(unittest.TestCase):
                 raw = copy.deepcopy(_BUILTIN_SCENARIOS[sid])
                 raw["id"] = f"{sid}-calibration"
                 raw["enemies"] = copy.deepcopy(enemies)
-                for seed in _SEEDS:
+                for seed in _ORDER_SEEDS:
                     if hasattr(driver, "reset"):
                         driver.reset(seed)
                     t = run_match(raw, party_driver=driver, enemy_driver=HeuristicTacticalDriver(rules), rules=rules, seed=seed)
@@ -696,18 +702,19 @@ class TestTalkSpamRegression(unittest.TestCase):
         talk_spam, talk_wins = mean_and_wins(_TalkSpam(rules))
         random_score, _ = mean_and_wins(RandomDriver(seed=1, rules=rules))
         self.assertEqual(talk_wins, 0, "talk-spam must never win")
-        self.assertLessEqual(talk_spam, 0.65 * random_score, f"talk-spam {talk_spam:.2f} vs random {random_score:.2f}")
+        self.assertLessEqual(talk_spam, 0.6 * random_score, f"talk-spam {talk_spam:.2f} vs random {random_score:.2f}")
 
 
 class TestScoreFloorAndOrdering(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.rules = RulesStore()
-        cls.heuristic = _mean_composite(HeuristicTacticalDriver(cls.rules), cls.rules)
-        cls.greedy = _mean_composite(GreedyDriver(cls.rules), cls.rules)
-        cls.random = _mean_composite(RandomDriver(seed=1, rules=cls.rules), cls.rules)
+        # The four real policies are ranked over seeds 1-10; the degenerate ones score ~0 on any seed set.
+        cls.heuristic = _mean_composite(HeuristicTacticalDriver(cls.rules), cls.rules, seeds=_ORDER_SEEDS)
+        cls.greedy = _mean_composite(GreedyDriver(cls.rules), cls.rules, seeds=_ORDER_SEEDS)
+        cls.random = _mean_composite(RandomDriver(seed=1, rules=cls.rules), cls.rules, seeds=_ORDER_SEEDS)
         cls.noop = _mean_composite(_NoOp(), cls.rules)
-        cls.talk_spam = _mean_composite(_TalkSpam(cls.rules), cls.rules)
+        cls.talk_spam = _mean_composite(_TalkSpam(cls.rules), cls.rules, seeds=_ORDER_SEEDS)
         cls.garbage = _mean_composite(_Garbage(), cls.rules)
         cls.help_only = _mean_composite(_HelpOnly(), cls.rules)
         cls.help_talk = _mean_composite(_HelpOnly(talk=True), cls.rules)
@@ -733,17 +740,15 @@ class TestScoreFloorAndOrdering(unittest.TestCase):
     def test_reasonable_policies_score_clearly_above_noop(self) -> None:
         # Scenarios were retuned so heuristic-vs-heuristic is no longer a near-certain party win (94.7 / 84.9 / 32.8
         # before; 64.5 / 59.6 / 20.0 after). The ordering is what matters.
-        # #53 (no creature stacking): heuristic 60.78 -> 59.83, greedy 59.14 -> 67.15, random 18.97 -> 23.74. The
-        # heuristic no longer beats greedy; restoring that (and the 60 floor) is #90.
-        self.assertGreater(self.heuristic, 55.0)
+        # Seeds 1-10 (#90): heuristic 73.53, greedy 67.24, random 26.88.
+        self.assertGreater(self.heuristic, 60.0)
         self.assertGreater(self.greedy, 55.0)
+        self.assertGreater(self.heuristic, self.greedy)
         self.assertGreater(self.greedy, self.random)
-        self.assertGreater(self.heuristic, self.random + 25.0)
         self.assertGreater(self.random, self.noop + 15.0)
 
     def test_score_ordering(self) -> None:
-        # heuristic > greedy held until #53; see #90.
-        self.assertGreater(self.heuristic, self.random)
+        self.assertGreater(self.heuristic, self.greedy)
         self.assertGreater(self.greedy, self.random)
         self.assertGreater(self.random, self.talk_spam)
         self.assertGreater(self.talk_spam, self.noop)

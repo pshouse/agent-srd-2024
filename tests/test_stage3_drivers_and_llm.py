@@ -283,14 +283,23 @@ class TestStage3OfflineDrivers(unittest.TestCase):
         self.assertNotEqual(dec_shield.intent.get("spell"), "shield")
         self.assertFalse(dec_shield.intent.get("as_reaction"))
 
-        # 4. Wizard Mage Armor when unarmored, reaction spent/no adjacent enemy, no multi-target AoE kill shot
+        # 4. Wizard Mage Armor when unarmored and no offensive spell can reach an enemy yet (#90): it goes up while
+        #    the enemy closes. With a goblin in spell range she attacks instead (Mage Armor would cost the Action and
+        #    the turn's one slot).
         gob_far = self._start_state(self.goblin_scen, seed=5)
-        gob_far["combatants"]["goblin-1"]["position"] = {"x": 60, "y": 0}
-        gob_far["combatants"]["goblin-2"]["position"] = {"x": 60, "y": 50}
+        for gid in ("goblin-1", "goblin-2", "goblin-minion-1"):
+            if gid in gob_far["combatants"]:
+                gob_far["combatants"][gid]["position"] = {"x": 300, "y": 0 if gid == "goblin-1" else 50 if gid == "goblin-2" else 100}
         obs_talia_ma = self._obs_for_actor(gob_far, "pc-talia", self.goblin_scen)
         dec_ma = tactical.decide(obs_talia_ma)
         self.assertEqual(dec_ma.intent["type"], "cast_spell")
         self.assertEqual(dec_ma.intent.get("spell"), "mage-armor")
+        gob_near = self._start_state(self.goblin_scen, seed=5)
+        for gid in ("goblin-1", "goblin-2", "goblin-minion-1"):
+            if gid in gob_near["combatants"]:
+                gob_near["combatants"][gid]["position"] = {"x": 60, "y": 0 if gid == "goblin-1" else 50 if gid == "goblin-2" else 100}
+        dec_near = tactical.decide(self._obs_for_actor(gob_near, "pc-talia", self.goblin_scen))
+        self.assertNotEqual(dec_near.intent.get("spell"), "mage-armor")
 
         # 5. Prone recovery
         prone_state = self._start_state(self.goblin_scen, seed=5)
