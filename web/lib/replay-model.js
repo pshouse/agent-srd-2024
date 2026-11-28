@@ -214,7 +214,10 @@ export function applyAction(units, action) {
     const who = units.get(e.actor_id);
     if (e.type === "concentration_started" && who && isStr(e.spell)) who.concentration = e.spell;
     else if (e.type === "concentration_ended" && who) who.concentration = null;
-    else if (e.type === "combatant_defeated" && units.has(e.combatant_id)) units.get(e.combatant_id).alive = false;
+    // Monsters are defeated at 0 HP; PCs die from three failed death saves or massive damage (combatant_died).
+    else if ((e.type === "combatant_defeated" || e.type === "combatant_died") && units.has(e.combatant_id)) {
+      units.get(e.combatant_id).alive = false;
+    }
     else if (e.type === "death_save" && who && isInt(e.successes) && isInt(e.failures)) {
       who.deathSaves = { successes: e.successes, failures: e.failures };
     } else if (e.type === "death_save_damage_failure" && units.has(e.target_id) && isInt(e.failures_total)) {
