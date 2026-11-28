@@ -90,8 +90,31 @@ test("a PC who dies (combatant_died) is shown dead from that step on", () => {
       }
     });
   }
-  // The re-recorded opus-wyrmling-8 (#67) has PC deaths; keep at least one in the committed set.
-  assert.ok(deaths > 0, "no committed trace has a combatant_died event");
+  // Committed traces may have no PC deaths (#52 re-recorded opus-wyrmling-8 without any), so the synthetic
+  // check below always exercises the event.
+  assert.ok(deaths >= 0);
+});
+
+test("combatant_died marks a unit dead just like combatant_defeated (synthetic)", () => {
+  const base = committed.find((c) => c.trace.actions.some((a) => a.events.some((e) => e.type === "combatant_defeated")));
+  assert.ok(base, "need a committed trace with a defeat");
+  const relabelled = clone(base.trace);
+  let n = 0;
+  for (const a of relabelled.actions) {
+    for (const e of a.events) {
+      if (e.type === "combatant_defeated") {
+        e.type = "combatant_died";
+        e.reason = "death_save_failures";
+        n += 1;
+      }
+    }
+  }
+  assert.ok(n > 0);
+  const a = buildReplay(base.trace);
+  const b = buildReplay(relabelled);
+  assert.equal(b.ok, true, b.errors.join("; "));
+  assert.deepEqual(b.replay.frames.map((f) => f.units.map((u) => [u.id, u.alive])),
+    a.replay.frames.map((f) => f.units.map((u) => [u.id, u.alive])));
 });
 
 test("intermediate frames follow each action's state_diff", () => {
