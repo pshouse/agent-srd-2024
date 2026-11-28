@@ -33,6 +33,7 @@ from srd2024.engine.combat import (
     _has_modifier_flag,
     compute_legal_actions,
     distance_ft,
+    grid_square,
     step,
 )
 from srd2024.engine.store import RulesStore, strip_prefix
@@ -117,6 +118,16 @@ def capture_initial_max_slots(state: dict[str, Any]) -> dict[str, dict[str, int]
 # ----------------------------------------------------------------------
 # 1. Universal Engine Invariant Checker
 # ----------------------------------------------------------------------
+
+
+def _free_start(rng: random.Random, xs: list[int], taken: set[tuple[int, int]]) -> dict[str, int]:
+    """A random start square from `xs` x {0..20} that no other combatant holds (#53: no shared squares)."""
+    ys = [0, 5, 10, 15, 20]
+    pos = {"x": rng.choice(xs), "y": rng.choice(ys)}
+    while (pos["x"], pos["y"]) in taken:
+        pos = {"x": rng.choice(xs), "y": rng.choice(ys)}
+    taken.add((pos["x"], pos["y"]))
+    return pos
 
 
 def check_state_invariants(
@@ -312,6 +323,23 @@ def check_state_invariants(
             violations.append(
                 f"dead_with_positive_hp:{cid}: combatant has alive == False with hp={hp} > 0"
             )
+
+    # Space occupancy (#53): no two living non-Tiny creatures share a 5-ft square.
+    squares: dict[tuple[int, int], str] = {}
+    for cid in sorted(combatants.keys()):
+        comb = combatants[cid]
+        if not isinstance(comb, dict) or comb.get("alive") is not True:
+            continue
+        if str(comb.get("size") or "Medium").strip().lower() == "tiny":
+            continue
+        pos = comb.get("position")
+        if not (isinstance(pos, dict) and _is_strict_int(pos.get("x")) and _is_strict_int(pos.get("y"))):
+            continue
+        sq = grid_square(pos)
+        if sq in squares:
+            violations.append(f"shared_square:{squares[sq]},{cid}: two living creatures occupy square {sq}")
+        else:
+            squares[sq] = cid
 
     return violations
 
@@ -512,6 +540,7 @@ def build_procedural_scenario(seed: int, rules: RulesStore) -> dict[str, Any]:
     combatants: list[dict[str, Any]] = []
     party_ids: list[str] = []
     enemy_ids: list[str] = []
+    taken: set[tuple[int, int]] = set()
 
     for idx, sb in enumerate(chosen_pcs, start=1):
         cid = f"pc-{idx}"
@@ -521,7 +550,7 @@ def build_procedural_scenario(seed: int, rules: RulesStore) -> dict[str, Any]:
             "name": f"{sb['name']} #{idx}",
             "side": "party",
             "statblock": sb,
-            "position": {"x": rng.choice([0, 5, 10]), "y": rng.choice([0, 5, 10, 15, 20])},
+            "position": _free_start(rng, [0, 5, 10], taken),
         }
         # Inject initial exhaustion / conditions on ~25% of combatants.
         if rng.random() < 0.20:
@@ -539,7 +568,7 @@ def build_procedural_scenario(seed: int, rules: RulesStore) -> dict[str, Any]:
             "name": f"{m_rec.get('name', m_slug)} #{idx}",
             "side": "enemy",
             "monster": m_slug,
-            "position": {"x": rng.choice([5, 10, 15, 20, 25]), "y": rng.choice([0, 5, 10, 15, 20])},
+            "position": _free_start(rng, [5, 10, 15, 20, 25], taken),
         }
         if rng.random() < 0.15:
             entry["exhaustion_level"] = rng.randint(1, 6)

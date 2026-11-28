@@ -37,6 +37,8 @@ from .agents import (
     _available_monster_actions,
     _available_slots_map,
     _best_kite_position,
+    _is_free,
+    _occupied_squares,
     _can_cast_spell_now,
     _condition_set,
     _conscious_allies,
@@ -88,8 +90,9 @@ def _retreat_step(
     origin: dict[str, int],
     enemies: list[dict[str, Any]],
     max_move_ft: int,
+    occupied: set[tuple[int, int]] | None = None,
 ) -> dict[str, int] | None:
-    """Compute a fallback retreat step away from the nearest enemy when not adjacent."""
+    """Compute a fallback retreat step away from the nearest enemy when not adjacent (never an occupied square)."""
     if max_move_ft < 5 or not enemies:
         return None
     nearest = min(enemies, key=lambda e: (distance_ft(origin, e["position"]), str(e.get("id") or "")))
@@ -104,7 +107,7 @@ def _retreat_step(
         step_y = 5 if dy > 0 else (-5 if dy < 0 else 0)
     steps = min(4, max_move_ft // 5)
     cand = {"x": ox + step_x * steps, "y": oy + step_y * steps}
-    if cand == origin:
+    if cand == origin or not _is_free(cand, occupied):
         return None
     if distance_ft(origin, cand) > max_move_ft:
         return None
@@ -437,11 +440,12 @@ def build_human_action_menu(
                     if isinstance(b, dict) and b.get("kind") == "teleport":
                         max_d = int(b.get("max_distance_ft", 30))
                 dest = _best_kite_position(
-                    self_pos, max_d, enemies, conscious_allies, preferred_range_ft=35
-                ) or _retreat_step(self_pos, enemies, max_d)
+                    self_pos, max_d, enemies, conscious_allies, preferred_range_ft=35,
+                    occupied=_occupied_squares(observation),
+                ) or _retreat_step(self_pos, enemies, max_d, occupied=_occupied_squares(observation))
                 if dest is None:
                     dest = {"x": sx - 15, "y": sy}
-                if dest != self_pos:
+                if dest != self_pos and _is_free(dest, _occupied_squares(observation)):
                     _add(
                         "spell",
                         f"Cast {sp_name} -> teleport to {_fmt_pos(dest)} ({slot_tag})",
@@ -732,7 +736,7 @@ def build_human_action_menu(
                 cur_d = distance_ft(self_pos, enemy["position"])
                 if cur_d <= 5:
                     continue
-                dest = _step_toward(self_pos, enemy["position"], max_step, desired_dist_ft=5)
+                dest = _step_toward(self_pos, enemy["position"], max_step, desired_dist_ft=5, occupied=_occupied_squares(observation))
                 key = (int(dest["x"]), int(dest["y"]))
                 if key in seen_dests:
                     continue
@@ -756,10 +760,11 @@ def build_human_action_menu(
         # 4b. Kite / Fall Back
         if enemies:
             kite_dest = _best_kite_position(
-                self_pos, max_step, enemies, conscious_allies, preferred_range_ft=30
+                self_pos, max_step, enemies, conscious_allies, preferred_range_ft=30,
+                occupied=_occupied_squares(observation),
             )
             if kite_dest is None:
-                kite_dest = _retreat_step(self_pos, enemies, max_step)
+                kite_dest = _retreat_step(self_pos, enemies, max_step, occupied=_occupied_squares(observation))
             if kite_dest is not None:
                 key = (int(kite_dest["x"]), int(kite_dest["y"]))
                 if key not in seen_dests:

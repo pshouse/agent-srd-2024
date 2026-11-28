@@ -31,6 +31,7 @@ from .agents import (
     _aoe_targets_for_spell,
     _available_slots_map,
     _best_kite_position,
+    _occupied_squares,
     _can_cast_spell_now,
     _conscious_allies,
     _downed_allies,
@@ -167,7 +168,7 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
 
         if mode == "self":
             if slug == "misty-step":
-                dest = _best_kite_position(pos, 30, enemies, allies, spread_from_allies=True) if enemies else None
+                dest = _best_kite_position(pos, 30, enemies, allies, spread_from_allies=True, occupied=_occupied_squares(observation)) if enemies else None
                 if dest:
                     add(
                         f"cast {slug} to ({dest['x']},{dest['y']})",
@@ -253,7 +254,7 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
         )
     if move_ft >= 5:
         for e in enemies:
-            dest = _step_toward(pos, e["position"], move_ft, desired_dist_ft=5)
+            dest = _step_toward(pos, e["position"], move_ft, desired_dist_ft=5, occupied=_occupied_squares(observation))
             if dest != pos and fear_ok(dest):
                 close = distance_ft(dest, e["position"]) <= 5
                 add(
@@ -263,7 +264,7 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
                     {"type": "move", "actor_id": actor_id, "to": dest, "stand_up": stand},
                 )
         for a in downed:
-            dest = _step_toward(pos, a["position"], move_ft, desired_dist_ft=5)
+            dest = _step_toward(pos, a["position"], move_ft, desired_dist_ft=5, occupied=_occupied_squares(observation))
             if dest != pos and fear_ok(dest):
                 add(
                     f"move toward {a['id']} to ({dest['x']},{dest['y']})",
@@ -271,7 +272,7 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
                     {"type": "move", "actor_id": actor_id, "to": dest, "stand_up": stand},
                 )
         if enemies:
-            dest = _best_kite_position(pos, move_ft, enemies, allies, spread_from_allies=True)
+            dest = _best_kite_position(pos, move_ft, enemies, allies, spread_from_allies=True, occupied=_occupied_squares(observation))
             if dest and dest != pos and fear_ok(dest):
                 add(
                     f"move away to ({dest['x']},{dest['y']})",

@@ -151,6 +151,39 @@ def distance_ft(pos_a: dict[str, int], pos_b: dict[str, int]) -> int:
     return max(abs(int(pos_a["x"]) - int(pos_b["x"])), abs(int(pos_a["y"]) - int(pos_b["y"])))
 
 
+def grid_square(pos: dict[str, Any]) -> tuple[int, int]:
+    """The 5-ft square a position falls in (floor division, so negative coordinates work)."""
+    return int(pos["x"]) // 5, int(pos["y"]) // 5
+
+
+def _is_tiny(combatant: dict[str, Any]) -> bool:
+    return str(combatant.get("size") or "Medium").strip().lower() == "tiny"
+
+
+def square_occupant(state: dict[str, Any], mover_id: str, pos: dict[str, Any]) -> str | None:
+    """ID of a creature whose space blocks `mover_id` from ending a move at `pos`, or None (#53).
+
+    SRD 5.2 (Moving Around Other Creatures): you can't willingly end a move in a space
+    occupied by another creature. Every living creature occupies its square, including an
+    unconscious one at 0 HP; a defeated or dead creature does not. The engine models each
+    creature as one 5-ft square, so a Tiny creature (2.5 ft) never blocks and is never blocked.
+    """
+    combatants = state.get("combatants") or {}
+    mover = combatants.get(mover_id) or {}
+    if mover and _is_tiny(mover):
+        return None
+    square = grid_square(pos)
+    for cid in sorted(combatants):
+        other = combatants[cid]
+        if cid == mover_id or not other.get("alive"):
+            continue
+        if _is_tiny(other):
+            continue
+        if grid_square(other["position"]) == square:
+            return cid
+    return None
+
+
 def _slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", str(text).strip().lower()).strip("-")
 
@@ -1436,17 +1469,35 @@ def _resolve_single_weapon_attack(
             if sx == 0 and sy == 0:
                 sx = 1
             old_pos = copy.deepcopy(target["position"])
-            target["position"] = {"x": old_pos["x"] + sx * 10, "y": old_pos["y"] + sy * 10}
-            tracker.emit(
-                "mastery_triggered",
-                mastery="push",
-                actor_id=attacker_id,
-                target_id=target_id,
-                from_pos=old_pos,
-                to_pos=copy.deepcopy(target["position"]),
-                distance_ft=10,
-            )
-            tracker.hook(f"Push mastery shoves {target['name']} 10 ft away to ({target['position']['x']}, {target['position']['y']}).")
+            # Push moves the target "up to 10 feet": stop short rather than end in an occupied space (#53).
+            push_ft = 0
+            blocked_by: str | None = None
+            for step_ft in (10, 5):
+                cand = {"x": old_pos["x"] + sx * step_ft, "y": old_pos["y"] + sy * step_ft}
+                occupant = square_occupant(state, target_id, cand)
+                if occupant is None:
+                    push_ft = step_ft
+                    break
+                if blocked_by is None:
+                    blocked_by = occupant
+            target["position"] = {"x": old_pos["x"] + sx * push_ft, "y": old_pos["y"] + sy * push_ft}
+            push_event: dict[str, Any] = {
+                "mastery": "push",
+                "actor_id": attacker_id,
+                "target_id": target_id,
+                "from_pos": old_pos,
+                "to_pos": copy.deepcopy(target["position"]),
+                "distance_ft": push_ft,
+            }
+            if push_ft < 10:
+                push_event["blocked_by"] = blocked_by
+            tracker.emit("mastery_triggered", **push_event)
+            if push_ft == 10:
+                tracker.hook(f"Push mastery shoves {target['name']} 10 ft away to ({target['position']['x']}, {target['position']['y']}).")
+            elif push_ft:
+                tracker.hook(f"Push mastery shoves {target['name']} only 5 ft, to ({target['position']['x']}, {target['position']['y']}); the next square is occupied.")
+            else:
+                tracker.hook(f"Push mastery can't move {target['name']}: the squares behind it are occupied.")
         else:
             tracker.emit(
                 "mastery_skipped",
@@ -2463,6 +2514,17 @@ def step(
                 )
             to_pos = parsed_to
 
+        if distance_ft(actor["position"], to_pos) > 0:
+            blocker_id = square_occupant(s, actor_id, to_pos)
+            if blocker_id is not None:
+                blocker_name = str(s["combatants"][blocker_id].get("name") or blocker_id)
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"({to_pos['x']}, {to_pos['y']}) is occupied by {blocker_name}; "
+                    "a creature can't end its move in another creature's space.",
+                    rules,
+                )
+
         if stand_up:
             if "prone" in _effective_conditions(actor, rules):
                 stand_cost = eff_speed // 2
@@ -3022,6 +3084,14 @@ def step(
                     return _invalid(
                         copy.deepcopy(state),
                         f"Teleport destination exceeds {max_d} ft for '{spell_slug}'.",
+                        rules,
+                    )
+                blocker_id = square_occupant(s, actor_id, to_pos)
+                if blocker_id is not None and distance_ft(actor["position"], to_pos) > 0:
+                    blocker_name = str(s["combatants"][blocker_id].get("name") or blocker_id)
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"Teleport destination ({to_pos['x']}, {to_pos['y']}) is occupied by {blocker_name}.",
                         rules,
                     )
                 old_pos = copy.deepcopy(actor["position"])
