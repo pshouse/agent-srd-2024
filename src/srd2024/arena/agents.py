@@ -3240,6 +3240,7 @@ def create_driver(
     - `"openai-compat:<model>"`
     - `"anthropic:<model>"`
     - `"gemini:<model>"`
+    - `"typesafe:<model>"` (TypeSafe AI Jev, e.g. `typesafe:jev-1.14.0`; party seat only, see `arena/jev.py`)
 
     Also accepts a dict spec (e.g. `{"driver": "openai-compat:gpt-4o-mini", "api_base": ...}`
     or `{"type": "anthropic", "model": "..."}`). Raises `ValueError` on unknown specs.
@@ -3329,6 +3330,18 @@ def create_driver(
                 timeout_s=timeout_s,
                 http_transport=http_transport,
             )
+        if p_low == "typesafe":
+            from .jev import JevDriver
+
+            return JevDriver(
+                model,
+                rules=rules,
+                api_base=api_base,
+                api_key_env=api_key_env,
+                api_key=api_key,
+                timeout_s=timeout_s,
+                http_transport=http_transport,
+            )
         if p_low == "gemini":
             return GeminiDriver(
                 model,
@@ -3344,7 +3357,7 @@ def create_driver(
     raise ValueError(
         f"Unknown driver spec {spec!r}. Expected one of: 'random', 'greedy', "
         "'heuristic-tactical', 'human', 'replay', 'openai-compat:<model>', "
-        "'anthropic:<model>', 'gemini:<model>'."
+        "'anthropic:<model>', 'gemini:<model>', 'typesafe:<model>'."
     )
 
 

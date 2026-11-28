@@ -494,6 +494,7 @@ All three live drivers inherit from `BaseLLMDriver` and share:
 | **`OpenAICompatDriver`** | `openai-compat:<model>` | `https://api.openai.com/v1` (works with OpenAI, xAI Grok `https://api.x.ai/v1`, OpenRouter `https://openrouter.ai/api/v1`, Ollama `http://localhost:11434/v1`, vLLM, LM Studio) | `OPENAI_API_KEY` (optional when `api_base` is `localhost`/`127.0.0.1`) | `POST {api_base}/chat/completions`, header `Authorization: Bearer <key>` (omitted if key empty) | `choices[0].message.content`; usage `{prompt_tokens, completion_tokens, total_tokens}` |
 | **`AnthropicDriver`** | `anthropic:<model>` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` | `POST {api_base}/v1/messages`, headers `x-api-key: <key>`, `anthropic-version: 2023-06-01` | Concatenated `content[i].text` where `type == "text"`; usage `{prompt_tokens: input_tokens, completion_tokens: output_tokens, total_tokens: input+output}` |
 | **`GeminiDriver`** | `gemini:<model>` | `https://generativelanguage.googleapis.com` | `GEMINI_API_KEY` | `POST {api_base}/v1beta/models/{model}:generateContent?key={key}` | Concatenated `candidates[0].content.parts[].text`; usage `{prompt_tokens: promptTokenCount, completion_tokens: candidatesTokenCount, total_tokens: totalTokenCount}` |
+| **`JevDriver`** (`arena/jev.py`) | `typesafe:<model>` (e.g. `typesafe:jev-1.14.0`) | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | `POST {api_base}/v1/systemone`, header `Authorization: Bearer <key>`; one `choice` question whose `criteria` are candidate intents generated from the observation | Plays the highest of `answers.next_action.probabilities`; a retry plays the next-ranked candidate without a new call. No table talk. Monster seats fall back to `heuristic-tactical`. Usage `{prompt_tokens: input_tokens, completion_tokens: output_tokens}` |
 
 ### 4.5 Driver Factory (`create_driver`)
 
@@ -512,7 +513,7 @@ def create_driver(
     replay_side: str | None = None,
 ) -> AgentDriver: ...
 ```
-Accepted string specs: `"random"`, `"greedy"`, `"heuristic-tactical"`, `"replay"`, `"openai-compat:<model>"`, `"anthropic:<model>"`, `"gemini:<model>"`. Unknown driver types MUST raise `ValueError`.
+Accepted string specs: `"random"`, `"greedy"`, `"heuristic-tactical"`, `"replay"`, `"openai-compat:<model>"`, `"anthropic:<model>"`, `"gemini:<model>"`, `"typesafe:<model>"`. Unknown driver types MUST raise `ValueError`.
 
 ---
 
