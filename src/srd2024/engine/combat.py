@@ -406,6 +406,20 @@ def _drop_concentration(
     tracker.hook(f"{caster['name']} loses concentration on {spell_slug} ({reason}).")
 
 
+def _death_save_tally(actor: dict[str, Any], what: str) -> str:
+    ds = actor["death_saves"]
+    return f"{actor['name']} {what}: {ds['successes']}/3 successes, {ds['failures']}/3 failures."
+
+
+def _save_hook(name: str, ability: str, dc: int, source: str, success: bool, applied: list[str]) -> str:
+    """Narration for a rider save, e.g. "Lyra fails a CON save (DC 10) against Claw and is Paralyzed." (#61)."""
+    verb = "succeeds on" if success else "fails"
+    text = f"{name} {verb} a {ability.upper()} save (DC {dc}) against {source}"
+    if applied:
+        text += f" and is {' and '.join(applied)}"
+    return text + "."
+
+
 def _apply_condition(
     state: dict[str, Any],
     target_id: str,
@@ -669,12 +683,16 @@ def _apply_damage_parts(
     hp_max = int(target.get("hp_max") or 0)
     if target.get("kind") == "pc" and target.get("alive") and hp_max > 0 and target["hp"] == 0 and hp_damage > 0 \
             and hp_damage - hp_before >= hp_max:
+        drop_idx = len(tracker.hooks)
         if target.get("concentration"):
             _drop_concentration(state, target_id, tracker, reason="dropped_to_0_hp")
         target["alive"] = False
         tracker.emit("combatant_died", combatant_id=target_id, reason="massive_damage",
                      overflow=hp_damage - hp_before, hp_max=hp_max)
-        tracker.hook(f"{target['name']} takes {hp_damage - hp_before} damage past 0 HP (max {hp_max}) and dies instantly.")
+        tracker.hooks.insert(
+            drop_idx,
+            f"{target['name']} takes {hp_damage - hp_before} damage past 0 HP (max {hp_max}) and dies instantly.",
+        )
         return total_effective
 
     # Damage at 0 HP on a PC causes death save failure(s).
@@ -693,12 +711,13 @@ def _apply_damage_parts(
 
     # Dropping to 0 HP.
     if hp_before > 0 and target["hp"] == 0:
+        drop_idx = len(tracker.hooks)  # the 0-HP line goes before the concentration loss it causes (#56)
         if target.get("concentration"):
             _drop_concentration(state, target_id, tracker, reason="dropped_to_0_hp")
         if target.get("kind") == "monster":
             target["alive"] = False
             tracker.emit("combatant_defeated", combatant_id=target_id)
-            tracker.hook(f"{target['name']} drops to 0 HP and is defeated.")
+            tracker.hooks.insert(drop_idx, f"{target['name']} drops to 0 HP and is defeated.")
             burst = _trait(target, "death_burst")
             if burst:
                 _resolve_death_burst(state, target_id, burst, rules, rng, tracker)
@@ -706,7 +725,7 @@ def _apply_damage_parts(
             _apply_condition(state, target_id, "unconscious", rules, tracker, source_id=source_id)
             _apply_condition(state, target_id, "prone", rules, tracker, source_id=source_id)
             tracker.emit("pc_unconscious", combatant_id=target_id)
-            tracker.hook(f"{target['name']} drops to 0 HP and falls Unconscious and Prone.")
+            tracker.hooks.insert(drop_idx, f"{target['name']} drops to 0 HP and falls Unconscious and Prone.")
     elif total_effective > 0 and target.get("concentration"):
         # Concentration CON saving throw: DC = max(10, floor(dmg / 2)).
         conc_dc = max(10, total_effective // 2)
@@ -1265,6 +1284,7 @@ def _resolve_single_weapon_attack(
                 damage=graze_dmg,
                 damage_type=dmg_type,
             )
+            graze_idx = len(tracker.hooks)
             eff_dmg = _apply_damage_parts(
                 state,
                 target_id,
@@ -1274,7 +1294,7 @@ def _resolve_single_weapon_attack(
                 tracker,
                 source_id=attacker_id,
             )
-            tracker.hook(f"Graze mastery still deals {eff_dmg} {dmg_type} damage to {target['name']}.")
+            tracker.hooks.insert(graze_idx, f"Graze mastery still deals {eff_dmg} {dmg_type} damage to {target['name']}.")
         return {
             "hit": False,
             "crit": False,
@@ -1296,6 +1316,7 @@ def _resolve_single_weapon_attack(
         raw_dmg_bonus = 0
     raw_dmg = max(0, int(dmg_roll["total"]) + raw_dmg_bonus)
 
+    hit_hook_idx = len(tracker.hooks)  # the hit line goes before any 0-HP line the damage causes (#62)
     eff_dmg = _apply_damage_parts(
         state,
         target_id,
@@ -1307,9 +1328,10 @@ def _resolve_single_weapon_attack(
         is_crit=crit,
     )
     crit_txt = " (CRITICAL HIT!)" if crit else ""
-    tracker.hook(
+    tracker.hooks.insert(
+        hit_hook_idx,
         f"{attacker['name']} hits {target['name']} with {weapon['name']}{crit_txt} "
-        f"({total_to_hit} vs AC {target_ac}) for {eff_dmg} {dmg_type} damage."
+        f"({total_to_hit} vs AC {target_ac}) for {eff_dmg} {dmg_type} damage.",
     )
     # A smite (#6) can follow a melee hit on the attacker's own turn. Recorded only for casters who know one,
     # so nobody else's state changes. Cleared when turn_resources reset at the start of the next turn.
@@ -1589,6 +1611,8 @@ def _resolve_monster_action(
 
         for tid in target_ids:
             save_ev = _roll_save(state, tid, save_ab, save_dc, rules, rng, tracker, reason=act_name)
+            save_idx = len(tracker.hooks)  # this target's save line goes before any 0-HP / concentration lines
+            took: int | None = None
             if rolled_parts:
                 if not save_ev["success"]:
                     adj_parts = [{"amount": p["amount"], "type": p["type"]} for p in rolled_parts]
@@ -1597,15 +1621,12 @@ def _resolve_monster_action(
                 else:
                     adj_parts = []
                 if adj_parts:
-                    eff = _apply_damage_parts(state, tid, adj_parts, rules, rng, tracker, source_id=actor_id)
-                    tracker.hook(
-                        f"{state['combatants'][tid]['name']} {'saves' if save_ev['success'] else 'fails'} "
-                        f"against {actor['name']}'s {act_name} (DC {save_dc}) and takes {eff} damage."
-                    )
+                    took = _apply_damage_parts(state, tid, adj_parts, rules, rng, tracker, source_id=actor_id)
+            applied_conds: list[str] = []
             if not save_ev["success"]:
                 for cond in action.get("conditions_applied") or []:
                     c_slug = strip_prefix(cond.get("condition") if isinstance(cond, dict) else str(cond))
-                    _apply_condition(
+                    if _apply_condition(
                         state,
                         tid,
                         c_slug,
@@ -1615,7 +1636,17 @@ def _resolve_monster_action(
                         duration=str(cond.get("duration", "indefinite")) if isinstance(cond, dict) else "indefinite",
                         save_ability=cond.get("repeat_save_ability") if isinstance(cond, dict) else None,
                         save_dc=save_dc,
-                    )
+                    ):
+                        applied_conds.append(c_slug.replace("-", " ").title())
+            line = (
+                f"{state['combatants'][tid]['name']} {'saves' if save_ev['success'] else 'fails'} "
+                f"against {actor['name']}'s {act_name} (DC {save_dc})"
+            )
+            if took is not None:
+                line += f" and takes {took} damage"
+            if applied_conds:
+                line += f"{',' if took is not None else ''} and is {' and '.join(applied_conds)}"
+            tracker.hooks.insert(save_idx, line + ".")
         return True, None
 
     # Attack action (melee / ranged / melee_or_ranged).
@@ -1730,7 +1761,8 @@ def _resolve_monster_action(
     )
     tracker.hooks.insert(
         hit_hook_idx,
-        f"{actor['name']} hits {target['name']} with {act_name} ({total_to_hit} vs AC {target_ac}) for {eff_dmg} damage.",
+        f"{actor['name']} hits {target['name']} with {act_name}{' (CRITICAL HIT!)' if crit else ''} "
+        f"({total_to_hit} vs AC {target_ac}) for {eff_dmg} damage.",
     )
 
     # Rider saves & conditions (e.g., Ghoul Claw CON DC 10 -> paralyzed, Wolf Bite -> prone).
@@ -1739,12 +1771,14 @@ def _resolve_monster_action(
         r_ab = strip_prefix(save_block.get("ability") or "con")
         r_dc = int(save_block.get("dc") or 10)
         save_ev = _roll_save(state, tid, r_ab, r_dc, rules, rng, tracker, reason=f"{act_name}_rider")
+        rider_idx = len(tracker.hooks)
+        applied: list[str] = []
         if not save_ev["success"]:
             for cond in conds_ir:
                 c_slug = strip_prefix(cond.get("condition") if isinstance(cond, dict) else str(cond))
                 dur = str(cond.get("duration", "save_ends")) if isinstance(cond, dict) else "save_ends"
                 rep_ab = cond.get("repeat_save_ability", r_ab) if isinstance(cond, dict) else r_ab
-                _apply_condition(
+                if _apply_condition(
                     state,
                     tid,
                     c_slug,
@@ -1754,7 +1788,9 @@ def _resolve_monster_action(
                     duration=dur,
                     save_ability=strip_prefix(rep_ab) if rep_ab else None,
                     save_dc=r_dc,
-                )
+                ):
+                    applied.append(c_slug.replace("-", " ").title())
+        tracker.hooks.insert(rider_idx, _save_hook(target["name"], r_ab, r_dc, act_name, save_ev["success"], applied))
     elif conds_ir:
         for cond in conds_ir:
             c_slug = strip_prefix(cond.get("condition") if isinstance(cond, dict) else str(cond))
@@ -3738,6 +3774,8 @@ def step(
                         new_actor["alive"] = False
                         tracker.emit("combatant_died", combatant_id=new_active_id, reason="death_save_failures")
                         tracker.hook(f"{new_actor['name']} rolls a Natural 1 on Death Save and dies.")
+                    else:
+                        tracker.hook(_death_save_tally(new_actor, "rolls a Natural 1 on a Death Save (two failures)"))
                 elif val >= 10:
                     new_actor["death_saves"]["successes"] = min(3, int(new_actor["death_saves"]["successes"]) + 1)
                     tracker.emit(
@@ -3751,6 +3789,8 @@ def step(
                     if new_actor["death_saves"]["successes"] >= 3:
                         tracker.emit("pc_stabilized", combatant_id=new_active_id)
                         tracker.hook(f"{new_actor['name']} succeeds on a Death Save ({val}) and stabilizes.")
+                    else:
+                        tracker.hook(_death_save_tally(new_actor, f"succeeds on a Death Save ({val})"))
                 else:
                     new_actor["death_saves"]["failures"] = min(3, int(new_actor["death_saves"]["failures"]) + 1)
                     tracker.emit(
@@ -3765,6 +3805,8 @@ def step(
                         new_actor["alive"] = False
                         tracker.emit("combatant_died", combatant_id=new_active_id, reason="death_save_failures")
                         tracker.hook(f"{new_actor['name']} fails a Death Save ({val}) and dies.")
+                    else:
+                        tracker.hook(_death_save_tally(new_actor, f"fails a Death Save ({val})"))
 
         s["rng"] = rng.to_dict()
         _update_encounter_status(s)
