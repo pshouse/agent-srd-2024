@@ -420,11 +420,15 @@ _HIDDEN_NARRATION_RES: tuple[re.Pattern[str], ...] = (
     re.compile(r"\(\s*temp(?:orary)?\s+HP\s*:?\s*\d+[^)]*\)", re.IGNORECASE),
     re.compile(r"\blevel-\d+\s+spell\s+slots?\b", re.IGNORECASE),
     re.compile(r"\b\d+\s+spell\s+slots?\b", re.IGNORECASE),
+    # Death saves (#73 MF1): the d20 roll and the running N/3 tally belong to the dying PC's sheet only. Every
+    # seat still sees that the save was made, succeeded or failed.
+    re.compile(r"(?<=Death Save)\s*\(\s*(?:\d+|two failures)\s*\)", re.IGNORECASE),
+    re.compile(r"\s*:\s*\d+\s*/\s*3\s+successes\s*,\s*\d+\s*/\s*3\s+failures", re.IGNORECASE),
 )
 
 
 def _observer_event_text(text: str) -> str:
-    """Drop hidden AC, DC, exact HP, temp HP, and slot counts from player narration."""
+    """Drop hidden AC, DC, exact HP, temp HP, slot counts and death-save rolls/tallies from player narration."""
     cleaned = str(text)
     for pattern in _HIDDEN_NARRATION_RES:
         cleaned = pattern.sub("", cleaned)
