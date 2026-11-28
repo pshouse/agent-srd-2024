@@ -223,7 +223,7 @@ a.xref.mon::before{clip-path:polygon(25% 3%,75% 3%,100% 50%,75% 97%,25% 97%,0 50
 }
 @media (min-width:760px){.nav .short{display:none}.stickbar{display:none}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-main.mode-bundle .hero,main.mode-bundle .search-wrap,main.mode-graph .hero,main.mode-graph .search-wrap{display:none}
+main.mode-bundle .hero,main.mode-bundle .search-wrap,main.mode-graph .hero,main.mode-graph .search-wrap,main.mode-replay .hero,main.mode-replay .search-wrap{display:none}
 .g-controls{display:flex;flex-wrap:wrap;gap:18px;padding:12px 0}
 .g-status{margin:0 0 12px;color:var(--text-2);font-size:var(--fs-ui)}
 .g-canvas{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:auto}
@@ -292,3 +292,39 @@ input[type=range]{width:100%;accent-color:var(--primary)}
   .footer .in{padding-bottom:84px}
   .deps .hide-m{display:none}
 }
+.rp-load{margin:16px 0 12px}.rp-load.drag{outline:3px dashed var(--primary)}
+.rp-row,.rp-ctl,.rp-badges,.rp-tags,.rp-ut{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rp-row .sel{min-height:40px;flex:1 1 220px;min-width:0}
+.rp-badges{margin:6px 0}.rp-badges h2{font-size:var(--fs-lg);margin-right:6px}
+.rp-win-party{background:var(--rules-bg);color:var(--rules)}.rp-win-enemy{background:var(--mon-bg);color:var(--mon)}
+.rp-main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;padding:8px 0 48px}
+.rp-ctl{margin-bottom:10px}.rp-ctl .btn{padding:0 12px}
+.rp-scrub{flex:1 1 220px}.rp-scrub input{display:block;margin:4px 0}.rp-pos{font-size:var(--fs-sm);color:var(--text-2)}
+.rp-board{font-family:var(--sans);max-height:66vh}
+.rp-grid line{stroke:var(--line);stroke-width:.08}
+.rp-active{fill:none;stroke:#C9871A;stroke-width:.35}
+.rp-shared{fill:none;stroke:var(--text-2);stroke-width:.15;stroke-dasharray:.5 .35}
+.rp-stack circle{fill:var(--text)}.rp-stack text{fill:var(--surface);font-size:.8px;font-weight:700}
+.rp-tok circle{stroke:var(--surface);stroke-width:.2}
+.rp-tok text{fill:var(--surface);font-size:1.5px;font-weight:700}.rp-tok.sm text{font-size:.75px}.rp-tok.l3 text{font-size:1.1px}.rp-tok.sm.l3 text{font-size:.55px}
+.side-party circle,.rp-sw-party{fill:var(--rules);background:var(--rules)}.side-enemy circle,.rp-sw-enemy{fill:var(--mon);background:var(--mon)}
+.rp-tok.on circle{stroke:#C9871A;stroke-width:.35}.rp-tok.down{opacity:.75}.rp-tok.dead,.rp-unit.dead{opacity:.4}
+.rp-tok text.rp-cnd{fill:var(--text);font-size:.7px}
+.rp-hpb{fill:var(--surface-2)}.hp-ok{fill:var(--ok);background:var(--ok)}.hp-mid{fill:#C9871A;background:#C9871A}.hp-low{fill:var(--danger);background:var(--danger)}
+.rp-move{stroke:var(--text-2);stroke-width:.2;stroke-dasharray:.6 .4}
+.rp-roster{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}.rp-roster h3{font-size:var(--fs-md)}
+.rp-units{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:8px}
+.rp-unit{border:1px solid var(--line);border-left:4px solid var(--rules);border-radius:var(--r-sm);padding:8px 10px;background:var(--surface)}
+.rp-unit.side-enemy{border-left-color:var(--mon)}.rp-unit.on{box-shadow:0 0 0 2px #C9871A}
+.rp-ut{justify-content:space-between}.rp-hp{height:8px;margin:6px 0}
+.cond{font:600 var(--fs-xs)/1 var(--sans);padding:3px 7px;border-radius:99px;background:var(--surface-2)}
+.cond.bad{background:var(--danger-bg);color:var(--danger)}.cond.conc{background:var(--spell-bg);color:var(--spell)}.cond.on{background:var(--warn-bg);color:var(--warn)}.cond.fx{font-weight:500}
+.rp-log{list-style:none;margin:0;padding:0;position:relative;max-height:75vh;overflow:auto}
+.rp-step{padding:8px 12px;border-bottom:1px solid var(--line)}.rp-step.on{background:var(--primary-soft)}
+.rp-sh{all:unset;cursor:pointer;display:block;font:600 var(--fs-sm)/1.4 var(--sans)}.rp-sh:focus-visible{outline:3px solid var(--focus)}
+.rp-who.side-party{color:var(--rules)}.rp-who.side-enemy{color:var(--mon)}
+.rp-l{margin:4px 0 0;font-size:var(--fs-sm)}.k-dice,.k-damage,.k-heal{font-family:var(--mono);font-size:var(--fs-xs)}
+.k-damage{color:var(--danger)}.k-heal{color:var(--ok)}.k-violation{color:var(--warn)}.k-talk{font-style:italic}
+.rp-why summary{cursor:pointer;font-size:var(--fs-xs);color:var(--text-2)}.rp-why p{font-size:var(--fs-xs);margin:4px 0}
+@media (max-width:1199px){.rp-main{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:759px){.rp-roster{grid-template-columns:minmax(0,1fr)}}

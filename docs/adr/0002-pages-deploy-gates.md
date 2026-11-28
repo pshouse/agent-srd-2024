@@ -22,10 +22,11 @@ Before upload, the build job runs the Node tests and the Python tests, then buil
 - `index.html`
 - `web/` runtime files (HTML, CSS, app, `lib/*.js`, vendored markdown-it and its license)
 - `dist/manifest.json`, `dist/web/index.json`, `dist/web/graph.json`, `dist/web/types/*.json`, `dist/cards/<type>/<slug>.md`
+- `dist/replays/index.json` and `dist/replays/*.trace.json` (M5 replay viewer; generated from git-tracked traces by `scripts/build_replay_index.py`, each listed by SHA-256)
 - `bin/srd`, `bin/srd-mcp`
 - `skill/SKILL.md`
 
-`scripts/check_site.sh` then refuses the tree if any file is outside that list, any symlink is present in `_site` or in an allowlisted source path, any file is over 5 MB, a `.env` / key / pem-like name appears, or `dataset_id` / counts in the manifest disagree with the expected dataset or with the index and graph sitting next to it.
+`scripts/check_site.sh` then refuses the tree if any file is outside that list, any symlink is present in `_site` or in an allowlisted source path, any file is over 5 MB, a `.env` / key / pem-like name appears, or `dataset_id` / counts in the manifest disagree with the expected dataset or with the index and graph sitting next to it. It also refuses the tree if `dist/replays/index.json` is malformed, lists a file that is not staged, misses a staged trace, or records a SHA-256 that does not match the staged copy.
 
 `.github/workflows/ci.yml` runs on pull requests and on pushes to `main`. It runs the same tests, checks the vendored markdown-it SHA-256, and on a push to `main` runs `gitleaks git` over a full-history checkout (`fetch-depth: 0`) of gitleaks 8.30.1 after verifying the release checksum. It does not deploy.
 

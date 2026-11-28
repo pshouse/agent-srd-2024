@@ -9,6 +9,7 @@ design mocks are not on it.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
@@ -29,6 +30,8 @@ ALLOWLIST = (
     "dist/web/graph.json",
     "dist/web/types/*.json",
     "dist/cards/*/*.md",
+    "dist/replays/index.json",
+    "dist/replays/*.trace.json",
     "bin/srd",
     "bin/srd-mcp",
     "skill/SKILL.md",
@@ -129,6 +132,47 @@ def check(repo: Path, site: Path) -> list[str]:
     for rel in sorted(expected - set(actual)):
         errors.append(f"missing required file: {rel}")
     errors.extend(_check_manifest(site))
+    errors.extend(_check_replays(site))
+    return errors
+
+
+def _check_replays(site: Path) -> list[str]:
+    """The replay index must list exactly the staged traces, each under 5 MB, by SHA-256."""
+    replay_dir = site / "dist" / "replays"
+    index_path = replay_dir / "index.json"
+    if not index_path.is_file():
+        return ["missing dist/replays/index.json"]
+    try:
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return [f"replays/index.json is not JSON: {exc}"]
+    if not isinstance(index, dict) or index.get("schema_version") != "1":
+        return ["replays/index.json schema_version is not '1'"]
+    if index.get("dataset_id") != EXPECTED_DATASET_ID:
+        return [f"replays/index.json dataset_id is {index.get('dataset_id')!r}"]
+    rows = index.get("replays")
+    if not isinstance(rows, list):
+        return ["replays/index.json replays is not a list"]
+    errors: list[str] = []
+    listed: set[str] = set()
+    for row in rows:
+        name = row.get("file") if isinstance(row, dict) else None
+        if not isinstance(name, str) or "/" in name or not name.endswith(".trace.json"):
+            errors.append(f"replays/index.json has a bad file entry: {name!r}")
+            continue
+        listed.add(name)
+        path = replay_dir / name
+        if not path.is_file():
+            errors.append(f"replay listed but not staged: {name}")
+            continue
+        data = path.read_bytes()
+        if len(data) > MAX_BYTES:
+            errors.append(f"over 5 MB: dist/replays/{name}")
+        if hashlib.sha256(data).hexdigest() != row.get("sha256"):
+            errors.append(f"replay sha256 does not match index: {name}")
+    staged = {p.name for p in replay_dir.glob("*.trace.json")}
+    for name in sorted(staged - listed):
+        errors.append(f"replay staged but not in index: {name}")
     return errors
 
 

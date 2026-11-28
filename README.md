@@ -338,7 +338,11 @@ The static explorer under `web/` loads a different set of those files on each ro
 | `#/bundle/<id>` Inspector | the explorer files, then `dist/web/graph.json` and only the type shards the bundle touches | graph 70,903; Longsword depth 1 adds 105,476 including that graph and five shards |
 | `#/graph/<id>` Graph | the explorer files, then `dist/web/graph.json`, `web/lib/ego.js`, `web/lib/graph-view.js`, `web/lib/bundle.js`, and `web/lib/inspector-data.js` | 82,809. No type shards |
 
+| `#/replay`, `#/replay/<id>?step=N` Replay | the explorer files, then `web/lib/replay-*.js`, `dist/replays/index.json`, and the chosen `dist/replays/<id>.trace.json` | index 1,027; goblin-nl-1 trace 5,881; the three modules 17,235 |
+
 `graph.json` and the type shards are not requested on the explorer route. The graph view draws at most 80 nodes from that file.
+
+The replay viewer steps through arena traces on a 5-ft grid. It reads the committed traces through `dist/replays/`, which `python3 scripts/build_replay_index.py` regenerates from the traces git tracks under `examples/sessions/` (run it after committing a new trace; `--check` reports a stale copy). A local `.trace.json` can also be opened or dropped onto the page; it is read with `FileReader` and never leaves the browser. A trace is shown only when it validates as schema_version `"4"` and stepping through every action reproduces its `final_state`.
 
 See [`docs/SPEC.md`](docs/SPEC.md) for the complete schema and contract specification.
 
