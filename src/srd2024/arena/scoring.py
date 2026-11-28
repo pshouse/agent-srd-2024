@@ -98,6 +98,66 @@ def _is_offensive_action(
     return []
 
 
+# Events that show a cast did something (#75). Opponent-facing ones count only on an opponent and ally-facing
+# ones only on the caster's side, so a spell that only hurts its own caster (#67) earns nothing.
+_CAST_HITS_OPPONENT: frozenset[str] = frozenset(
+    {"damage_applied", "condition_applied", "spell_attack_roll", "saving_throw", "spell_blocked"}
+)
+_CAST_HELPS_ALLY: frozenset[str] = frozenset({"healing_applied", "temp_hp_applied", "teleported", "condition_ended"})
+
+
+def _effects_before_each_action(
+    init_combatants: dict[str, dict[str, Any]], actions: list[dict[str, Any]]
+) -> list[dict[str, set[str]]]:
+    """Active effect kinds per combatant just before each action, replayed from `state_diff.effect_changes`."""
+    current: dict[str, set[str]] = {
+        cid: {str(e.get("kind")) for e in (c.get("active_effects") or []) if isinstance(e, dict) and e.get("kind")}
+        for cid, c in init_combatants.items()
+    }
+    out: list[dict[str, set[str]]] = []
+    for a in actions:
+        out.append({cid: set(kinds) for cid, kinds in current.items()})
+        for ec in ((a.get("state_diff") or {}).get("effect_changes") or []):
+            cid = str(ec.get("id") or "")
+            kinds = current.setdefault(cid, set())
+            kinds.difference_update(str(k) for k in ec.get("removed") or [])
+            kinds.update(str(k) for k in ec.get("added") or [])
+    return out
+
+
+def _cast_had_effect(
+    action: dict[str, Any], side_ids: set[str], prior_effects: dict[str, set[str]]
+) -> bool:
+    """True when a `cast_spell` changed something that matters (#75).
+
+    That means a spell attack roll, forced save, damage, condition or Shield block against an opponent; healing,
+    temp HP, a teleport or a removed condition on the caster's side; or an effect kind a same-side target
+    didn't already have (so re-casting Mage Armor doesn't count). Narrative casts, unmodeled damage
+    (`spell_damage_unresolved`) and duplicate buffs earn nothing. Synthetic transcripts with neither events nor
+    a state_diff keep the old credit.
+    """
+    events = action.get("events")
+    state_diff = action.get("state_diff")
+    if not events and not state_diff:
+        return True
+    for ev in events or []:
+        if ev.get("reaction"):
+            continue
+        etype = str(ev.get("type") or "")
+        tid = str(ev.get("target_id") or "")
+        if etype in _CAST_HITS_OPPONENT and tid and tid not in side_ids:
+            if etype == "saving_throw" and str(ev.get("reason") or "") == "concentration":
+                continue
+            return True
+        if etype in _CAST_HELPS_ALLY and (tid in side_ids or (etype == "teleported" and not tid)):
+            return True
+    for ec in ((state_diff or {}).get("effect_changes") or []):
+        cid = str(ec.get("id") or "")
+        if cid in side_ids and any(str(k) not in prior_effects.get(cid, set()) for k in ec.get("added") or []):
+            return True
+    return False
+
+
 def _successful_help_turns(side_actions: list[dict[str, Any]]) -> set[tuple[int, int, str]]:
     """Return turn keys of `help` actions whose Advantage was spent on an ally attack that hit.
 
@@ -244,6 +304,8 @@ def score_match(
     # Turn productivity: a turn is productive if any action in it attacked or cast,
     # or used Help that set up an ally's hit.
     successful_help_turns = _successful_help_turns(side_actions)
+    effects_before = _effects_before_each_action(init_combatants, actions)
+    prior_by_action = {id(a): effects_before[i] for i, a in enumerate(actions)}
     turn_productivity: dict[tuple[int, int, str], bool] = {}
     turn_talk: dict[tuple[int, int, str], int] = {}
     for a in side_actions:
@@ -252,6 +314,8 @@ def score_match(
         turn_key = (int(a.get("round", 0)), int(a.get("turn_index", 0)), str(a.get("actor_id") or ""))
         a_type = str((a.get("intent") or {}).get("type") or "").strip().lower()
         is_prod = a_type in _PRODUCTIVE_INTENT_TYPES and (a_type != "help" or turn_key in successful_help_turns)
+        if is_prod and a_type == "cast_spell":
+            is_prod = _cast_had_effect(a, side_ids, prior_by_action.get(id(a), {}))
         turn_productivity[turn_key] = turn_productivity.get(turn_key, False) or is_prod
         talk = a.get("table_talk")
         if isinstance(talk, str) and talk.strip():

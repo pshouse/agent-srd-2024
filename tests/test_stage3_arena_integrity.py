@@ -504,6 +504,97 @@ _CALIBRATION_ENEMIES: dict[str, list[dict[str, Any]]] = {
 }
 
 
+_NOOP_SPELLS = ("light", "divine-favor", "hunters-mark", "hex")
+
+
+def _noop_cast_scenario(sid: str, rules: RulesStore) -> dict[str, Any]:
+    """A built-in scenario where every PC also knows Light and three per-hit riders the engine doesn't resolve."""
+    from srd2024.arena.scenarios import _BUILTIN_SCENARIOS
+    from srd2024.engine.character import compile_character
+
+    raw = copy.deepcopy(_BUILTIN_SCENARIOS[sid])
+    raw["id"] = f"{sid}-noop-cast"
+    for entry in raw["party"]:
+        sb = compile_character(entry.pop("spec"), rules)["statblock"]
+        sc = sb.get("spellcasting") or {"ability": "wis", "spell_save_dc": 13, "spell_attack_bonus": 5, "is_pact_magic": False}
+        sc["cantrips"] = list(sc.get("cantrips") or []) + ["light"]
+        sc["prepared_spells"] = list(sc.get("prepared_spells") or []) + ["divine-favor", "hunters-mark", "hex"]
+        sc["slots"] = {**(sc.get("slots") or {}), "1": max(4, int((sc.get("slots") or {}).get("1", 0)))}
+        sb["spellcasting"] = sc
+        entry["statblock"] = sb
+    return raw
+
+
+class _NoopCaster:
+    """Issue #75 exploit: spend every turn on legal casts that do nothing (Light, unresolved rider damage).
+
+    Before #75 every successful cast counted as a productive turn, so this scored 42.25 on all three
+    scenarios with 0 damage and 0 wins, against random's ~25-32.
+    """
+
+    name = "noop-caster"
+
+    def reset(self, seed: int | None = None) -> None:
+        return
+
+    def decide(self, observation: dict[str, Any]) -> AgentDecision:
+        me = observation["self"]
+        res = me.get("turn_resources") or {}
+        sc = me.get("spellcasting") or {}
+        slots = sorted(int(k) for k, v in (sc.get("slots") or {}).items() if int(v) > 0)
+        for spell in _NOOP_SPELLS:
+            cantrip = spell == "light"
+            econ = "action" if cantrip else "bonus_action"
+            if not res.get(econ) or (not cantrip and not slots):
+                continue
+            intent: dict[str, Any] = {"type": "cast_spell", "actor_id": me["id"], "spell": spell, "target_ids": [me["id"]]}
+            if not cantrip:
+                intent["slot_level"] = slots[0]
+            return AgentDecision(intent=intent, rationale="no-op cast")
+        return AgentDecision(intent={"type": "end_turn", "actor_id": me["id"]}, rationale="idle")
+
+
+class TestNoopCastRegression(unittest.TestCase):
+    """#75: casts with no modeled effect earn no productive-turn credit."""
+
+    def test_noop_caster_scores_at_or_below_random_with_zero_wins(self) -> None:
+        rules = RulesStore()
+        noop_scores, rand_scores, noop_wins, noop_damage = [], [], 0, 0
+        for sid in ("goblin-ambush", "crypt-of-ghouls", "wyrmling-lair"):
+            scen = _noop_cast_scenario(sid, rules)
+            for seed in _SEEDS:
+                t = run_match(scen, party_driver=_NoopCaster(), enemy_driver=HeuristicTacticalDriver(rules), rules=rules, seed=seed)
+                casts = sum(1 for a in t["actions"] if a["side"] == "party" and a["intent"].get("type") == "cast_spell")
+                self.assertGreater(casts, 0, "the probe must actually cast")
+                noop_scores.append(float(t["scorecard"]["composite_score"]))
+                noop_wins += t["winner"] == "party"
+                noop_damage += int(t["scorecard"]["metrics"].get("effective_damage_dealt", 0))
+                r = run_match(scen, party_driver=RandomDriver(seed=seed), enemy_driver=HeuristicTacticalDriver(rules), rules=rules, seed=seed)
+                rand_scores.append(float(r["scorecard"]["composite_score"]))
+        noop, rand = sum(noop_scores) / len(noop_scores), sum(rand_scores) / len(rand_scores)
+        self.assertEqual(noop_wins, 0)
+        self.assertEqual(noop_damage, 0)
+        self.assertLessEqual(noop, rand, f"no-op caster {noop:.2f} vs random {rand:.2f}")
+
+    def test_cast_credit_rules(self) -> None:
+        from srd2024.arena.scoring import _cast_had_effect
+
+        side = {"pc-a", "pc-b"}
+        base = {"state_diff": {"effect_changes": []}}
+        self.assertFalse(_cast_had_effect({**base, "events": [{"type": "spell_cast"}, {"type": "spell_damage_unresolved"}]}, side, {}))
+        self.assertFalse(_cast_had_effect({**base, "events": [{"type": "spell_cast_narrative"}]}, side, {}))
+        self.assertTrue(_cast_had_effect({**base, "events": [{"type": "spell_attack_roll", "target_id": "gob"}]}, side, {}))
+        self.assertTrue(_cast_had_effect({**base, "events": [{"type": "saving_throw", "target_id": "gob", "reason": "fireball"}]}, side, {}))
+        # Damage only to your own side (#67's self-hit) isn't credit.
+        self.assertFalse(_cast_had_effect({**base, "events": [{"type": "damage_applied", "target_id": "pc-a"}]}, side, {}))
+        self.assertTrue(_cast_had_effect({**base, "events": [{"type": "healing_applied", "target_id": "pc-b"}]}, side, {}))
+        self.assertTrue(_cast_had_effect({**base, "events": [{"type": "teleported", "actor_id": "pc-a"}]}, side, {}))
+        buff = {"events": [{"type": "spell_cast"}], "state_diff": {"effect_changes": [{"id": "pc-a", "added": ["mage_armor"], "removed": []}]}}
+        self.assertTrue(_cast_had_effect(buff, side, {"pc-a": set()}))
+        self.assertFalse(_cast_had_effect(buff, side, {"pc-a": {"mage_armor"}}), "re-cast of an active buff")
+        self.assertTrue(_cast_had_effect({"intent": {"type": "cast_spell"}}, side, {}), "synthetic transcript keeps credit")
+
+
 class TestTalkSpamRegression(unittest.TestCase):
     """CTO (Phase 3): talk-spam must stay at or under ~0.6x a random policy, and never win.
 
