@@ -11,7 +11,7 @@
 
 import { tokenLabels, validateBounds, validateTerrain } from "../lib/replay-model.js";
 
-export const STATUSES = new Set(["ready", "running", "awaiting_input", "finished", "paused", "error"]);
+export const STATUSES = new Set(["builder", "ready", "running", "awaiting_input", "short_rest", "finished", "paused", "error"]);
 export const CATEGORIES = ["attack", "spell", "move", "tactical", "turn"];
 export const CATEGORY_TITLES = { attack: "Attacks", spell: "Spells", move: "Movement", tactical: "Actions", turn: "Turn" };
 const TOKEN_RE = /^[A-Za-z0-9_-]{20,128}$/;
@@ -396,12 +396,16 @@ export function downloadName(header) {
 /** Short human status line. */
 export function statusText(state) {
   switch (state.status) {
+    case "builder":
+      return "Encounter Builder";
     case "ready":
       return "Starting…";
     case "running":
       return "AI seats are acting…";
     case "awaiting_input":
       return `Your move: ${state.view ? state.view.self.name : ""}`;
+    case "short_rest":
+      return "Short Rest intermission";
     case "finished":
       return state.result ? `Match over · ${String(state.result.winner)} wins` : "Match over";
     case "paused":

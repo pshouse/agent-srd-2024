@@ -326,7 +326,7 @@ test("clickNote resolves moves, reports stopped moves, and clears on new turns (
 test("the tabletop is plain modules with no HTML injection or inline styles, and stays off the Pages allowlist", () => {
   const dir = new URL("../tabletop/", import.meta.url);
   const files = readdirSync(dir).filter((f) => f.endsWith(".js"));
-  assert.deepEqual(files.sort(), ["tabletop-model.js", "tabletop.js"]);
+  assert.deepEqual(files.sort(), ["builder-model.js", "builder-view.js", "tabletop-model.js", "tabletop.js"]);
   for (const f of [...files.map((f) => new URL(f, dir)), new URL("../lib/board-view.js", import.meta.url)]) {
     const src = readFileSync(f, "utf8");
     assert.doesNotMatch(src, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/, f.pathname);

@@ -9,6 +9,7 @@
 
 import { attributionPieces } from "../lib/attribution.js";
 import { badge, createBoard, el, notice, paintBoard, paintRoster, svgEl, terrainLegendItems } from "../lib/board-view.js";
+import { mountBuilderView, renderShortRestView } from "./builder-view.js";
 import {
   boardModel,
   clickAction,
@@ -41,6 +42,7 @@ let pollTimer = 0;
 let picked = null;
 let pendingMove = null;
 let currentClickNote = "";
+let builderMounted = false;
 
 const ui = buildShell();
 
@@ -224,7 +226,12 @@ function buildShell() {
     el("h2", { class: "sec-h", text: "Combat log" }),
     log,
   ]);
-  const stage = el("div", { class: "rp-main" }, [left, right]);
+  const builderBox = el("div", { class: "bld-host" });
+  builderBox.hidden = true;
+  const restBox = el("div", { class: "bld-host" });
+  restBox.hidden = true;
+  const combatStage = el("div", { class: "rp-main" }, [left, right]);
+  const stage = el("div", { class: "tt-stage" }, [builderBox, restBox, combatStage]);
   main.replaceChildren(head, status, stage);
 
   saveBtn.addEventListener("click", () => send("/api/save", { decision: state && state.decision }));
@@ -269,7 +276,7 @@ function buildShell() {
     send("/api/nl", { text, decision: state && state.decision });
   }
 
-  return { title, pills, saveBtn, quitBtn, resumeBtn, exportBtn, status, stage, boardBox, legend, clickNote, targets, reroll, menuBox, moveRow, moveBtn, moveX, moveY, sayRow, sayBtn, sayInput, nlRow, nlBtn, nlInput, me, roster, talk, log };
+  return { title, pills, saveBtn, quitBtn, resumeBtn, exportBtn, status, stage, builderBox, restBox, combatStage, boardBox, legend, clickNote, targets, reroll, menuBox, moveRow, moveBtn, moveX, moveY, sayRow, sayBtn, sayInput, nlRow, nlBtn, nlInput, me, roster, talk, log };
 }
 
 // ---- painting ----------------------------------------------------------------
@@ -294,6 +301,34 @@ function paint() {
     if (s.trace_written) ui.pills.append(el("span", { class: "pill full", text: "Trace written (--out-trace)" }));
   }
   if (s.checkpoint_written) ui.pills.append(el("span", { class: "pill", text: "Checkpoint saved" }));
+  const isBuilder = s.status === "builder";
+  const isShortRest = s.status === "short_rest";
+  ui.builderBox.hidden = !isBuilder;
+  ui.restBox.hidden = !isShortRest;
+  ui.combatStage.hidden = isBuilder || isShortRest;
+  if (isBuilder) {
+    if (!builderMounted) {
+      builderMounted = true;
+      mountBuilderView(ui.builderBox, {
+        api,
+        onLaunched: (nextState, err) => {
+          builderMounted = false;
+          accept(nextState, err, { afterAction: true });
+        },
+      });
+    }
+    paintControls();
+    return;
+  }
+  builderMounted = false;
+  if (isShortRest) {
+    renderShortRestView(ui.restBox, s, {
+      busy,
+      onSubmit: (takeRest, plan) => send("/api/short-rest", { take_rest: takeRest, plan }),
+    });
+    paintControls();
+    return;
+  }
   paintBoardAndStatus();
   paintControls();
 }
@@ -345,8 +380,26 @@ function paintMe(view) {
   const r = me.resources;
   const tags = el("div", { class: "rp-tags" });
   for (const [on, label] of [[r.action, "Action"], [r.bonus_action, "Bonus action"], [r.reaction, "Reaction"]]) tags.append(badge(label, on ? "fx" : "bad"));
+  if (r.surge_action) tags.append(badge("Action Surge Ready", "on"));
   if (r.attacks_remaining > 0) tags.append(badge(`Attacks left: ${r.attacks_remaining}`, "on"));
   if (me.heroic_inspiration) tags.append(badge("Heroic Inspiration", "on"));
+  const classRes = me.class_resources && typeof me.class_resources === "object" ? me.class_resources : {};
+  const RES_LABELS = {
+    second_wind: "Second Wind",
+    action_surge: "Action Surge",
+    lay_on_hands: "Lay on Hands",
+    channel_divinity: "Channel Divinity",
+    arcane_recovery: "Arcane Recovery",
+  };
+  for (const [k, info] of Object.entries(classRes)) {
+    if (!info || typeof info !== "object") continue;
+    const label = RES_LABELS[k] || k.replaceAll("_", " ");
+    const unit = k === "lay_on_hands" ? " HP" : "";
+    tags.append(badge(`${label} ${info.remaining}/${info.max}${unit}`, info.remaining > 0 ? "fx" : "bad"));
+  }
+  if (me.hit_dice && typeof me.hit_dice === "object") {
+    tags.append(badge(`Hit Dice ${me.hit_dice.remaining}/${me.hit_dice.max} d${me.hit_dice.die}`, "fx"));
+  }
   for (const c of me.conditions) tags.append(badge(c, "bad"));
   if (me.concentration) tags.append(badge(`Concentrating: ${me.concentration}`, "conc"));
   const slots = Object.entries(me.slots || {}).map(([lvl, n]) => `L${lvl}: ${n}`).join(" · ");

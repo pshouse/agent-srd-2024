@@ -46,6 +46,14 @@ from urllib.parse import parse_qs, urlsplit
 from srd2024.engine.store import RulesStore
 
 from .agents import BaseLLMDriver, _available_slots_map, create_driver, scrub_secrets
+from .builder import (
+    MAX_BUILDER_BODY_BYTES,
+    compile_launch_payload,
+    compute_encounter_budget,
+    get_builder_catalog,
+    search_monsters,
+    validate_pc_spec,
+)
 from .human import HumanDriver, _sanitize_hook_for_hud, build_human_action_menu
 from .scenarios import load_scenario
 from .session import load_session_checkpoint, run_interactive_session, save_session_checkpoint
@@ -68,6 +76,8 @@ STATIC_FILES: dict[str, str] = {
     "/index.html": "tabletop/index.html",
     "/tabletop.js": "tabletop/tabletop.js",
     "/tabletop-model.js": "tabletop/tabletop-model.js",
+    "/builder-model.js": "tabletop/builder-model.js",
+    "/builder-view.js": "tabletop/builder-view.js",
     "/tabletop.css": "tabletop/tabletop.css",
     "/styles.css": "styles.css",
     "/lib/board-view.js": "lib/board-view.js",
@@ -103,8 +113,12 @@ _COMMAND_RE = re.compile(
     r"|^(say|move|mv|m)\s",
     re.IGNORECASE,
 )
-_STRUCTURED_KINDS = ("attack", "cast_spell", "dodge", "dash", "disengage", "help")
-_INTENT_KEYS = {"type", "actor_id", "target_id", "target_ids", "weapon", "spell", "slot_level", "action", "ally_id", "offhand", "destination", "to", "stand_up", "as_reaction"}
+_STRUCTURED_KINDS = ("attack", "cast_spell", "class_feature", "dodge", "dash", "disengage", "help")
+_INTENT_KEYS = {
+    "type", "actor_id", "target_id", "target_ids", "weapon", "spell", "slot_level",
+    "action", "ally_id", "offhand", "destination", "to", "stand_up", "as_reaction",
+    "feature", "mode", "amount", "allocations", "move_to",
+}
 
 
 class ApiError(Exception):
@@ -138,6 +152,9 @@ class TabletopConfig:
     resume_path: Path | None = None
     out_trace: Path | None = None
     force: bool = False
+    builder_mode: bool = False
+    dungeon: str | dict[str, Any] | None = None
+    allow_short_rest: bool = True
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -206,11 +223,14 @@ def client_view(observation: dict[str, Any]) -> dict[str, Any]:
             "heroic_inspiration": bool(me.get("heroic_inspiration", False)),
             "resources": {
                 "action": bool(res.get("action")),
+                "surge_action": bool(res.get("surge_action", False)),
                 "bonus_action": bool(res.get("bonus_action")),
                 "reaction": bool(res.get("reaction")),
                 "attacks_remaining": int(res.get("attacks_remaining", 0) or 0),
             },
             "slots": {str(k): int(v) for k, v in sorted(slots.items())},
+            "class_resources": copy.deepcopy(me.get("class_resources") or {}),
+            "hit_dice": copy.deepcopy(me.get("hit_dice")),
             "death_saves": {
                 "successes": int((me.get("death_saves") or {}).get("successes", 0)),
                 "failures": int((me.get("death_saves") or {}).get("failures", 0)),
@@ -329,8 +349,11 @@ class TabletopSession:
         self.rules = rules
         self.nl_driver = nl_driver
         self._cv = threading.Condition()
-        self.status = "ready"  # ready | running | awaiting_input | finished | paused | error
+        self.status = "builder" if config.builder_mode else "ready"  # builder | ready | running | awaiting_input | short_rest | finished | paused | error
         self._pending: str | None = None
+        self._pending_rest: dict[str, Any] | None = None
+        self._last_rest_record: dict[str, Any] | None = None
+        self.dungeon_progress: dict[str, Any] | None = None
         self._abort = False
         self._decision_id = 0
         self._view: dict[str, Any] | None = None
@@ -346,14 +369,21 @@ class TabletopSession:
         self.trace_written = False
         self.checkpoint_written = False
         self._resume_from: Path | None = config.resume_path
-        self._scenario_name = ""
-        self._scenario_id = ""
+        self._scenario_name = "Custom Builder" if config.builder_mode else ""
+        self._scenario_id = "builder" if config.builder_mode else ""
         if config.scenario is not None:
             try:
                 compiled = load_scenario(config.scenario, rules)
                 self._scenario_name, self._scenario_id = str(compiled["name"]), str(compiled["id"])
             except Exception:  # validated again when the session starts
                 pass
+        elif config.dungeon is not None:
+            if isinstance(config.dungeon, dict):
+                self._scenario_name = str(config.dungeon.get("name") or "Custom Dungeon")
+                self._scenario_id = str(config.dungeon.get("id") or "custom-dungeon")
+            else:
+                self._scenario_name = str(config.dungeon)
+                self._scenario_id = str(config.dungeon)
         elif config.resume_path is not None:
             ckpt = load_session_checkpoint(config.resume_path)
             self._scenario_name = str(ckpt["scenario"].get("name") or "")
@@ -405,6 +435,9 @@ class TabletopSession:
 
     def _run(self) -> None:
         cfg = self.config
+        if cfg.dungeon is not None:
+            self._run_dungeon()
+            return
         resume = self._resume_from
         while True:
             try:
@@ -456,6 +489,196 @@ class TabletopSession:
                     self.notice = trace_note
                 self._cv.notify_all()
             return
+
+    def _wait_short_rest_choice(self, progress: dict[str, Any]) -> dict[str, Any]:
+        with self._cv:
+            self.dungeon_progress = copy.deepcopy(progress)
+            self._pending_rest = None
+            self.status = "short_rest"
+            self._cv.notify_all()
+            while self._pending_rest is None and not self._abort:
+                self._cv.wait()
+            if self._abort:
+                self.status = "running"
+                raise KeyboardInterrupt
+            choice, self._pending_rest = self._pending_rest, None
+            self.status = "running"
+            return choice
+
+    def _run_dungeon(self) -> None:
+        cfg = self.config
+        from srd2024.arena import dungeon as dungeon_mod
+
+        try:
+            compiled = dungeon_mod.load_dungeon(cfg.dungeon, self.rules)
+            party_carryover = dungeon_mod.init_party_carryover(compiled["party"], self.rules)
+            rooms = list(compiled["rooms"])
+            total_rooms = len(rooms)
+            effective_allow_rest = bool(cfg.allow_short_rest) and bool(
+                compiled.get("allow_short_rest_between_rooms", True)
+            )
+            room_traces: list[dict[str, Any]] = []
+            rests: list[dict[str, Any]] = []
+            rooms_cleared = 0
+            last_winner = "enemy"
+
+            self._output(
+                f"=== Starting Dungeon: {compiled['name']} ({total_rooms} rooms, Tier {compiled['tier']}) ==="
+            )
+
+            for r_idx, room in enumerate(rooms):
+                if not dungeon_mod._has_conscious_living_pc(party_carryover):
+                    break
+
+                with self._cv:
+                    self.dungeon_progress = {
+                        "room_index": r_idx,
+                        "total_rooms": total_rooms,
+                        "room_name": str(room.get("name") or f"Room {r_idx + 1}"),
+                        "next_room_name": (
+                            str(rooms[r_idx + 1].get("name") or f"Room {r_idx + 2}")
+                            if r_idx + 1 < total_rooms
+                            else None
+                        ),
+                        "party_summary": copy.deepcopy(party_carryover),
+                    }
+
+                self._output(f"\n--- Entering {room['name']} ({r_idx + 1}/{total_rooms}) ---")
+                room_scenario = dungeon_mod.build_room_scenario(compiled, r_idx, party_carryover)
+                room_seed = int(cfg.seed) + r_idx * 1000
+                room_res = run_interactive_session(
+                    room_scenario,
+                    rules=self.rules,
+                    play_as=cfg.play_as,
+                    seat_overrides=cfg.seat_overrides,
+                    party_agent=cfg.party_agent,
+                    enemy_agent=cfg.enemy_agent,
+                    human_driver=self._new_driver(),
+                    output_fn=self._output,
+                    seed=room_seed,
+                    max_rounds=cfg.max_rounds,
+                    max_actions_per_turn=cfg.max_actions_per_turn,
+                    max_retries_per_action=cfg.max_retries_per_action,
+                    api_base=cfg.api_base,
+                    api_key_env=cfg.api_key_env,
+                    temperature=cfg.temperature,
+                )
+                if room_res.get("status") == "paused":
+                    with self._cv:
+                        self.status = "paused"
+                        self.pause_reason = str(room_res.get("reason") or "quit")
+                        self._cv.notify_all()
+                    return
+
+                room_traces.append(room_res)
+                last_winner = str(room_res.get("winner") or "draw")
+                room_won = last_winner == "party"
+                party_carryover = dungeon_mod.extract_party_carryover(
+                    room_res["final_state"],
+                    party_carryover,
+                    room_won=room_won,
+                )
+                if not room_won:
+                    break
+
+                rooms_cleared += 1
+                if r_idx + 1 < total_rooms:
+                    if not dungeon_mod._has_any_living_pc(party_carryover):
+                        break
+                    next_room = rooms[r_idx + 1]
+                    if effective_allow_rest:
+                        choice = self._wait_short_rest_choice(
+                            {
+                                "room_index": r_idx,
+                                "total_rooms": total_rooms,
+                                "room_name": str(room.get("name") or f"Room {r_idx + 1}"),
+                                "next_room_name": str(next_room.get("name") or f"Room {r_idx + 2}"),
+                                "party_summary": party_carryover,
+                            }
+                        )
+                        if choice.get("take_rest", True):
+                            rest_rng = dungeon_mod.DeterministicRNG(seed=(int(cfg.seed) ^ 0x52455354) + r_idx)
+                            party_carryover, rest_rec = dungeon_mod.resolve_short_rest(
+                                party_carryover,
+                                rng=rest_rng,
+                                plan=choice.get("plan"),
+                            )
+                            rest_entry = {
+                                "after_room_index": r_idx,
+                                "after_room_id": str(room.get("id") or f"room-{r_idx + 1}"),
+                                **rest_rec,
+                            }
+                        else:
+                            rest_entry = {
+                                "after_room_index": r_idx,
+                                "after_room_id": str(room.get("id") or f"room-{r_idx + 1}"),
+                                "taken": False,
+                                "per_pc": {},
+                            }
+                    else:
+                        rest_entry = {
+                            "after_room_index": r_idx,
+                            "after_room_id": str(room.get("id") or f"room-{r_idx + 1}"),
+                            "taken": False,
+                            "per_pc": {},
+                        }
+                    rests.append(rest_entry)
+                    with self._cv:
+                        self._last_rest_record = copy.deepcopy(rest_entry)
+                    if not dungeon_mod._has_conscious_living_pc(party_carryover):
+                        break
+
+            winner = "party" if rooms_cleared == total_rooms else last_winner
+            final_party_state = dungeon_mod._format_final_party_state(party_carryover)
+            result: dict[str, Any] = {
+                "schema_version": dungeon_mod.DUNGEON_SCHEMA_VERSION,
+                "kind": "dungeon_trace",
+                "dataset_id": self.rules.dataset_id,
+                "dungeon": {
+                    "id": compiled["id"],
+                    "name": compiled["name"],
+                    "tier": int(compiled["tier"]),
+                    "party_level": int(compiled["party_level"]),
+                    "total_rooms": total_rooms,
+                },
+                "config": {
+                    "seed": int(cfg.seed),
+                    "party_driver": str(cfg.party_agent),
+                    "enemy_driver": str(cfg.enemy_agent),
+                    "allow_short_rest": effective_allow_rest,
+                    "max_actions_per_turn": int(cfg.max_actions_per_turn),
+                    "max_retries_per_action": int(cfg.max_retries_per_action),
+                },
+                "winner": winner,
+                "rooms_cleared": rooms_cleared,
+                "total_rooms": total_rooms,
+                "rooms": room_traces,
+                "rests": rests,
+                "final_party_state": final_party_state,
+            }
+            result["scorecard"] = dungeon_mod.score_dungeon(result, self.rules)
+            result["digest"] = dungeon_mod.compute_dungeon_digest(result)
+        except KeyboardInterrupt:
+            with self._cv:
+                self.status = "paused"
+                self.pause_reason = "quit"
+                self._cv.notify_all()
+            return
+        except Exception as exc:
+            with self._cv:
+                self.status = "error"
+                self.error = scrub_secrets(str(exc) or type(exc).__name__)
+                self._cv.notify_all()
+            return
+
+        trace_note = self._write_trace(result)
+        with self._cv:
+            self.transcript = result
+            self.dungeon_progress = None
+            self.status = "finished"
+            if trace_note:
+                self.notice = trace_note
+            self._cv.notify_all()
 
     def _write_checkpoint(self, payload: dict[str, Any]) -> bool:
         path = self.config.save_path
@@ -537,6 +760,74 @@ class TabletopSession:
                     error = entry["text"].strip()[len(_REJECTED_PREFIX):].strip()
             return self.snapshot(since=mark), error
 
+    def launch_custom(self, launch_spec: dict[str, Any], wait_s: float = DEFAULT_WAIT_S) -> dict[str, Any]:
+        """Start a custom single encounter or 3-room dungeon from the builder lobby."""
+        mode = launch_spec["mode"]
+        if mode == "dungeon":
+            try:
+                from srd2024.arena import dungeon as _dungeon_mod  # noqa: F401
+            except ImportError as exc:
+                raise ApiError(
+                    501,
+                    "Multi-room dungeon engine (srd2024.arena.dungeon) is not available yet.",
+                ) from exc
+        with self._cv:
+            if self.status in ("running", "awaiting_input", "short_rest"):
+                raise ApiError(409, f"A session is already active ({self.status}); finish or quit it first.")
+            self.config.builder_mode = False
+            self.config.play_as = launch_spec["play_as"]
+            self.config.party_agent = launch_spec["party_agent"]
+            self.config.enemy_agent = launch_spec["enemy_agent"]
+            self.config.seed = int(launch_spec["seed"])
+            self.config.allow_short_rest = bool(launch_spec.get("allow_short_rest", True))
+            if mode == "dungeon":
+                self.config.dungeon = launch_spec["dungeon"]
+                self.config.scenario = None
+                self._scenario_name = str(launch_spec["dungeon"]["name"])
+                self._scenario_id = str(launch_spec["dungeon"]["id"])
+            else:
+                self.config.scenario = launch_spec["scenario"]
+                self.config.dungeon = None
+                self._scenario_name = str(launch_spec["scenario"]["name"])
+                self._scenario_id = str(launch_spec["scenario"]["id"])
+            self._resume_from = None
+            self._abort = False
+            self._pending = None
+            self._pending_rest = None
+            self._last_rest_record = None
+            self.dungeon_progress = None
+            self.transcript = None
+            self.error = None
+            self.notice = None
+            self.pause_reason = None
+            self._view = None
+            self._menu = []
+            mark = self._log_seq
+            self.status = "running"
+            self._thread = threading.Thread(target=self._run, name="srd-web-session", daemon=True)
+            self._thread.start()
+            self._wait_quiet(wait_s)
+            return self.snapshot(since=mark)
+
+    def submit_short_rest(
+        self,
+        *,
+        take_rest: bool,
+        plan: dict[str, Any] | None,
+        wait_s: float = DEFAULT_WAIT_S,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        """Resolve an inter-room Short Rest in dungeon play."""
+        with self._cv:
+            if self.status != "short_rest":
+                raise ApiError(409, f"Not waiting for a Short Rest (session is {self.status}).")
+            mark = self._log_seq
+            self._last_rest_record = None
+            self._pending_rest = {"take_rest": bool(take_rest), "plan": copy.deepcopy(plan) if plan is not None else None}
+            self.status = "running"
+            self._cv.notify_all()
+            self._wait_quiet(wait_s)
+            return self.snapshot(since=mark), copy.deepcopy(self._last_rest_record)
+
     def current_menu(self) -> tuple[int, list[dict[str, Any]], dict[str, Any] | None]:
         with self._cv:
             if self.status != "awaiting_input":
@@ -549,13 +840,25 @@ class TabletopSession:
             result = None
             if self.transcript is not None:
                 sc = self.transcript.get("scorecard") or {}
-                result = {
-                    "winner": self.transcript.get("winner"),
-                    "rounds": self.transcript.get("rounds"),
-                    "actions": len(self.transcript.get("actions") or []),
-                    "composite_score": sc.get("composite_score"),
-                    "digest": self.transcript.get("digest"),
-                }
+                if self.transcript.get("kind") == "dungeon_trace":
+                    rooms_list = self.transcript.get("rooms") or []
+                    result = {
+                        "winner": self.transcript.get("winner"),
+                        "rounds": sum(int(r.get("rounds") or 0) for r in rooms_list),
+                        "actions": sum(len(r.get("actions") or []) for r in rooms_list),
+                        "rooms_cleared": self.transcript.get("rooms_cleared"),
+                        "total_rooms": self.transcript.get("total_rooms"),
+                        "composite_score": sc.get("composite_score"),
+                        "digest": self.transcript.get("digest"),
+                    }
+                else:
+                    result = {
+                        "winner": self.transcript.get("winner"),
+                        "rounds": self.transcript.get("rounds"),
+                        "actions": len(self.transcript.get("actions") or []),
+                        "composite_score": sc.get("composite_score"),
+                        "digest": self.transcript.get("digest"),
+                    }
             live = self.status == "awaiting_input"
             return {
                 "status": self.status,
@@ -570,6 +873,7 @@ class TabletopSession:
                 "decision": self._decision_id if live else None,
                 "view": copy.deepcopy(self._view),
                 "menu": copy.deepcopy(self._menu) if live else [],
+                "dungeon_progress": copy.deepcopy(self.dungeon_progress),
                 "log": lines,
                 "log_next": lines[-1]["seq"] if lines else since,
                 "result": result,
@@ -659,7 +963,10 @@ def action_to_line(body: dict[str, Any], menu: list[dict[str, Any]], view: dict[
                 raise ApiError(400, "'intent' must be an object with a string 'type'.")
             want = dict(want)
         else:
-            _only("target_id", "target_ids", "weapon", "spell", "slot_level", "action", "ally_id", "offhand")
+            _only(
+                "target_id", "target_ids", "weapon", "spell", "slot_level", "action", "ally_id", "offhand",
+                "feature", "mode", "amount", "allocations", "move_to",
+            )
             want = {k: v for k, v in body.items() if k not in allowed}
             want["type"] = kind
         unknown = set(want) - _INTENT_KEYS
@@ -780,7 +1087,7 @@ class _Handler(BaseHTTPRequestHandler):
         if scheme.lower() != "bearer" or not value or not hmac.compare_digest(value.strip().encode(), self.server.token.encode()):
             raise ApiError(403, "Invalid token.")
 
-    def _read_json(self) -> dict[str, Any]:
+    def _read_json(self, max_bytes: int = MAX_BODY_BYTES) -> dict[str, Any]:
         ctype = self.headers.get("Content-Type", "")
         if ctype.split(";", 1)[0].strip().lower() != "application/json":
             raise ApiError(415, "Content-Type must be application/json.")
@@ -790,9 +1097,9 @@ class _Handler(BaseHTTPRequestHandler):
         if raw_len is None or not raw_len.isdigit():
             raise ApiError(411, "Content-Length required.")
         length = int(raw_len)
-        if length > MAX_BODY_BYTES:
+        if length > max_bytes:
             self.close_connection = True
-            raise ApiError(413, f"Body larger than {MAX_BODY_BYTES} bytes.")
+            raise ApiError(413, f"Body larger than {max_bytes} bytes.")
         raw = self.rfile.read(length)
         try:
             data = json.loads(raw.decode("utf-8")) if raw else {}
@@ -859,16 +1166,119 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if method == "GET" and path == "/api/trace":
             trace = session.trace()
-            name = f"{trace.get('scenario', {}).get('id', 'match')}-seed{trace.get('config', {}).get('seed', 0)}.trace.json"
+            trace_id = (trace.get("scenario") or trace.get("dungeon") or {}).get("id", "match")
+            name = f"{trace_id}-seed{trace.get('config', {}).get('seed', 0)}.trace.json"
             name = re.sub(r"[^A-Za-z0-9._-]", "-", name)
             body = (json.dumps(trace, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
             self._send(200, body, "application/json; charset=utf-8", {"Content-Disposition": f'attachment; filename="{name}"'})
             return
+        if method == "GET" and path == "/api/builder/catalog":
+            self._json(200, get_builder_catalog(session.rules))
+            return
+        if method == "GET" and path == "/api/builder/monsters":
+            allowed_q = {"cr_min", "cr_max", "type", "coverage", "q", "limit", "offset"}
+            unknown_q = set(query) - allowed_q
+            if unknown_q:
+                raise ApiError(400, f"Unknown query parameter(s): {', '.join(sorted(unknown_q))}.")
+
+            def _opt_float(key: str) -> float | None:
+                if key not in query or not query[key][0].strip():
+                    return None
+                raw_v = query[key][0].strip()
+                if "/" in raw_v:
+                    num, _, den = raw_v.partition("/")
+                    try:
+                        val = float(num) / float(den)
+                    except (ValueError, ZeroDivisionError):
+                        raise ApiError(400, f"'{key}' must be a valid CR number.") from None
+                else:
+                    try:
+                        val = float(raw_v)
+                    except ValueError:
+                        raise ApiError(400, f"'{key}' must be a valid CR number.") from None
+                if val < 0 or val > 30:
+                    raise ApiError(400, f"'{key}' must be between 0 and 30.")
+                return val
+
+            def _opt_int(key: str, default: int) -> int:
+                if key not in query or not query[key][0].strip():
+                    return default
+                raw_v = query[key][0].strip()
+                if not raw_v.isdigit():
+                    raise ApiError(400, f"'{key}' must be a non-negative integer.")
+                return int(raw_v)
+
+            try:
+                res = search_monsters(
+                    session.rules,
+                    cr_min=_opt_float("cr_min"),
+                    cr_max=_opt_float("cr_max"),
+                    creature_type=query.get("type", [""])[0],
+                    coverage=query.get("coverage", [""])[0],
+                    q=query.get("q", [""])[0],
+                    limit=_opt_int("limit", 50),
+                    offset=_opt_int("offset", 0),
+                )
+            except ValueError as exc:
+                raise ApiError(400, str(exc)) from None
+            self._json(200, res)
+            return
         if method != "POST":
-            raise ApiError(405 if path in _API_PATHS else 404, "Method not allowed." if path in _API_PATHS else "Not found.")
+            raise ApiError(405 if path in _ALL_API_PATHS else 404, "Method not allowed." if path in _ALL_API_PATHS else "Not found.")
+        if path in _GET_API_PATHS:
+            raise ApiError(405, "Method not allowed.")
         if path not in _API_PATHS:
             raise ApiError(404, "Not found.")
-        body = self._read_json()
+        max_bytes = MAX_BUILDER_BODY_BYTES if path in _BUILDER_POST_PATHS else MAX_BODY_BYTES
+        body = self._read_json(max_bytes=max_bytes)
+
+        if path == "/api/builder/validate-pc":
+            extra = set(body) - {"spec"}
+            if extra or "spec" not in body:
+                raise ApiError(400, "validate-pc requires only the 'spec' object.")
+            self._json(200, validate_pc_spec(body["spec"], session.rules))
+            return
+        if path == "/api/builder/budget":
+            extra = set(body) - {"party_levels", "monsters"}
+            if extra or "party_levels" not in body or "monsters" not in body:
+                raise ApiError(400, "budget requires only 'party_levels' and 'monsters'.")
+            try:
+                res = compute_encounter_budget(body["party_levels"], body["monsters"], session.rules)
+            except ValueError as exc:
+                raise ApiError(422, str(exc)) from None
+            self._json(200, res)
+            return
+        if path == "/api/builder/launch":
+            try:
+                compiled = compile_launch_payload(body, session.rules)
+            except KeyError as exc:
+                raise ApiError(400, exc.args[0] if exc.args else str(exc)) from None
+            except ValueError as exc:
+                raise ApiError(422, str(exc)) from None
+            state = session.launch_custom(compiled)
+            self._json(200, {"ok": True, "error": None, "state": state})
+            return
+        if path == "/api/short-rest":
+            extra = set(body) - {"take_rest", "plan"}
+            if extra:
+                raise ApiError(400, f"Unknown field(s) for short-rest: {', '.join(sorted(extra))}.")
+            take_rest = body.get("take_rest", True)
+            if not isinstance(take_rest, bool):
+                raise ApiError(400, "'take_rest' must be a boolean.")
+            plan = body.get("plan")
+            if plan is not None and not isinstance(plan, dict):
+                raise ApiError(400, "'plan' must be an object or null.")
+            try:
+                from srd2024.arena import dungeon as _dungeon_mod  # noqa: F401
+            except ImportError as exc:
+                raise ApiError(
+                    501,
+                    "Multi-room dungeon engine (srd2024.arena.dungeon) is not available yet.",
+                ) from exc
+            state, rest = session.submit_short_rest(take_rest=take_rest, plan=plan)
+            self._json(200, {"ok": True, "error": None, "rest": rest, "state": state})
+            return
+
         decision = body.get("decision")
         if decision is not None and not _is_int(decision):
             raise ApiError(400, "'decision' must be an integer.")
@@ -908,7 +1318,10 @@ class _Handler(BaseHTTPRequestHandler):
         raise ApiError(404, "Not found.")  # pragma: no cover
 
 
-_API_PATHS = {"/api/start", "/api/action", "/api/nl", "/api/save", "/api/quit"}
+_GET_API_PATHS = {"/api/state", "/api/trace", "/api/builder/catalog", "/api/builder/monsters"}
+_BUILDER_POST_PATHS = {"/api/builder/validate-pc", "/api/builder/budget", "/api/builder/launch"}
+_API_PATHS = {"/api/start", "/api/action", "/api/nl", "/api/save", "/api/quit", "/api/short-rest", *_BUILDER_POST_PATHS}
+_ALL_API_PATHS = _GET_API_PATHS | _API_PATHS
 
 
 # ---- CLI -----------------------------------------------------------------------
@@ -922,7 +1335,9 @@ def build_parser() -> argparse.ArgumentParser:
             "`srd-arena play`, served on 127.0.0.1 only."
         ),
     )
-    p.add_argument("scenario", nargs="?", default=None, help="Built-in scenario ID or path to scenario JSON (optional with --resume).")
+    p.add_argument("scenario", nargs="?", default=None, help="Built-in scenario ID or path to scenario JSON (omit to open the Custom Builder lobby).")
+    p.add_argument("--builder", action="store_true", default=False, help="Open the Custom Party & Encounter Builder lobby.")
+    p.add_argument("--dungeon", default=None, help="Built-in dungeon ID or path to dungeon JSON for multi-room play.")
     p.add_argument("--rules", default=None, help="Path to rules.json (overrides SRD2024_RULES and dist/rules.json).")
     p.add_argument("--as", dest="play_as", default=None, help="Seat to play: a combatant ID (e.g. pc-bram), 'party', or 'dm'.")
     p.add_argument("--seat", dest="seats", action="append", default=None, help="Per-seat driver override '<combatant_id>=<driver_spec>' (repeatable).")
@@ -952,8 +1367,9 @@ def config_from_args(args: argparse.Namespace) -> TabletopConfig:
         raise ValueError(f"srd-web only binds {BIND_HOST}; refusing --host {args.host!r}.")
     if not 0 <= int(args.port) <= 65535:
         raise ValueError("--port must be between 0 and 65535.")
-    if args.scenario is None and args.resume_path is None:
-        raise ValueError("Provide a scenario ID/path or --resume <checkpoint.json>.")
+    builder_mode = bool(getattr(args, "builder", False)) or (
+        args.scenario is None and args.resume_path is None and getattr(args, "dungeon", None) is None
+    )
     if args.max_rounds is not None and args.max_rounds < 1:
         raise ValueError("--max-rounds must be >= 1.")
     if args.max_actions_per_turn < 1:
@@ -971,7 +1387,7 @@ def config_from_args(args: argparse.Namespace) -> TabletopConfig:
     if resume_path is not None:
         load_session_checkpoint(resume_path)
     return TabletopConfig(
-        scenario=_parse_scenario_arg(args.scenario) if args.scenario is not None else None,
+        scenario=_parse_scenario_arg(args.scenario) if args.scenario is not None and not builder_mode else None,
         play_as=args.play_as,
         seat_overrides=args.seats,
         party_agent=args.party_agent,
@@ -988,6 +1404,8 @@ def config_from_args(args: argparse.Namespace) -> TabletopConfig:
         resume_path=resume_path,
         out_trace=out_trace,
         force=bool(args.force),
+        builder_mode=builder_mode,
+        dungeon=getattr(args, "dungeon", None) if not builder_mode else None,
     )
 
 
