@@ -117,7 +117,7 @@ _STRUCTURED_KINDS = ("attack", "cast_spell", "class_feature", "dodge", "dash", "
 _INTENT_KEYS = {
     "type", "actor_id", "target_id", "target_ids", "weapon", "spell", "slot_level",
     "action", "ally_id", "offhand", "destination", "to", "stand_up", "as_reaction",
-    "feature", "mode", "amount", "allocations", "move_to",
+    "feature", "mode", "amount", "allocations", "move_to", "source",
 }
 
 
@@ -965,7 +965,7 @@ def action_to_line(body: dict[str, Any], menu: list[dict[str, Any]], view: dict[
         else:
             _only(
                 "target_id", "target_ids", "weapon", "spell", "slot_level", "action", "ally_id", "offhand",
-                "feature", "mode", "amount", "allocations", "move_to",
+                "feature", "mode", "amount", "allocations", "move_to", "source",
             )
             want = {k: v for k, v in body.items() if k not in allowed}
             want["type"] = kind

@@ -1175,7 +1175,7 @@ def build_system_prompt() -> str:
         '- move: {"type":"move","actor_id":"<id>","to":{"x":<int>,"y":<int>},"stand_up":<bool>}\n'
         '- attack (PC weapon): {"type":"attack","actor_id":"<id>","target_id":"<id>","weapon":"<slug>","offhand":<bool>}\n'
         '- attack (monster action): {"type":"attack","actor_id":"<id>","action":"<Action Name>","target_ids":["<id>",...]}\n'
-        '- cast_spell: {"type":"cast_spell","actor_id":"<id>","spell":"<slug>","slot_level":<int>,"target_ids":["<id>",...],"destination":{"x":<int>,"y":<int>}}\n'
+        '- cast_spell: {"type":"cast_spell","actor_id":"<id>","spell":"<slug>","slot_level":<int>,"target_ids":["<id>",...],"destination":{"x":<int>,"y":<int>}} (add "source":"magic-initiate" for a spell from self.feat_spellcasting; omit slot_level to use its free cast)\n'
         '- class_feature: {"type":"class_feature","actor_id":"<id>","feature":"second_wind"|"action_surge"|"lay_on_hands"|"preserve_life",...}\n'
         '- dodge / dash / disengage: {"type":"dodge"|"dash"|"disengage","actor_id":"<id>"}\n'
         '- help: {"type":"help","actor_id":"<id>","target_id":"<enemy_id>","ally_id":"<ally_id>"}\n'

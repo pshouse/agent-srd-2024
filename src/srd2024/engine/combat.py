@@ -202,6 +202,49 @@ ON_HIT_SMITES: dict[str, dict[str, Any]] = {
 }
 
 
+FEAT_SPELL_SOURCES: frozenset[str] = frozenset({"magic-initiate"})
+
+
+def _class_knows_spell(combatant: dict[str, Any], spell_slug: str) -> bool:
+    sc = combatant.get("spellcasting")
+    if not isinstance(sc, dict):
+        return False
+    known = {strip_prefix(str(x)) for x in list(sc.get("prepared_spells") or []) + list(sc.get("cantrips") or [])}
+    return spell_slug in known
+
+
+def _feat_spell_blocks(combatant: dict[str, Any]) -> list[dict[str, Any]]:
+    return [b for b in (combatant.get("feat_spellcasting") or []) if isinstance(b, dict)]
+
+
+def _feat_block_spells(block: dict[str, Any]) -> list[str]:
+    return [strip_prefix(str(x)) for x in list(block.get("cantrips") or []) + list(block.get("spells") or [])]
+
+
+def _feat_spell_block(
+    combatant: dict[str, Any], spell_slug: str, raw_source: Any
+) -> tuple[dict[str, Any] | None, str | None]:
+    """The feat spellcasting block a `cast_spell` uses (#8), or an error.
+
+    With `source: "magic-initiate"` the spell must come from a Magic Initiate pick. Without a source, a spell the
+    class already knows is a class cast, and one only a feat block has is cast from that feat.
+    """
+    blocks = _feat_spell_blocks(combatant)
+    if raw_source is not None and str(raw_source).strip():
+        source = strip_prefix(str(raw_source)).strip().lower()
+        if source not in FEAT_SPELL_SOURCES:
+            return None, f"Unknown spell source '{raw_source}' (supported: {sorted(FEAT_SPELL_SOURCES)})."
+        for b in blocks:
+            if str(b.get("feat") or "") == source and spell_slug in _feat_block_spells(b):
+                return b, None
+        return None, f"{combatant.get('id')} did not learn '{spell_slug}' from {source}."
+    if blocks and not _class_knows_spell(combatant, spell_slug):
+        for b in blocks:
+            if spell_slug in _feat_block_spells(b):
+                return b, None
+    return None, None
+
+
 def _knows_on_hit_smite(combatant: dict[str, Any]) -> bool:
     sc = combatant.get("spellcasting")
     if not isinstance(sc, dict):
@@ -1552,6 +1595,17 @@ def _build_pc_combatant(entry: dict[str, Any], *, state_shape_version: int = STA
         "monster_actions": [],
         "spellcasting": spellcasting,
     }
+    # #8: only characters with Magic Initiate picks carry the key, so other states keep their shape.
+    feat_sc = [copy.deepcopy(b) for b in (sb.get("feat_spellcasting") or []) if isinstance(b, dict)]
+    if feat_sc:
+        # Carryover between rooms (M6.3B): free casts only come back on a Long Rest.
+        raw_free = entry.get("feat_free_casts")
+        if isinstance(raw_free, list):
+            for b, left in zip(feat_sc, raw_free):
+                if isinstance(left, dict):
+                    cap = b.get("free_casts") or {}
+                    b["free_casts"] = {k: max(0, min(int(cap[k]), int(left.get(k, cap[k])))) for k in cap}
+        comb["feat_spellcasting"] = feat_sc
 
     if state_shape_version >= 3:
         hit_die = int(sb.get("hit_die", 8))
@@ -2783,17 +2837,28 @@ def compute_legal_actions(state: dict[str, Any], rules: RulesStore) -> dict[str,
             weapons = [str(a.get("name")) for a in actor.get("monster_actions", [])]
 
         sc = actor.get("spellcasting")
-        if isinstance(sc, dict):
-            avail_slots = {int(k) for k, v in (sc.get("slots") or {}).items() if int(v) > 0}
-            all_sp = list(sc.get("cantrips") or []) + list(sc.get("prepared_spells") or [])
+        feat_blocks = _feat_spell_blocks(actor)
+        if isinstance(sc, dict) or feat_blocks:
+            sc_d = sc if isinstance(sc, dict) else {}
+            avail_slots = {int(k) for k, v in (sc_d.get("slots") or {}).items() if int(v) > 0}
+            all_sp = list(sc_d.get("cantrips") or []) + list(sc_d.get("prepared_spells") or [])
+            free_ready: set[str] = set()
+            for b in feat_blocks:  # #8: Magic Initiate cantrips and spell
+                for fs in _feat_block_spells(b):
+                    if fs not in all_sp:
+                        all_sp.append(fs)
+                for fs, n in (b.get("free_casts") or {}).items():
+                    if int(n) > 0:
+                        free_ready.add(strip_prefix(str(fs)))
             for sp_slug in all_sp:
                 sp_rec = rules.get_spell(sp_slug)
                 if sp_rec is None:
                     continue
                 sp_lvl = int(sp_rec.get("level", 0))
-                if sp_lvl > 0 and not any(s >= sp_lvl for s in avail_slots):
+                free_now = sp_lvl > 0 and sp_slug in free_ready and not _class_knows_spell(actor, sp_slug)
+                if sp_lvl > 0 and not free_now and not any(s >= sp_lvl for s in avail_slots):
                     continue
-                if sp_lvl > 0 and res.get("slot_spent_this_turn"):
+                if sp_lvl > 0 and not free_now and res.get("slot_spent_this_turn"):
                     continue  # one spell slot per turn (#52)
                 atype = str(sp_rec.get("action_type") or "action")
                 if atype == "action" and res.get("action"):
@@ -3770,7 +3835,12 @@ def step(
             return _invalid(copy.deepcopy(state), f"Unknown spell '{spell_raw}'.", rules)
 
         sc = actor.get("spellcasting")
-        if not isinstance(sc, dict):
+        # #8: Magic Initiate spells are cast with the feat's ability, DC and attack bonus. `source` picks the feat
+        # explicitly; without it, a spell the class doesn't know but a feat block does is cast from the feat.
+        feat_block, feat_err = _feat_spell_block(actor, spell_slug, intent.get("source"))
+        if feat_err:
+            return _invalid(copy.deepcopy(state), feat_err, rules)
+        if feat_block is None and not isinstance(sc, dict):
             return _invalid(copy.deepcopy(state), f"{actor_id} does not have spellcasting.", rules)
 
         action_type = str(spell.get("action_type") or "action").lower()
@@ -3814,7 +3884,26 @@ def step(
             if parsed_slot is None:
                 return _invalid(copy.deepcopy(state), "cast_spell 'slot_level' must be an integer.", rules)
             slot_level = parsed_slot
-        if spell_level >= 1:
+        free_casts = feat_block.setdefault("free_casts", {}) if feat_block is not None else {}
+        if spell_level >= 1 and raw_slot_level is None and int(free_casts.get(spell_slug, 0)) > 0:
+            # Magic Initiate: once per Long Rest without a spell slot (#8). Not a slot, so #52 doesn't apply.
+            before_free = int(free_casts[spell_slug])
+            free_casts[spell_slug] = before_free - 1
+            tracker.emit(
+                "feat_free_cast_used",
+                actor_id=actor_id,
+                feat=str(feat_block.get("feat") or "magic-initiate") if feat_block else "magic-initiate",
+                spell=spell_slug,
+                before=before_free,
+                after=before_free - 1,
+            )
+        elif spell_level >= 1:
+            if not isinstance(sc, dict):
+                return _invalid(
+                    copy.deepcopy(state),
+                    f"{actor_id} has no free casts of '{spell_slug}' left and no spell slots to cast it with.",
+                    rules,
+                )
             if slot_level < spell_level:
                 return _invalid(
                     copy.deepcopy(state),
@@ -4048,10 +4137,16 @@ def step(
         scaling = spell.get("scaling") or {}
         upcast = max(0, slot_level - spell_level) if spell_level >= 1 else 0
         caster_level = int(actor.get("level", 1))
-        spell_ab = strip_prefix(sc.get("ability") or "int")
+        cast_sc: dict[str, Any] = (
+            {"ability": feat_block.get("ability"), "spell_save_dc": feat_block.get("save_dc"),
+             "spell_attack_bonus": feat_block.get("attack_bonus")}
+            if feat_block is not None
+            else sc
+        )
+        spell_ab = strip_prefix(cast_sc.get("ability") or "int")
         spell_mod = int(actor["ability_mods"].get(spell_ab, 0))
-        spell_dc = int(sc.get("spell_save_dc", 8 + int(actor.get("proficiency_bonus", 2)) + spell_mod))
-        spell_atk = int(sc.get("spell_attack_bonus", int(actor.get("proficiency_bonus", 2)) + spell_mod))
+        spell_dc = int(cast_sc.get("spell_save_dc") or 8 + int(actor.get("proficiency_bonus", 2)) + spell_mod)
+        spell_atk = int(cast_sc.get("spell_attack_bonus") or int(actor.get("proficiency_bonus", 2)) + spell_mod)
 
         has_mechanics = bool(
             spell.get("damage")

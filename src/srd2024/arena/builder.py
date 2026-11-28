@@ -390,6 +390,11 @@ _ARCHETYPE_DEFS: dict[str, dict[str, Any]] = {
         "background": "acolyte",
         "background_asi": {"wis": 2, "cha": 1},
         "origin_feat": "magic-initiate",
+        # Magic Initiate picks (#8); the list is the one the background names.
+        "feat_spells": [
+            {"feat": "magic-initiate", "list": "cleric", "ability": "wis",
+             "cantrips": ["mending", "thaumaturgy"], "spell": "guiding-bolt"},
+        ],
         "base_abilities": {"str": 13, "dex": 10, "con": 14, "int": 8, "wis": 15, "cha": 12},
         "asi_order": ["wis", "con", "str"],
         "fighting_style": None,
@@ -415,6 +420,11 @@ _ARCHETYPE_DEFS: dict[str, dict[str, Any]] = {
         "background": "sage",
         "background_asi": {"int": 2, "con": 1},
         "origin_feat": "magic-initiate",
+        # Magic Initiate picks (#8); the list is the one the background names.
+        "feat_spells": [
+            {"feat": "magic-initiate", "list": "wizard", "ability": "int",
+             "cantrips": ["shocking-grasp", "prestidigitation"], "spell": "shield"},
+        ],
         "base_abilities": {"str": 8, "dex": 13, "con": 14, "int": 15, "wis": 12, "cha": 10},
         "asi_order": ["int", "con", "dex"],
         "fighting_style": None,
@@ -460,6 +470,11 @@ _ARCHETYPE_DEFS: dict[str, dict[str, Any]] = {
         "background": "acolyte",
         "background_asi": {"cha": 2, "wis": 1},
         "origin_feat": "magic-initiate",
+        # Magic Initiate picks (#8); the list is the one the background names.
+        "feat_spells": [
+            {"feat": "magic-initiate", "list": "cleric", "ability": "cha",
+             "cantrips": ["guidance", "sacred-flame"], "spell": "bless"},
+        ],
         "extra_origin_feat": "alert",
         "base_abilities": {"str": 8, "dex": 14, "con": 14, "int": 10, "wis": 10, "cha": 15},
         "asi_order": ["cha", "dex", "con"],
@@ -486,6 +501,11 @@ _ARCHETYPE_DEFS: dict[str, dict[str, Any]] = {
         "background": "sage",
         "background_asi": {"wis": 2, "con": 1},
         "origin_feat": "magic-initiate",
+        # Magic Initiate picks (#8); the list is the one the background names.
+        "feat_spells": [
+            {"feat": "magic-initiate", "list": "wizard", "ability": "wis",
+             "cantrips": ["fire-bolt", "mage-hand"], "spell": "magic-missile"},
+        ],
         "base_abilities": {"str": 8, "dex": 14, "con": 14, "int": 10, "wis": 15, "cha": 10},
         "asi_order": ["wis", "con", "dex"],
         "fighting_style": None,
@@ -556,6 +576,11 @@ _ARCHETYPE_DEFS: dict[str, dict[str, Any]] = {
         "background": "acolyte",
         "background_asi": {"cha": 2, "wis": 1},
         "origin_feat": "magic-initiate",
+        # Magic Initiate picks (#8); the list is the one the background names.
+        "feat_spells": [
+            {"feat": "magic-initiate", "list": "cleric", "ability": "cha",
+             "cantrips": ["guidance", "sacred-flame"], "spell": "bless"},
+        ],
         "base_abilities": {"str": 8, "dex": 14, "con": 14, "int": 10, "wis": 10, "cha": 15},
         "asi_order": ["cha", "con", "dex"],
         "fighting_style": None,
@@ -581,6 +606,11 @@ _ARCHETYPE_DEFS: dict[str, dict[str, Any]] = {
         "background": "acolyte",
         "background_asi": {"cha": 2, "wis": 1},
         "origin_feat": "magic-initiate",
+        # Magic Initiate picks (#8); the list is the one the background names.
+        "feat_spells": [
+            {"feat": "magic-initiate", "list": "cleric", "ability": "cha",
+             "cantrips": ["guidance", "sacred-flame"], "spell": "healing-word"},
+        ],
         "base_abilities": {"str": 8, "dex": 14, "con": 14, "int": 10, "wis": 10, "cha": 15},
         "asi_order": ["cha", "con", "dex"],
         "fighting_style": None,
@@ -779,6 +809,8 @@ def build_pc_preset(
     }
     if defn.get("extra_origin_feat"):
         spec["extra_origin_feat"] = defn["extra_origin_feat"]
+    if defn.get("feat_spells"):
+        spec["feat_spells"] = copy.deepcopy(defn["feat_spells"])
     if masteries:
         spec["weapon_mastery_weapons"] = masteries
     fs = defn.get("fighting_style")
