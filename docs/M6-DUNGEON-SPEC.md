@@ -88,7 +88,7 @@ Every mechanic below was verified verbatim against `data/raw/2024/en/5e-SRD-Feat
   - Applies **once per turn** (NOT once per round!) — including off-turn **Opportunity Attacks** (`_opportunity_attacks()` → `_resolve_single_weapon_attack()`), because an Opportunity Attack happens on another creature's turn!
   - Reset rule: `turn_resources["sneak_attack_used"] = False` is cleared for **every** combatant whenever a turn ends / a new turn starts in `end_turn` (and initialized to `False` on `start_encounter`).
   - Eligibility predicate (all MUST hold):
-    1. `state.get("state_shape_version", 1) >= 2`.
+    1. `state.get("state_shape_version", 1) >= 3` (using `#94`'s `STATE_SHAPE_VERSION`).
     2. `"rogue-sneak-attack"` in `attacker.get("features", [])` (or `attacker["source_id"] == "classes:rogue"`).
     3. `hit is True` and `not attacker["turn_resources"].get("sneak_attack_used", False)`.
     4. Qualifying weapon: `"finesse"` in `weapon["properties"]` OR `weapon["weapon_range"] == "ranged"`. (Thrown non-Finesse melee weapons such as `javelin` do NOT qualify; `dagger` qualifies via `finesse`; `shortbow`/`light-crossbow` qualify via `ranged`.)
@@ -104,16 +104,15 @@ Every mechanic below was verified verbatim against `data/raw/2024/en/5e-SRD-Feat
 #### D. Paladin — Lay on Hands (`paladin-lay-on-hands`, L1+)
 - **Verbatim SRD 5.2 (`paladin-lay-on-hands`):**
   > *"Your blessed touch can heal wounds. You have a pool of healing power that replenishes when you finish a Long Rest. With that pool, you can restore a total number of Hit Points equal to five times your Paladin level. As a Bonus Action, you can touch a creature (which could be yourself) and draw power from the pool of healing to restore a number of Hit Points to that creature, up to the maximum amount remaining in the pool. You can also expend 5 Hit Points from the pool of healing power to remove the Poisoned condition from the creature; those points don't also restore Hit Points to the creature."*
-- **Empirical SRD 5.2 Audit Note (Undead & Constructs):**
-  - Verbatim 2024 SRD 5.2 removed the 2014 sentence *"This feature has no effect on undead and constructs"* from `paladin-lay-on-hands` (matching 2024 `cure-wounds`/`healing-word`).
-  - Per M6 specification requirements, the engine enforces an explicit creature-type exclusion guard `LAY_ON_HANDS_EXCLUDED_TYPES: frozenset[str] = frozenset({"undead", "construct"})` using `creature_type_of(target, rules)` (failing closed on `"undead"`, `"construct"`, or `None` with `invalid_intent`), isolated in a single module constant for clarity and future configurability.
+- **SRD 5.2 RAW Ruling (No Undead/Construct Exclusion):**
+  - Verbatim 2024 SRD 5.2 removed the 2014 *"no effect on undead and constructs"* restriction from `paladin-lay-on-hands` (matching 2024 `cure-wounds` and `healing-word`). Per Patrick's ruling, Lay on Hands follows **SRD 5.2 RAW** with **no Undead or Construct exclusion**.
 - **Verified Level Scaling (L1–10):**
   - Pool `max = 5 * paladin_level` (L1: 5, L2: 10, L3: 15, L4: 20, L5: 25, L6: 30, L7: 35, L8: 40, L9: 45, L10: 50).
   - Recharge: **Long Rest only** (does NOT recharge on Short Rest).
 - **Engine Rules:**
   - Action economy: **Bonus Action** (`turn_resources["bonus_action"] = False`).
   - Range: **Touch** (`distance_ft(actor["position"], target["position"]) <= 5`; may target self or ally).
-  - Target validation: `target["alive"] is True` (refuses dead creatures), `creature_type_of(target, rules)` is known and not in `{"undead", "construct"}`.
+  - Target validation: `target["alive"] is True` (refuses dead creatures; any living creature type is valid per SRD 5.2 RAW).
   - Modes:
     - `mode == "heal"` (default): `amount` must be an integer with `1 <= amount <= pool_remaining`. Deducts `amount` from pool; caps target HP at `hp_max`; revives 0-HP living unconscious PC (removes `unconscious`, leaves `prone`, resets `death_saves`).
     - `mode == "cure_poison"`: requires `pool_remaining >= 5` and `"poisoned"` in `_direct_condition_slugs(target)`. Deducts `5` from pool, removes `"poisoned"`, restores `0` HP.
@@ -147,14 +146,14 @@ Every mechanic below was verified verbatim against `data/raw/2024/en/5e-SRD-Feat
 - **Verbatim SRD 5.2 (`#34` `life-disciple-of-life`, L3+):**
   > *"When a spell you cast with a spell slot restores Hit Points to a creature, that creature regains additional Hit Points on the turn you cast the spell. The additional Hit Points equal 2 plus the spell slot's level."*
   - **Engine Rules:**
-    - Fires inside `cast_spell` healing loop when `state.get("state_shape_version", 1) >= 2`, `"life-disciple-of-life"` in `actor.get("features", [])`, `slot_level >= 1`, `target["alive"] is True`, and base `heal_amt > 0`.
+    - Fires inside `cast_spell` healing loop when `state.get("state_shape_version", 1) >= 3`, `"life-disciple-of-life"` in `actor.get("features", [])`, `slot_level >= 1`, `target["alive"] is True`, and base `heal_amt > 0`.
     - Adds `bonus = 2 + slot_level` to `heal_amt` for each healed living target (`cure-wounds`, `healing-word`, `mass-healing-word`, `mass-cure-wounds`, `heal`, `aid` HP restoration, etc.).
     - Emits `disciple_of_life_bonus: bonus` on each `healing_applied` event and appends ` (+{bonus} Disciple of Life)` to the narrative hook.
 
 - **Verbatim SRD 5.2 (`life-blessed-healer`, L6+):**
   > *"Immediately after you cast a spell with a spell slot that restores Hit Points to one or more creatures other than yourself, you regain Hit Points equal to 2 plus the spell slot's level."*
   - **Engine Rules:**
-    - Fires immediately after the `cast_spell` healing loop when `state.get("state_shape_version", 1) >= 2`, `"life-blessed-healer"` in `actor.get("features", [])`, `slot_level >= 1`, `actor["alive"] is True`, and at least one living target `tid != actor_id` received `> 0` HP.
+    - Fires immediately after the `cast_spell` healing loop when `state.get("state_shape_version", 1) >= 3`, `"life-blessed-healer"` in `actor.get("features", [])`, `slot_level >= 1`, `actor["alive"] is True`, and at least one living target `tid != actor_id` received `> 0` HP.
     - Restores `2 + slot_level` HP to `actor_id` (capped at `hp_max`), emitting a `healing_applied` event with `feature="blessed_healer"`, `spell=spell_slug`, `slot_level=slot_level`.
 
 #### F. Honest Subclass Coverage Grading (`#34`)
@@ -186,16 +185,16 @@ Every mechanic below was verified verbatim against `data/raw/2024/en/5e-SRD-Feat
 
 ---
 
-### 2.2 State Schema Changes & `state_shape_version` Contract
+### 2.2 State Schema Changes & `STATE_SHAPE_VERSION` Contract
 
 #### Top-Level `EncounterState`
-Add **`"state_shape_version": 2`** (`CURRENT_STATE_SHAPE_VERSION = 2` in `combat.py`):
-- `start_encounter` accepts optional `"state_shape_version": int` (default `2`; valid values `1` or `2`).
-- When `state_shape_version == 1` (used ONLY by `replay_match()` when replaying pre-M6 traces whose `initial_state` omits `state_shape_version`):
-  - `combat.py` omits `state_shape_version` from `new_state`, omits all new M6.3A combatant fields (`subclass`, `features`, `hit_die`, `hit_dice`, `class_resources`), omits `surge_action` / `action_surge_used_this_turn` / `sneak_attack_used` from `turn_resources`, and skips passive Sneak Attack / Disciple of Life / Blessed Healer hooks.
-  - **Guarantee:** All 5 committed legacy traces in `examples/sessions/*.trace.json` replay to the exact existing SHA-256 digest with zero drift.
-- When `state_shape_version == 2` (default for all new encounters & dungeons):
-  - `new_state["state_shape_version"] = 2`.
+Reuse **PR #94's `STATE_SHAPE_VERSION`** constant (no separate `CURRENT_STATE_SHAPE_VERSION` constant; `#94` introduces `STATE_SHAPE_VERSION = 1` in `src/srd2024/arena/runner.py`, `#95` bumps it to `2` for `bounds`/`terrain`, and M6.3A bumps `STATE_SHAPE_VERSION` to the next integer `3`, updating `#94`'s key-set guard test in lockstep):
+- `start_encounter` accepts optional `"state_shape_version": int` (defaulting to `STATE_SHAPE_VERSION`, i.e., `3` for M6.3A; legacy replays pass the recorded `state_shape_version` or `1`).
+- When replaying pre-M6.3A traces (`state_shape_version < 3`, e.g., `1` or `2`):
+  - `combat.py` omits all new M6.3A combatant fields (`subclass`, `features`, `hit_die`, `hit_dice`, `class_resources`), omits `surge_action` / `action_surge_used_this_turn` / `sneak_attack_used` from `turn_resources`, and skips passive Sneak Attack / Disciple of Life / Blessed Healer hooks.
+  - **Guarantee:** All committed legacy traces in `examples/sessions/*.trace.json` replay to the exact existing SHA-256 digest with zero drift.
+- When `state_shape_version >= 3` (default for all new M6.3A+ encounters & dungeons):
+  - `new_state["state_shape_version"] = STATE_SHAPE_VERSION`.
 
 #### Derived Statblock Additions (`src/srd2024/engine/character.py`)
 `compile_character()` adds one additive field `class_resources_max` to `statblock` (preserving every existing Stage 2 field unchanged):
@@ -211,7 +210,7 @@ Derived deterministically from `class_slug`, `subclass_slug`, `level`, and `leve
 - Cleric: if `level >= 2`: `channel_divinity` (`max` = `class_specific.channel_divinity_charges`, `recharge`: `"short_rest_one"`).
 - Wizard: `arcane_recovery` (`max` = `1`, `budget_levels` = `(level + 1) // 2`, `max_slot_level` = `5`, `recharge`: `"long_rest"`).
 
-#### PC Combatant State Additions (`state_shape_version == 2`)
+#### PC Combatant State Additions (`state_shape_version >= 3`)
 Inside `_build_pc_combatant(entry)`:
 ```json
 {
@@ -244,7 +243,7 @@ Inside `_build_pc_combatant(entry)`:
   - `"hit_dice"` (overrides starting `remaining`, clamped `0..max`)
   - `"heroic_inspiration"` (already supported)
   - `"death_saves"` (optional override, default `{"successes": 0, "failures": 0}`)
-- `_StepTracker.build_diff()` adds an additive `"resource_changes": [{"id": cid, "resource": str, "before": int, "after": int}]` list when `state_shape_version >= 2`.
+- `_StepTracker.build_diff()` adds an additive `"resource_changes": [{"id": cid, "resource": str, "before": int, "after": int}]` list when `state_shape_version >= 3`.
 
 ---
 
@@ -257,12 +256,12 @@ Add `"class_feature"` to `combat.py:step()`, `runner.py:_ARENA_INTENT_TYPES`, an
 |---|---|---|---|
 | **Second Wind** | `{"type": "class_feature", "actor_id": "pc-aldric", "feature": "second_wind", "move_to": {"x": 10, "y": 5}}` (`move_to` optional, L5+ only) | Bonus Action, 1 `second_wind` | Missing feature; no Bonus Action; 0 uses remaining; `move_to` before L5 or exceeds `speed // 2` or out of bounds/wall |
 | **Action Surge** | `{"type": "class_feature", "actor_id": "pc-aldric", "feature": "action_surge"}` | Free (1/turn), 1 `action_surge` | Missing feature; already used this turn; 0 uses remaining |
-| **Lay on Hands (Heal)** | `{"type": "class_feature", "actor_id": "pc-seren", "feature": "lay_on_hands", "mode": "heal", "target_id": "pc-aldric", "amount": 10}` | Bonus Action, `amount` pool | Missing feature; no Bonus Action; `amount < 1` or `> remaining`; distance `> 5` ft; dead target; Undead/Construct/unknown creature type |
-| **Lay on Hands (Cure Poison)** | `{"type": "class_feature", "actor_id": "pc-seren", "feature": "lay_on_hands", "mode": "cure_poison", "target_id": "pc-aldric"}` | Bonus Action, 5 pool | Missing feature; no Bonus Action; `remaining < 5`; distance `> 5` ft; target not `poisoned`; dead/Undead/Construct target |
+| **Lay on Hands (Heal)** | `{"type": "class_feature", "actor_id": "pc-seren", "feature": "lay_on_hands", "mode": "heal", "target_id": "pc-aldric", "amount": 10}` | Bonus Action, `amount` pool | Missing feature; no Bonus Action; `amount < 1` or `> remaining`; distance `> 5` ft; dead target |
+| **Lay on Hands (Cure Poison)** | `{"type": "class_feature", "actor_id": "pc-seren", "feature": "lay_on_hands", "mode": "cure_poison", "target_id": "pc-aldric"}` | Bonus Action, 5 pool | Missing feature; no Bonus Action; `remaining < 5`; distance `> 5` ft; target not `poisoned`; dead target |
 | **Preserve Life** | `{"type": "class_feature", "actor_id": "pc-dorian", "feature": "preserve_life", "allocations": {"pc-aldric": 15, "pc-lyra": 10}}` *(or `"target_ids": ["pc-aldric", "pc-lyra"]`)* | **Magic Action** (no Action Surge!), 1 `channel_divinity` | Missing feature; no regular Action (explicit error if only `surge_action` left); 0 CD remaining; target `> 30` ft / no LoS / dead / not Bloodied (`hp > hp_max // 2`); allocation exceeds half-max cap or `5 * level` pool |
 
 #### `legal_actions` Additions (`compute_legal_actions`)
-When `state_shape_version >= 2`, `compute_legal_actions()` includes:
+When `state_shape_version >= 3`, `compute_legal_actions()` includes:
 - `"class_features": list[str]` — currently usable feature slugs from `["second_wind", "action_surge", "lay_on_hands", "preserve_life"]` (checking action/bonus-action economy, remaining pool, and `action_surge_used_this_turn`).
 - `"surge_action_available": bool` — `True` while `turn_resources["surge_action"]` is `True` (so drivers know non-Magic actions are still legal even when `turn_resources["action"]` is `False`).
 - `"sneak_attack_available": bool` — `True` when actor has `rogue-sneak-attack` and `not turn_resources["sneak_attack_used"]`.
@@ -290,7 +289,7 @@ Add 7 new independent rules (exercised automatically whenever a trace contains M
 1. **Second Wind formula & pool:** `healing_applied(feature="second_wind")` has `amount` in `[1 + level, 10 + level]`, `source_id == target_id`, Fighter class, Bonus Action available, and uses spent `<= max_uses(level)`.
 2. **Action Surge Magic-action ban & 1/turn limit:** After `class_feature_used(feature="action_surge")`, a Fighter may take at most 1 extra non-Magic Action that turn (`attack`/`dodge`/`dash`/`disengage`/`help`); a second Action-casting-time `spell_cast` or `preserve_life` on the same turn is flagged as a violation.
 3. **Sneak Attack eligibility, scaling & 1/turn (incl. OA):** On `sneak_attack_triggered`, verify Rogue class, weapon is Finesse or Ranged, `damage` in `[dice_count * (2 if crit else 1), 6 * dice_count * (2 if crit else 1)]` where `dice_count == (level + 1) // 2`, either `mode == "advantage"` or (`mode == "normal"` and a living non-incapacitated ally was within 5 ft of target), and at most 1 trigger per `(round, turn_index)` (allowing a separate trigger on an off-turn Opportunity Attack!). Subtract `sneak_attack` raw damage when checking PC weapon damage bounds!
-4. **Lay on Hands pool, Touch range & type guard:** On `class_feature_used(feature="lay_on_hands")`, verify Paladin class, `cheb(pos[actor], pos[target]) <= 5`, cumulative spent `<= 5 * level`, `mode == "cure_poison"` spends exactly `5` and removes `poisoned`, and target is not Undead or Construct.
+4. **Lay on Hands pool & Touch range (SRD 5.2 RAW):** On `class_feature_used(feature="lay_on_hands")`, verify Paladin class, `cheb(pos[actor], pos[target]) <= 5`, cumulative spent `<= 5 * level`, and `mode == "cure_poison"` spends exactly `5` and removes `poisoned` (no Undead/Construct exclusion per SRD 5.2 RAW).
 5. **Preserve Life Bloodied & half-max cap:** On `class_feature_used(feature="preserve_life")`, verify Life Domain Cleric L3+, `cheb(pos[actor], pos[target]) <= 30`, total distributed `<= 5 * level`, every healed target started at `hp_before <= hp_max // 2`, and `hp_after <= hp_max // 2`.
 6. **Disciple of Life bonus (`#34`):** When a L3+ Life Domain Cleric casts a healing spell with `slot_level >= 1`, verify `disciple_of_life_bonus == 2 + slot_level` on each living target's `healing_applied` event.
 7. **Blessed Healer bonus:** When a L6+ Life Domain Cleric heals at least one living ally (`tid != actor_id`) with `slot_level >= 1`, verify a `healing_applied(feature="blessed_healer")` event for `actor_id` with `amount == 2 + slot_level`.
