@@ -375,6 +375,148 @@ def execute_arena_play(
     )
 
 
+def execute_arena_dungeons() -> dict[str, Any]:
+    """List built-in 5e 2024 (SRD 5.2) multi-encounter dungeons."""
+    from srd2024.arena.dungeon import DUNGEON_SCHEMA_VERSION, list_builtin_dungeons
+
+    return {
+        "status": "ok",
+        "schema_version": DUNGEON_SCHEMA_VERSION,
+        "dungeons": list_builtin_dungeons(),
+    }
+
+
+def execute_arena_dungeon(
+    rules: Any,
+    *,
+    dungeon: str | Path | dict[str, Any],
+    party_agent: str | dict[str, Any] = "heuristic-tactical",
+    enemy_agent: str | dict[str, Any] = "heuristic-tactical",
+    seed: int = 42,
+    allow_short_rest: bool = True,
+    max_actions_per_turn: int = 6,
+    max_retries_per_action: int = 2,
+    api_base: str | None = None,
+    api_key_env: str | None = None,
+    enemy_api_base: str | None = None,
+    enemy_api_key_env: str | None = None,
+    temperature: float = 0.0,
+) -> dict[str, Any]:
+    """Run an automated multi-room 5e 2024 (SRD 5.2) dungeon with carryover & Short Rests."""
+    from srd2024.arena import create_driver
+    from srd2024.arena.dungeon import run_dungeon
+
+    if max_actions_per_turn < 1:
+        raise ValueError("max_actions_per_turn must be >= 1.")
+    if max_retries_per_action < 0:
+        raise ValueError("max_retries_per_action must be >= 0.")
+
+    party_driver = create_driver(
+        party_agent,
+        rules=rules,
+        seed=seed,
+        api_base=api_base,
+        api_key_env=api_key_env,
+        temperature=temperature,
+    )
+    enemy_driver = create_driver(
+        enemy_agent,
+        rules=rules,
+        seed=seed + 1,
+        api_base=enemy_api_base,
+        api_key_env=enemy_api_key_env,
+        temperature=temperature,
+    )
+    return run_dungeon(
+        dungeon,
+        party_driver=party_driver,
+        enemy_driver=enemy_driver,
+        rules=rules,
+        seed=seed,
+        allow_short_rest=allow_short_rest,
+        max_actions_per_turn=max_actions_per_turn,
+        max_retries_per_action=max_retries_per_action,
+    )
+
+
+def execute_arena_dungeon_replay(rules: Any, trace: dict[str, Any]) -> dict[str, Any]:
+    """Deterministically replay a saved DungeonTranscript (`schema_version: '5'`)."""
+    from srd2024.arena.dungeon import replay_dungeon
+
+    if not isinstance(trace, dict):
+        raise ValueError("Dungeon trace JSON must be an object containing a DungeonTranscript.")
+    return replay_dungeon(trace, rules)
+
+
+def execute_arena_dungeon_play(
+    rules: Any,
+    *,
+    dungeon: str | Path | dict[str, Any],
+    play_as: str | None = None,
+    seat_overrides: dict[str, Any] | list[str] | None = None,
+    party_agent: str | dict[str, Any] = "heuristic-tactical",
+    enemy_agent: str | dict[str, Any] = "heuristic-tactical",
+    nl_driver_spec: str | dict[str, Any] | None = None,
+    api_base: str | None = None,
+    api_key_env: str | None = None,
+    temperature: float = 0.0,
+    seed: int = 42,
+    allow_short_rest: bool = True,
+    max_actions_per_turn: int = 6,
+    max_retries_per_action: int = 2,
+    out_trace: str | Path | None = None,
+    force: bool = False,
+    input_fn: Any = input,
+    output_fn: Any = print,
+) -> dict[str, Any]:
+    """Run an interactive human-in-the-loop 5e 2024 (SRD 5.2) multi-room dungeon."""
+    from srd2024.arena import create_driver
+    from srd2024.arena.agents import BaseLLMDriver
+    from srd2024.arena.dungeon import run_interactive_dungeon
+
+    if max_actions_per_turn < 1:
+        raise ValueError("max_actions_per_turn must be >= 1.")
+    if max_retries_per_action < 0:
+        raise ValueError("max_retries_per_action must be >= 0.")
+
+    nl_driver_obj: BaseLLMDriver | None = None
+    if nl_driver_spec is not None:
+        drv = create_driver(
+            nl_driver_spec,
+            rules=rules,
+            seed=seed,
+            api_base=api_base,
+            api_key_env=api_key_env,
+            temperature=temperature,
+        )
+        if not isinstance(drv, BaseLLMDriver):
+            raise ValueError(
+                f"--nl-driver must be a live LLM driver spec (openai-compat:/anthropic:/gemini:), got {nl_driver_spec!r}."
+            )
+        nl_driver_obj = drv
+
+    return run_interactive_dungeon(
+        dungeon,
+        rules=rules,
+        play_as=play_as,
+        seat_overrides=seat_overrides,
+        party_agent=party_agent,
+        enemy_agent=enemy_agent,
+        nl_driver=nl_driver_obj,
+        input_fn=input_fn,
+        output_fn=output_fn,
+        seed=seed,
+        allow_short_rest=allow_short_rest,
+        max_actions_per_turn=max_actions_per_turn,
+        max_retries_per_action=max_retries_per_action,
+        out_trace=out_trace,
+        force=force,
+        api_base=api_base,
+        api_key_env=api_key_env,
+        temperature=temperature,
+    )
+
+
 def add_arena_subcommands(
     subparsers: Any,
     parent_parser: argparse.ArgumentParser,
@@ -707,6 +849,215 @@ def add_arena_subcommands(
         help="Overwrite an existing --save checkpoint or --out-trace file.",
     )
 
+    # 6. dungeons (M6.3B: Built-in multi-encounter dungeon catalog)
+    subparsers.add_parser(
+        "dungeons",
+        parents=[parent_parser],
+        help="List built-in 5e 2024 (SRD 5.2) multi-encounter dungeons.",
+    )
+
+    # 7. dungeon (M6.3B: Automated multi-room adventuring day)
+    p_dungeon = subparsers.add_parser(
+        "dungeon",
+        parents=[parent_parser],
+        help="Run a deterministic multi-room 5e 2024 (SRD 5.2) dungeon with carryover and Short Rests.",
+    )
+    p_dungeon.add_argument(
+        "dungeon",
+        help="Built-in dungeon ID (e.g. ashfall-keep) or path to custom dungeon JSON.",
+    )
+    p_dungeon.add_argument(
+        "--party-agent",
+        dest="party_agent",
+        default="heuristic-tactical",
+        help="Party driver spec (default: heuristic-tactical).",
+    )
+    p_dungeon.add_argument(
+        "--enemy-agent",
+        dest="enemy_agent",
+        default="heuristic-tactical",
+        help="Enemy driver spec (default: heuristic-tactical).",
+    )
+    p_dungeon.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Deterministic PRNG seed (default: 42).",
+    )
+    p_dungeon.add_argument(
+        "--no-short-rest",
+        dest="no_short_rest",
+        action="store_true",
+        default=False,
+        help="Disable inter-room Short Rests.",
+    )
+    p_dungeon.add_argument(
+        "--max-actions-per-turn",
+        dest="max_actions_per_turn",
+        type=int,
+        default=6,
+        help="Maximum actions per combatant turn (default: 6).",
+    )
+    p_dungeon.add_argument(
+        "--max-retries",
+        dest="max_retries",
+        type=int,
+        default=2,
+        help="Maximum retries per rejected action before fallback (default: 2).",
+    )
+    p_dungeon.add_argument(
+        "--api-base",
+        dest="api_base",
+        default=None,
+        help="Optional API base URL for party live LLM driver.",
+    )
+    p_dungeon.add_argument(
+        "--api-key-env",
+        dest="api_key_env",
+        default=None,
+        help="Optional environment variable name holding the party LLM API key.",
+    )
+    p_dungeon.add_argument(
+        "--enemy-api-base",
+        dest="enemy_api_base",
+        default=None,
+        help="Optional API base URL for enemy live LLM driver.",
+    )
+    p_dungeon.add_argument(
+        "--enemy-api-key-env",
+        dest="enemy_api_key_env",
+        default=None,
+        help="Optional environment variable name holding the enemy LLM API key.",
+    )
+    p_dungeon.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="Sampling temperature for live LLM drivers (default: 0.0).",
+    )
+    p_dungeon.add_argument(
+        "--out-trace",
+        dest="out_trace",
+        default=None,
+        help="Write the full DungeonTranscript JSON (`schema_version: '5'`) to this file path.",
+    )
+    p_dungeon.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Overwrite an existing --out-trace file.",
+    )
+
+    # 8. dungeon-replay (M6.3B: Deterministic multi-room + Short Rest replay verification)
+    p_dreplay = subparsers.add_parser(
+        "dungeon-replay",
+        parents=[parent_parser],
+        help="Deterministically replay a saved DungeonTranscript JSON and verify digest parity.",
+    )
+    p_dreplay.add_argument(
+        "trace_file",
+        help="Path to saved DungeonTranscript JSON file (or '-' for stdin).",
+    )
+
+    # 9. dungeon-play (M6.3B: Interactive CLI multi-room dungeon)
+    p_dplay = subparsers.add_parser(
+        "dungeon-play",
+        parents=[parent_parser],
+        help="Play an interactive 5e 2024 (SRD 5.2) multi-room dungeon with inter-room Short Rest prompts.",
+    )
+    p_dplay.add_argument(
+        "dungeon",
+        help="Built-in dungeon ID (e.g. ashfall-keep) or path to custom dungeon JSON.",
+    )
+    p_dplay.add_argument(
+        "--as",
+        dest="play_as",
+        default=None,
+        help="Seat role to play: a combatant ID (e.g. pc-aldric), 'party', or 'dm'.",
+    )
+    p_dplay.add_argument(
+        "--seat",
+        dest="seats",
+        action="append",
+        default=None,
+        help="Per-seat driver override '<combatant_id>=<driver_spec>' (repeatable).",
+    )
+    p_dplay.add_argument(
+        "--party-agent",
+        dest="party_agent",
+        default="heuristic-tactical",
+        help="Default AI driver for non-human party seats (default: heuristic-tactical).",
+    )
+    p_dplay.add_argument(
+        "--enemy-agent",
+        dest="enemy_agent",
+        default="heuristic-tactical",
+        help="Default AI driver for non-human enemy seats (default: heuristic-tactical).",
+    )
+    p_dplay.add_argument(
+        "--nl-driver",
+        dest="nl_driver",
+        default=None,
+        help="Optional LLM driver spec for natural-language-to-intent mode.",
+    )
+    p_dplay.add_argument(
+        "--api-base",
+        dest="api_base",
+        default=None,
+        help="Optional API base URL for live LLM seat or NL driver.",
+    )
+    p_dplay.add_argument(
+        "--api-key-env",
+        dest="api_key_env",
+        default=None,
+        help="Optional environment variable name holding the LLM API key.",
+    )
+    p_dplay.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="Sampling temperature for live LLM seat/NL drivers (default: 0.0).",
+    )
+    p_dplay.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Deterministic PRNG seed (default: 42).",
+    )
+    p_dplay.add_argument(
+        "--no-short-rest",
+        dest="no_short_rest",
+        action="store_true",
+        default=False,
+        help="Disable inter-room Short Rests.",
+    )
+    p_dplay.add_argument(
+        "--max-actions-per-turn",
+        dest="max_actions_per_turn",
+        type=int,
+        default=6,
+        help="Maximum actions per combatant turn (default: 6).",
+    )
+    p_dplay.add_argument(
+        "--max-retries",
+        dest="max_retries",
+        type=int,
+        default=2,
+        help="Maximum retries per rejected action before fallback (default: 2).",
+    )
+    p_dplay.add_argument(
+        "--out-trace",
+        dest="out_trace",
+        default=None,
+        help="Write the final DungeonTranscript JSON to this file path.",
+    )
+    p_dplay.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Overwrite an existing --out-trace file.",
+    )
+
 
 def run_arena_cli_command(
     args: argparse.Namespace,
@@ -716,6 +1067,8 @@ def run_arena_cli_command(
     subcmd = getattr(args, "arena_command", None)
     if subcmd == "scenarios":
         return "arena_scenarios", execute_arena_scenarios(), 0
+    if subcmd == "dungeons":
+        return "arena_dungeons", execute_arena_dungeons(), 0
 
     rules = load_rules_store(rules_override)
 
@@ -861,6 +1214,90 @@ def run_arena_cli_command(
             return "arena_play_paused", result, 0
         return "arena_run", result, 0
 
+    if subcmd == "dungeon":
+        dungeon_input = _parse_scenario_arg(args.dungeon)
+        trace = execute_arena_dungeon(
+            rules,
+            dungeon=dungeon_input,
+            party_agent=args.party_agent,
+            enemy_agent=args.enemy_agent,
+            seed=args.seed,
+            allow_short_rest=not bool(getattr(args, "no_short_rest", False)),
+            max_actions_per_turn=args.max_actions_per_turn,
+            max_retries_per_action=args.max_retries,
+            api_base=args.api_base,
+            api_key_env=args.api_key_env,
+            enemy_api_base=args.enemy_api_base,
+            enemy_api_key_env=args.enemy_api_key_env,
+            temperature=args.temperature,
+        )
+        if args.out_trace:
+            out_path = Path(args.out_trace).expanduser()
+            if out_path.exists() and not getattr(args, "force", False):
+                raise FileExistsError(
+                    f"Refusing to overwrite '{out_path}'. Pass --force to replace it."
+                )
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(
+                json.dumps(trace, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        return "arena_dungeon", trace, 0
+
+    if subcmd == "dungeon-replay":
+        trace = _load_json_file_or_stdin(args.trace_file, label="dungeon trace")
+        if not isinstance(trace, dict):
+            raise ValueError("Dungeon trace JSON must be an object.")
+        result = execute_arena_dungeon_replay(rules, trace)
+        exit_code = 0 if bool(result.get("deterministic_match")) else 1
+        return "arena_dungeon_replay", result, exit_code
+
+    if subcmd == "dungeon-play":
+        dungeon_input = _parse_scenario_arg(args.dungeon)
+        fmt = getattr(args, "format", "markdown")
+        if fmt == "json":
+            def _d_stderr_out(msg: str) -> None:
+                print(msg, file=sys.stderr, flush=True)
+
+            def _d_stderr_in(prompt: str) -> str:
+                if prompt:
+                    sys.stderr.write(prompt)
+                    sys.stderr.flush()
+                line = sys.stdin.readline()
+                if line == "":
+                    raise EOFError
+                return line.rstrip("\r\n")
+
+            dplay_in = _d_stderr_in
+            dplay_out = _d_stderr_out
+        else:
+            dplay_in = input
+            dplay_out = print
+
+        result = execute_arena_dungeon_play(
+            rules,
+            dungeon=dungeon_input,
+            play_as=args.play_as,
+            seat_overrides=args.seats,
+            party_agent=args.party_agent,
+            enemy_agent=args.enemy_agent,
+            nl_driver_spec=args.nl_driver,
+            api_base=args.api_base,
+            api_key_env=args.api_key_env,
+            temperature=args.temperature,
+            seed=args.seed,
+            allow_short_rest=not bool(getattr(args, "no_short_rest", False)),
+            max_actions_per_turn=args.max_actions_per_turn,
+            max_retries_per_action=args.max_retries,
+            out_trace=args.out_trace,
+            force=bool(getattr(args, "force", False)),
+            input_fn=dplay_in,
+            output_fn=dplay_out,
+        )
+        if result.get("status") == "paused":
+            return "arena_play_paused", result, 0
+        return "arena_dungeon", result, 0
+
     raise ValueError(f"Unknown arena subcommand: {subcmd}")
 
 
@@ -913,7 +1350,21 @@ def main_arena(argv: Sequence[str] | None = None) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
-    output = render_operation(op, payload, fmt=args.format)
+    if args.format == "markdown" and op in ("arena_dungeons", "arena_dungeon", "arena_dungeon_replay"):
+        from srd2024.arena.dungeon import (
+            render_dungeon_markdown,
+            render_dungeon_replay_markdown,
+            render_dungeons_markdown,
+        )
+
+        if op == "arena_dungeons":
+            output = render_dungeons_markdown(payload.get("dungeons") or [])
+        elif op == "arena_dungeon":
+            output = render_dungeon_markdown(payload)
+        else:
+            output = render_dungeon_replay_markdown(payload)
+    else:
+        output = render_operation(op, payload, fmt=args.format)
     sys.stdout.write(output + "\n")
     sys.stdout.flush()
 
