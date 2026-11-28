@@ -21,6 +21,7 @@ import {
   newLines,
   reachableSquares,
   readToken,
+  resolveClickNote,
   squareAt,
   statusText,
   validateState,
@@ -38,8 +39,15 @@ let lastSeq = 0;
 let busy = false;
 let pollTimer = 0;
 let picked = null;
+let pendingMove = null;
+let currentClickNote = "";
 
 const ui = buildShell();
+
+function setClickNote(text) {
+  currentClickNote = text;
+  ui.clickNote.textContent = text;
+}
 
 if (!token) {
   ui.status.replaceChildren(notice("err", "No session token.", ["Open the full URL that bin/srd-web printed when it started (it ends in #token=…)."]));
@@ -103,25 +111,43 @@ async function send(path, body) {
   const got = await api("POST", path, body);
   busy = false;
   if (got) {
-    accept(got.body.state, got.body.error);
+    accept(got.body.state, got.body.error, { afterAction: true, actionOutcome: got.body.outcome || null });
   } else {
+    pendingMove = null;
+    setClickNote("");
     paintControls();
   }
 }
 
 /** Validate and apply one state payload. A bad payload clears the board (fail closed). */
-function accept(raw, actionError) {
+function accept(raw, actionError, opts = {}) {
   const checked = validateState(raw);
   window.clearTimeout(pollTimer);
   if (!checked.ok) {
     state = null;
+    pendingMove = null;
+    setClickNote("");
     ui.stage.hidden = true;
     showError("The server sent a state this page does not understand, so nothing is shown.", checked.errors);
     return;
   }
+  const prevState = state;
   state = checked.state;
   ui.stage.hidden = false;
-  appendLog(newLines(state.log, lastSeq));
+  const incoming = newLines(state.log, lastSeq);
+  appendLog(incoming);
+  const nextNote = resolveClickNote({
+    prevState,
+    nextState: state,
+    currentNote: currentClickNote,
+    pendingMove,
+    incomingLog: incoming,
+    actionError,
+    actionOutcome: opts.actionOutcome || null,
+    afterAction: Boolean(opts.afterAction),
+  });
+  if (opts.afterAction || actionError || state.status !== "running") pendingMove = null;
+  setClickNote(nextNote);
   if (actionError) showError("The engine rejected that action.", [actionError]);
   else if (state.error) showError("The session stopped with an error.", [state.error]);
   else if (state.notice) ui.status.replaceChildren(notice("warn", state.notice, []));
@@ -210,6 +236,14 @@ function buildShell() {
     if (!got.ok) {
       showError("Can’t move there.", [got.error]);
       return;
+    }
+    if (state && state.view && state.view.self) {
+      pendingMove = {
+        actorId: state.view.self.id,
+        from: { x: state.view.self.position.x, y: state.view.self.position.y },
+        to: { x: got.body.x, y: got.body.y },
+      };
+      setClickNote(`Moving to (${got.body.x}, ${got.body.y})…`);
     }
     send("/api/action", got.body);
   });
@@ -390,15 +424,20 @@ function onBoardClick(svg, event, reach) {
   const sq = squareAt(pt.x, pt.y);
   const act = clickAction(state.view, state.menu, sq, reach);
   if (act.type === "move") {
-    ui.clickNote.textContent = `Moving to (${sq.x}, ${sq.y})…`;
+    pendingMove = {
+      actorId: state.view.self.id,
+      from: { x: state.view.self.position.x, y: state.view.self.position.y },
+      to: { x: sq.x, y: sq.y },
+    };
+    setClickNote(`Moving to (${sq.x}, ${sq.y})…`);
     send("/api/action", { ...act.body, decision: state.decision });
   } else if (act.type === "targets") {
     picked = act.id;
-    ui.clickNote.textContent = `${act.items.length} legal ${act.items.length === 1 ? "action" : "actions"} on ${act.name}.`;
+    setClickNote(`${act.items.length} legal ${act.items.length === 1 ? "action" : "actions"} on ${act.name}.`);
     paint();
   } else {
     picked = null;
-    ui.clickNote.textContent = act.reason;
+    setClickNote(act.reason);
     paint();
   }
 }

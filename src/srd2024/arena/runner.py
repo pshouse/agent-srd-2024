@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
+from srd2024 import __version__ as ENGINE_VERSION
 from srd2024.engine.combat import (
     _effective_ac,
     _effective_conditions,
@@ -503,6 +504,165 @@ def _cannot_act(actor: dict[str, Any], rules: RulesStore) -> bool:
     return False
 
 
+STATE_SHAPE_VERSION: int = 1
+_RULES_DIGEST_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def compute_rules_digest(rules: RulesStore) -> str:
+    """Return the SHA-256 hex digest of the compiled `rules.json` backing `rules`."""
+    rules_path = getattr(rules, "rules_path", None)
+    if isinstance(rules_path, Path) and rules_path.is_file():
+        st = rules_path.stat()
+        cache_key = (str(rules_path), st.st_mtime_ns, st.st_size)
+        cached = _RULES_DIGEST_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+        digest = hashlib.sha256(rules_path.read_bytes()).hexdigest()
+        _RULES_DIGEST_CACHE[cache_key] = digest
+        return digest
+    canonical = json.dumps(rules.data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def build_trace_provenance(rules: RulesStore) -> dict[str, Any]:
+    """Build provenance metadata recorded on emitted MatchTranscripts (#66)."""
+    return {
+        "engine_version": ENGINE_VERSION,
+        "rules_digest": compute_rules_digest(rules),
+        "state_shape_version": STATE_SHAPE_VERSION,
+    }
+
+
+def _check_provenance(transcript: dict[str, Any], rules: RulesStore) -> list[str]:
+    """Compare a trace's provenance against the current engine and rules build (#66)."""
+    warnings: list[str] = []
+    current_rules_digest = compute_rules_digest(rules)
+
+    rec_engine = transcript.get("engine_version")
+    if rec_engine is None:
+        warnings.append(f"missing engine_version in trace (current={ENGINE_VERSION!r}).")
+    elif str(rec_engine) != str(ENGINE_VERSION):
+        warnings.append(
+            f"engine_version mismatch: trace={rec_engine!r}, current={ENGINE_VERSION!r}."
+        )
+
+    rec_rules = transcript.get("rules_digest")
+    if rec_rules is None:
+        warnings.append(
+            f"missing rules_digest in trace (current={current_rules_digest[:12]}...)."
+        )
+    elif str(rec_rules) != current_rules_digest:
+        warnings.append(
+            f"rules_digest mismatch: trace={str(rec_rules)!r}, current={current_rules_digest!r}."
+        )
+
+    rec_shape = transcript.get("state_shape_version")
+    if rec_shape is None:
+        warnings.append(
+            f"missing state_shape_version in trace (current={STATE_SHAPE_VERSION!r})."
+        )
+    elif str(rec_shape) != str(STATE_SHAPE_VERSION):
+        warnings.append(
+            f"state_shape_version mismatch: trace={rec_shape!r}, current={STATE_SHAPE_VERSION!r}."
+        )
+
+    return warnings
+
+
+def _strip_symmetric_dict_drift(
+    orig_init: Any,
+    orig_final: Any,
+    rep_init: Any,
+    rep_final: Any,
+    prefix: str,
+    drift_paths: set[str],
+) -> tuple[Any, Any]:
+    """Return normalized copies of `(orig_final, rep_final)` without symmetric init+final schema keys."""
+    if not (isinstance(orig_final, dict) and isinstance(rep_final, dict)):
+        return orig_final, rep_final
+    o_init = orig_init if isinstance(orig_init, dict) else {}
+    r_init = rep_init if isinstance(rep_init, dict) else {}
+    o_out: dict[str, Any] = {}
+    r_out: dict[str, Any] = {}
+    for k in set(orig_final.keys()) | set(rep_final.keys()):
+        in_of = k in orig_final
+        in_rf = k in rep_final
+        path = f"{prefix}.{k}" if prefix else k
+        if in_of and in_rf:
+            if isinstance(orig_final[k], dict) and isinstance(rep_final[k], dict):
+                o_sub, r_sub = _strip_symmetric_dict_drift(
+                    o_init.get(k), orig_final[k], r_init.get(k), rep_final[k], path, drift_paths
+                )
+                o_out[k] = o_sub
+                r_out[k] = r_sub
+            else:
+                o_out[k] = orig_final[k]
+                r_out[k] = rep_final[k]
+        elif in_rf and not in_of:
+            if k in r_init and k not in o_init:
+                drift_paths.add(path)
+            else:
+                r_out[k] = rep_final[k]
+        else:
+            if k in o_init and k not in r_init:
+                drift_paths.add(path)
+            else:
+                o_out[k] = orig_final[k]
+    return o_out, r_out
+
+
+def _analyze_state_schema_drift(
+    orig_init: Any,
+    orig_final: Any,
+    rep_init: Any,
+    rep_final: Any,
+) -> tuple[list[str], bool]:
+    """Separate symmetric init+final state-shape drift from gameplay/value divergence (#66).
+
+    Returns `(sorted_drift_paths, normalized_states_equal)`.
+    Combatant-level keys are reported under `combatants.*.<field>`.
+    """
+    if not (isinstance(orig_final, dict) and isinstance(rep_final, dict)):
+        return [], orig_final == rep_final
+    if orig_final == rep_final:
+        return [], True
+
+    o_init = orig_init if isinstance(orig_init, dict) else {}
+    r_init = rep_init if isinstance(rep_init, dict) else {}
+    drift_paths: set[str] = set()
+
+    o_top = {k: v for k, v in orig_final.items() if k != "combatants"}
+    r_top = {k: v for k, v in rep_final.items() if k != "combatants"}
+    o_top_init = {k: v for k, v in o_init.items() if k != "combatants"}
+    r_top_init = {k: v for k, v in r_init.items() if k != "combatants"}
+    o_top_norm, r_top_norm = _strip_symmetric_dict_drift(
+        o_top_init, o_top, r_top_init, r_top, "", drift_paths
+    )
+
+    o_combs = orig_final.get("combatants")
+    r_combs = rep_final.get("combatants")
+    o_init_combs = o_init.get("combatants") if isinstance(o_init.get("combatants"), dict) else {}
+    r_init_combs = r_init.get("combatants") if isinstance(r_init.get("combatants"), dict) else {}
+    if not (isinstance(o_combs, dict) and isinstance(r_combs, dict)) or set(o_combs.keys()) != set(r_combs.keys()):
+        return sorted(drift_paths), False
+
+    o_combs_norm: dict[str, Any] = {}
+    r_combs_norm: dict[str, Any] = {}
+    for cid in o_combs:
+        o_c_norm, r_c_norm = _strip_symmetric_dict_drift(
+            o_init_combs.get(cid),
+            o_combs[cid],
+            r_init_combs.get(cid),
+            r_combs[cid],
+            "combatants.*",
+            drift_paths,
+        )
+        o_combs_norm[cid] = o_c_norm
+        r_combs_norm[cid] = r_c_norm
+
+    return sorted(drift_paths), (o_top_norm == r_top_norm) and (o_combs_norm == r_combs_norm)
+
+
 def compute_transcript_digest(transcript: dict[str, Any]) -> str:
     """SHA-256 hex digest of canonical JSON over final_state, all action events, winner, and scorecard."""
     payload = {
@@ -922,6 +1082,7 @@ def run_match(
 
     transcript: dict[str, Any] = {
         "schema_version": "4",
+        **build_trace_provenance(rules),
         "dataset_id": rules.dataset_id,
         "scenario": {
             "id": compiled["id"],
@@ -1075,10 +1236,14 @@ def replay_match(
         )
         return {
             "status": "error",
+            "replay_status": "error",
             "error": message,
             "scenario_id": str((transcript.get("scenario") or {}).get("id") or ""),
             "seed": int((transcript.get("config") or {}).get("seed", 0) or 0),
             "deterministic_match": False,
+            "events_match": False,
+            "state_schema_drift": [],
+            "provenance_warnings": _check_provenance(transcript, rules),
             "original_digest": str(transcript.get("digest") or ""),
             "replayed_digest": "",
             "diffs": [message],
@@ -1088,10 +1253,14 @@ def replay_match(
         message = f"unsupported schema_version {schema!r}. Expected schema_version 4."
         return {
             "status": "error",
+            "replay_status": "error",
             "error": message,
             "scenario_id": str((transcript.get("scenario") or {}).get("id") or ""),
             "seed": int((transcript.get("config") or {}).get("seed", 0) or 0),
             "deterministic_match": False,
+            "events_match": False,
+            "state_schema_drift": [],
+            "provenance_warnings": _check_provenance(transcript, rules),
             "original_digest": str(transcript.get("digest") or ""),
             "replayed_digest": "",
             "diffs": [message],
@@ -1132,36 +1301,100 @@ def replay_match(
         max_retries_per_action=max_retries,
     )
 
-    original_digest = str(transcript.get("digest") or compute_transcript_digest(transcript))
+    expected_orig_digest = compute_transcript_digest(transcript)
+    original_digest = str(transcript.get("digest") or expected_orig_digest)
     replayed_digest = str(replayed["digest"])
 
+    provenance_warnings = _check_provenance(transcript, rules)
+    state_schema_drift, normalized_state_match = _analyze_state_schema_drift(
+        transcript.get("initial_state"),
+        transcript.get("final_state"),
+        replayed.get("initial_state"),
+        replayed.get("final_state"),
+    )
+
+    winner_matches = replayed.get("winner") == transcript.get("winner")
+    exact_state_match = replayed.get("final_state") == transcript.get("final_state")
+    scorecard_matches = replayed.get("scorecard") == transcript.get("scorecard")
+
     diffs: list[str] = []
-    if replayed.get("winner") != transcript.get("winner"):
+    if not winner_matches:
         diffs.append(f"winner mismatch: original={transcript.get('winner')!r}, replayed={replayed.get('winner')!r}")
-    if replayed.get("final_state") != transcript.get("final_state"):
-        diffs.append("final_state differs between original and replayed transcripts.")
+    if not exact_state_match:
+        if state_schema_drift and normalized_state_match:
+            diffs.append(
+                f"state_schema_drift ({', '.join(state_schema_drift)}): "
+                "all shared final_state values match."
+            )
+        else:
+            diffs.append("final_state differs between original and replayed transcripts.")
 
     orig_actions = transcript.get("actions") or []
     rep_actions = replayed.get("actions") or []
+    events_match = True
     if len(orig_actions) != len(rep_actions):
+        events_match = False
         diffs.append(f"action count mismatch: original={len(orig_actions)}, replayed={len(rep_actions)}")
     else:
         for idx, (oa, ra) in enumerate(zip(orig_actions, rep_actions)):
-            if oa.get("events") != ra.get("events"):
-                diffs.append(f"action[{idx}] (seq={oa.get('seq')}) events differ.")
+            o_evs = oa.get("events") or []
+            r_evs = ra.get("events") or []
+            if o_evs != r_evs:
+                events_match = False
+                ev_detail = ""
+                if len(o_evs) != len(r_evs):
+                    ev_detail = f" (event count original={len(o_evs)}, replayed={len(r_evs)})"
+                else:
+                    for eidx, (oe, re_ev) in enumerate(zip(o_evs, r_evs)):
+                        if oe != re_ev:
+                            ev_detail = f" (event[{eidx}] type={oe.get('type')!r} vs {re_ev.get('type')!r})"
+                            break
+                diffs.append(f"action[{idx}] (seq={oa.get('seq')}) events differ{ev_detail}.")
                 break
 
-    if replayed.get("scorecard") != transcript.get("scorecard"):
+    if not scorecard_matches:
         diffs.append("scorecard differs between original and replayed transcripts.")
 
-    if original_digest != replayed_digest and not diffs:
+    digest_tampered = bool(transcript.get("digest")) and (
+        original_digest != expected_orig_digest and original_digest != replayed_digest
+    )
+    if (original_digest != replayed_digest and not diffs) or digest_tampered:
         diffs.append(f"digest mismatch: original={original_digest}, replayed={replayed_digest}")
+
+    if (
+        original_digest == replayed_digest
+        and exact_state_match
+        and events_match
+        and winner_matches
+        and scorecard_matches
+        and not state_schema_drift
+        and len(diffs) == 0
+    ):
+        replay_status = "match"
+        deterministic_match = True
+    elif (
+        events_match
+        and winner_matches
+        and scorecard_matches
+        and normalized_state_match
+        and bool(state_schema_drift)
+        and not digest_tampered
+    ):
+        replay_status = "match_with_drift"
+        deterministic_match = False
+    else:
+        replay_status = "mismatch"
+        deterministic_match = False
 
     return {
         "status": "ok",
+        "replay_status": replay_status,
         "scenario_id": scenario_id,
         "seed": seed,
-        "deterministic_match": (original_digest == replayed_digest) and (len(diffs) == 0),
+        "deterministic_match": deterministic_match,
+        "events_match": events_match,
+        "state_schema_drift": state_schema_drift,
+        "provenance_warnings": provenance_warnings,
         "original_digest": original_digest,
         "replayed_digest": replayed_digest,
         "diffs": diffs,

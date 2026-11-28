@@ -15,8 +15,10 @@ import {
   newLines,
   reachableSquares,
   readToken,
+  resolveClickNote,
   squareAt,
   statusText,
+  turnKey,
   validateState,
 } from "../tabletop/tabletop-model.js";
 
@@ -210,6 +212,115 @@ test("log lines, download names, and status text", () => {
   assert.equal(downloadName(null), "srd-web.trace.json");
   assert.match(statusText(state()), /Your move: Bram/);
   assert.match(statusText(state({ status: "finished", result: { winner: "party" } })), /party wins/);
+});
+
+test("clickNote resolves moves, reports stopped moves, and clears on new turns (#83)", () => {
+  const prev = state({ decision: 3 });
+  const pending = { actorId: "pc-bram", from: { x: 0, y: 0 }, to: { x: 15, y: 0 } };
+
+  // 1. Successful move on the same turn updates "Moving to…" to the resolved destination.
+  const movedState = state({ decision: 4 });
+  movedState.view.self.position = { x: 15, y: 0 };
+  assert.equal(
+    resolveClickNote({
+      prevState: prev,
+      nextState: movedState,
+      currentNote: "Moving to (15, 0)…",
+      pendingMove: pending,
+      afterAction: true,
+    }),
+    "Moved to (15, 0).",
+  );
+  // Same check via structured state_diff.position_changes.
+  assert.equal(
+    resolveClickNote({
+      prevState: prev,
+      nextState: movedState,
+      currentNote: "Moving to (15, 0)…",
+      pendingMove: pending,
+      actionOutcome: { state_diff: { position_changes: [{ id: "pc-bram", before: { x: 0, y: 0 }, after: { x: 15, y: 0 } }] } },
+      afterAction: true,
+    }),
+    "Moved to (15, 0).",
+  );
+
+  // 2. Stopped move (e.g. OA drops mover; empty position_changes) shows stopped outcome instead of stale "Moving to…".
+  const prevStop = state({ decision: 10 });
+  prevStop.view.round = 3;
+  prevStop.view.self.position = { x: 5, y: 15 };
+  const stoppedState = state({ decision: 11 });
+  stoppedState.view.round = 3;
+  stoppedState.view.self.position = { x: 5, y: 15 };
+  const stoppedNote = resolveClickNote({
+    prevState: prevStop,
+    nextState: stoppedState,
+    currentNote: "Moving to (0, 10)…",
+    pendingMove: { actorId: "pc-bram", from: { x: 5, y: 15 }, to: { x: 0, y: 10 } },
+    actionOutcome: { state_diff: { position_changes: [] } },
+    incomingLog: [{ seq: 20, text: "  * Bram Ironhand is dropped before getting away; the move ends at (5, 15)." }],
+    afterAction: true,
+  });
+  assert.match(stoppedNote, /^Move stopped at \(5, 15\):/);
+  assert.match(stoppedNote, /dropped before getting away/);
+
+  // 3. New turn (next round or different active seat) clears any previous or pending move note.
+  const nextRound = state({ decision: 12 });
+  nextRound.view.round = 4;
+  nextRound.view.self.position = { x: 5, y: 15 };
+  assert.equal(turnKey(prevStop), "3:pc-bram");
+  assert.equal(turnKey(nextRound), "4:pc-bram");
+  assert.equal(
+    resolveClickNote({
+      prevState: prevStop,
+      nextState: nextRound,
+      currentNote: "Moving to (0, 10)…",
+      pendingMove: { actorId: "pc-bram", from: { x: 5, y: 15 }, to: { x: 0, y: 10 } },
+      afterAction: true,
+    }),
+    "",
+  );
+  const nextSeat = state({ decision: 13 });
+  nextSeat.view.round = 3;
+  nextSeat.view.self.id = "pc-talia";
+  assert.equal(
+    resolveClickNote({
+      prevState: prevStop,
+      nextState: nextSeat,
+      currentNote: "Moved to (15, 0).",
+      afterAction: true,
+    }),
+    "",
+  );
+
+  // 4. Subsequent non-move action, action error, and finished session all clear clickNote.
+  assert.equal(
+    resolveClickNote({
+      prevState: movedState,
+      nextState: state({ decision: 5 }),
+      currentNote: "Moved to (15, 0).",
+      afterAction: true,
+    }),
+    "",
+  );
+  assert.equal(
+    resolveClickNote({
+      prevState: prev,
+      nextState: prev,
+      currentNote: "Moving to (15, 0)…",
+      pendingMove: pending,
+      actionError: "Insufficient movement",
+      afterAction: true,
+    }),
+    "",
+  );
+  assert.equal(
+    resolveClickNote({
+      prevState: prev,
+      nextState: state({ status: "finished", decision: null, menu: [] }),
+      currentNote: "Moved to (15, 0).",
+    }),
+    "",
+  );
 });
 
 test("the tabletop is plain modules with no HTML injection or inline styles, and stays off the Pages allowlist", () => {

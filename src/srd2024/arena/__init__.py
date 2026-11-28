@@ -26,7 +26,11 @@ from .render import (
     render_scenarios_markdown,
 )
 from .runner import (
+    ENGINE_VERSION,
+    STATE_SHAPE_VERSION,
     build_observation,
+    build_trace_provenance,
+    compute_rules_digest,
     compute_transcript_digest,
     replay_match,
     run_benchmark,
@@ -60,7 +64,11 @@ __all__ = [
     "GeminiDriver",
     "extract_decision_json",
     "create_driver",
+    "ENGINE_VERSION",
+    "STATE_SHAPE_VERSION",
     "build_observation",
+    "build_trace_provenance",
+    "compute_rules_digest",
     "run_match",
     "replay_match",
     "run_benchmark",

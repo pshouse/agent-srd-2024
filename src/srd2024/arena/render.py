@@ -405,7 +405,18 @@ def render_benchmark_markdown(report: dict[str, Any]) -> str:
 def render_replay_markdown(replay_result: dict[str, Any]) -> str:
     """Render a replay_match verification result as Markdown."""
     matched = bool(replay_result.get("deterministic_match", False))
-    status_badge = "PASS (100% Deterministic)" if matched else "FAIL (Divergence Detected)"
+    replay_status = str(
+        replay_result.get("replay_status") or ("match" if matched else "mismatch")
+    )
+    events_match = bool(replay_result.get("events_match", matched))
+    drift = list(replay_result.get("state_schema_drift") or [])
+    warnings = list(replay_result.get("provenance_warnings") or [])
+    if replay_status == "match":
+        status_badge = "PASS (100% Deterministic)"
+    elif replay_status == "match_with_drift":
+        status_badge = "PASS WITH DRIFT (Events Match; State Schema Drift)"
+    else:
+        status_badge = "FAIL (Divergence Detected)"
     diffs = list(replay_result.get("diffs") or [])
 
     lines: list[str] = [
@@ -415,13 +426,19 @@ def render_replay_markdown(replay_result: dict[str, Any]) -> str:
         "|---|---|",
         f"| Scenario | `{replay_result.get('scenario_id', '')}` |",
         f"| Seed | `{replay_result.get('seed', '')}` |",
+        f"| Replay Status | `{replay_status}` |",
         f"| Deterministic Match | **{status_badge}** |",
+        f"| Events Match | `{'true' if events_match else 'false'}` |",
         f"| Original Digest | `{replay_result.get('original_digest', '')}` |",
         f"| Replayed Digest | `{replay_result.get('replayed_digest', '')}` |",
-        "",
-        "## Diff Summary",
-        "",
     ]
+    if drift:
+        lines.append(f"| State Schema Drift | {', '.join(f'`{p}`' for p in drift)} |")
+    if warnings:
+        lines.extend(["", "## Provenance Warnings", ""])
+        for w in warnings:
+            lines.append(f"- {w}")
+    lines.extend(["", "## Diff Summary", ""])
     if not diffs:
         lines.append("No differences detected — replayed state, events, and scorecard are byte-identical.")
     else:

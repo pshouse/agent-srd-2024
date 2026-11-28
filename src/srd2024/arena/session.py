@@ -40,6 +40,7 @@ from .runner import (
     _retry_feedback_with_history,
     _select_driver,
     build_observation,
+    build_trace_provenance,
     compute_transcript_digest,
 )
 from .scenarios import load_scenario
@@ -913,6 +914,7 @@ def run_interactive_session(
 
     transcript: dict[str, Any] = {
         "schema_version": "4",
+        **build_trace_provenance(rules),
         "dataset_id": rules.dataset_id,
         "scenario": {
             "id": compiled["id"],
