@@ -21,7 +21,7 @@ SCORE_WEIGHTS: dict[str, float] = {
     "coordination": 0.15,
 }
 
-_PRODUCTIVE_INTENT_TYPES: frozenset[str] = frozenset({"attack", "cast_spell", "help"})
+_PRODUCTIVE_INTENT_TYPES: frozenset[str] = frozenset({"attack", "cast_spell", "class_feature", "help"})
 
 # Ratio terms (legality, immunity, friendly fire, focus fire) can be perfect
 # from a tiny sample: one attack followed by idle turns used to collect almost
@@ -186,6 +186,29 @@ def _cast_had_effect(
     return False
 
 
+def _class_feature_had_effect(action: dict[str, Any], side_ids: set[str]) -> bool:
+    """True when a `class_feature` use changed something for the user's side (#102 review follow-up).
+
+    Second Wind, Lay on Hands and Preserve Life count when their healing raised someone's HP or revived them, and
+    Lay on Hands (cure poison) counts when it ended a condition. Healing at full HP earns nothing, the same rule
+    `_cast_had_effect` applies to healing spells (#75). Action Surge only grants an extra action, so it counts
+    through whatever that action does, not on its own. Synthetic transcripts with neither events nor a
+    state_diff keep the old credit.
+    """
+    events = action.get("events")
+    if not events and not action.get("state_diff"):
+        return True
+    for ev in events or []:
+        if ev.get("reaction"):
+            continue
+        etype = str(ev.get("type") or "")
+        tid = str(ev.get("target_id") or "")
+        if etype in ("healing_applied", "condition_ended") and tid in side_ids:
+            if _ally_event_changed_something(ev, {}):
+                return True
+    return False
+
+
 def _successful_help_turns(side_actions: list[dict[str, Any]]) -> set[tuple[int, int, str]]:
     """Return turn keys of `help` actions whose Advantage was spent on an ally attack that hit.
 
@@ -329,8 +352,8 @@ def score_match(
     forced_fallbacks = sum(1 for a in decision_actions if bool(a.get("forced_fallback", False)))
     side_violations = sum(1 for v in violations if str(v.get("side")) == side)
 
-    # Turn productivity: a turn is productive if any action in it attacked or cast,
-    # or used Help that set up an ally's hit.
+    # Turn productivity: a turn is productive if any action in it attacked, cast a spell or used a class
+    # feature that changed something, or used Help that set up an ally's hit.
     successful_help_turns = _successful_help_turns(side_actions)
     effects_before = _effects_before_each_action(init_combatants, actions)
     prior_by_action = {id(a): effects_before[i] for i, a in enumerate(actions)}
@@ -344,6 +367,8 @@ def score_match(
         is_prod = a_type in _PRODUCTIVE_INTENT_TYPES and (a_type != "help" or turn_key in successful_help_turns)
         if is_prod and a_type == "cast_spell":
             is_prod = _cast_had_effect(a, side_ids, prior_by_action.get(id(a), {}))
+        elif is_prod and a_type == "class_feature":
+            is_prod = _class_feature_had_effect(a, side_ids)
         turn_productivity[turn_key] = turn_productivity.get(turn_key, False) or is_prod
         talk = a.get("table_talk")
         if isinstance(talk, str) and talk.strip():
