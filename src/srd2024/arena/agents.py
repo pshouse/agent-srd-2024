@@ -1760,27 +1760,26 @@ class HeuristicTacticalDriver:
             spell_recs=spell_recs,
         )
 
-        # 3g. Wizard `mage-armor` if unarmored, not active, and no 2+-target non-immune AoE kill shot
+        # 3g. Wizard `mage-armor` if unarmored and not active, but only while no offensive spell can reach an
+        #     enemy. Mage Armor costs the Action and (#52) the turn's one spell slot; spending them in a fight
+        #     the caster can already hurt delays damage, and a Level 1 Wizard often drops before it pays off
+        #     (#90: goblin-ambush 76.8 -> 80.0, seeds 1-40). It still goes up while the enemy closes.
         if (
             "mage-armor" in spell_recs
             and res.get("action")
             and "mage_armor" not in self_effects
             and not self_data.get("wearing_armor", False)
+            and best_spell_plan is None
         ):
             base_ac = int(self_data.get("ac", 10))
             eff_ac = int(self_data.get("effective_ac", base_ac))
             ab_mods = self_data.get("ability_mods") or {}
             dex_mod = int(ab_mods.get("dex", max(0, base_ac - 10)))
             needs_mage_armor = base_ac < (13 + dex_mod) and eff_ac < (13 + dex_mod)
-            has_multi_aoe = (
-                best_spell_plan is not None
-                and int(best_spell_plan.get("num_targets", 0)) >= 2
-                and float(best_spell_plan.get("expected_damage", 0.0)) >= 24.0
-            )
             can_ma, _, ma_slot = _can_cast_spell_now(
                 "mage-armor", spell_recs["mage-armor"], self_data, slots, allow_reaction=False
             )
-            if needs_mage_armor and can_ma and not has_multi_aoe:
+            if needs_mage_armor and can_ma:
                 return AgentDecision(
                     intent={
                         "type": "cast_spell",
