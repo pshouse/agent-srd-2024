@@ -23,7 +23,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from srd2024.engine.combat import distance_ft
+from srd2024.engine.combat import distance_ft, spell_target_allowed
 from srd2024.engine.store import RulesStore, strip_prefix
 
 from .agents import (
@@ -674,6 +674,10 @@ def build_human_action_menu(
             if resolution in ("attack", "save", "auto_hit") or has_damage:
                 if enemies:
                     for enemy in enemies:
+                        # Hold Person is only legal on a Humanoid. Unknown types fail closed,
+                        # same as engine validation, so the menu never offers a cast step() would reject.
+                        if not spell_target_allowed(sp_slug, sp_rec, enemy, rules):
+                            continue
                         dist = distance_ft(self_pos, enemy["position"])
                         if dist > eff_range:
                             continue

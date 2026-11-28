@@ -10,9 +10,16 @@ Usage:
     python3 scripts/audit_arena_trace.py /tmp/crypt-*.json
 
 Exit code 1 if any rule has a violation. Reactions are checked: Opportunity Attacks (#38) and Shield's trigger (#33,
-#41). Monster traits (#39): Stench saves, Legendary Resistance, Undead Fortitude and Parry are checked. Not covered:
-ranges and cover, and spells other than Fireball/Healing Word/Mass Healing
-Word/Bless/Shield/Mage Armor.
+#41). Monster traits (#39): Stench saves, Legendary Resistance, Undead Fortitude and Parry are checked.
+
+Condition durations are keyed by source. Ghoul Claw paralysis ("ends at the end of the target's next turn") is
+only checked for a Claw rider. Hold Person paralysis is a concentration condition: it ends when the caster's
+concentration ends (a failed concentration save, incapacitation, death, or a new concentration spell all emit
+`concentration_ended`) or when the target succeeds on the end-of-turn save. The trace often has no
+`condition_ended` for the concentration case, because the engine drops those conditions inside
+`_drop_concentration`. This audit drops them itself when concentration ends, and flags an attack that still
+treats the target as paralyzed after that. Not covered: ranges and cover, and spells other than
+Fireball/Healing Word/Mass Healing Word/Bless/Shield/Mage Armor/Hold Person's paralysis.
 """
 
 from __future__ import annotations
@@ -58,7 +65,13 @@ def audit(path: Path) -> None:
     conds: dict[str, set] = {i: set(c.get("conditions") or []) for i, c in cs.items()}
     conc: dict[str, str | None] = {i: None for i in cs}
     death = {i: [0, 0] for i in cs}  # successes, failures
-    pending_par_end: dict[str, int] = {}  # target -> number of its own turn_ended events still to pass
+    # Ghoul Claw (and other on-hit riders) only. Hold Person is tracked separately, below.
+    pending_par_end: dict[str, int] = {}  # target -> 1 until its next turn_ended is checked
+    # Each entry is {kind: "claw"|"concentration"|"other", caster, spell}.
+    par_sources: dict[str, list[dict]] = {i: [] for i in cs}
+    # Targets whose Hold Person paralysis has already had to end. A later attack that still
+    # lists target_paralyzed is a paralysis that outlived concentration (or the end-of-turn save).
+    conc_freed: set[str] = set()
     weapons = {i: {w["slug"]: w for w in (c.get("weapons") or [])} for i, c in cs.items()}
     mactions = {i: {a["name"]: a for a in (c.get("monster_actions") or [])} for i, c in cs.items()}
     spell_dc = {i: (c.get("spellcasting") or {}).get("spell_save_dc") for i, c in cs.items()}
@@ -90,6 +103,59 @@ def audit(path: Path) -> None:
     def can_react(i: str) -> bool:
         return reaction[i] and hp[i] > 0 and not (conds[i] & {"paralyzed", "unconscious", "incapacitated", "stunned", "petrified", "dead"}) \
             and str(cs[i].get("reaction_policy") or "auto") != "none"
+
+    def _sync_paralyzed(tgt: str) -> None:
+        if par_sources.get(tgt):
+            conds[tgt].add("paralyzed")
+        else:
+            conds[tgt].discard("paralyzed")
+
+    def _paralysis_source(evs_local: list, idx_local: int) -> dict:
+        """Key a paralysis application by the save or spell that caused it."""
+        ev = evs_local[idx_local]
+        tgt = ev["target_id"]
+        caster = ev.get("source_id")
+        for prev in reversed(evs_local[:idx_local]):
+            pty = prev.get("type")
+            if pty == "saving_throw" and prev.get("target_id") == tgt:
+                reason = str(prev.get("reason") or "")
+                if reason == "hold-person":
+                    return {"kind": "concentration", "caster": caster, "spell": "hold-person"}
+                if reason.endswith("_rider"):
+                    return {"kind": "claw", "caster": caster, "spell": None}
+                return {"kind": "other", "caster": caster, "spell": None}
+            if pty == "spell_cast" and prev.get("spell") == "hold-person" and tgt in (prev.get("target_ids") or []):
+                return {"kind": "concentration", "caster": prev.get("actor_id") or caster, "spell": "hold-person"}
+            if pty in ("attack_roll", "spell_attack_roll") and prev.get("target_id") == tgt:
+                break
+        return {"kind": "other", "caster": caster, "spell": None}
+
+    def _drop_paralysis(tgt: str, reason: str | None) -> None:
+        sources = par_sources.get(tgt) or []
+        if not sources:
+            conds[tgt].discard("paralyzed")
+            return
+        prefer = "claw" if reason == "duration_expired" else "concentration" if reason == "save_succeeded" else None
+        pick = next((i for i, src in enumerate(sources) if src["kind"] == prefer), 0) if prefer else 0
+        removed = sources.pop(pick)
+        par_sources[tgt] = sources
+        _sync_paralyzed(tgt)
+        if removed["kind"] == "concentration":
+            conc_freed.add(tgt)
+
+    def _end_concentration_paralysis(caster: str, spell: str | None) -> None:
+        """Hold Person (and any other concentration paralysis) ends when that concentration ends."""
+        for tgt, sources in list(par_sources.items()):
+            kept = []
+            for src in sources:
+                same_caster = src.get("caster") == caster
+                same_spell = spell is None or src.get("spell") in (None, spell)
+                if src["kind"] == "concentration" and same_caster and same_spell:
+                    conc_freed.add(tgt)
+                    continue
+                kept.append(src)
+            par_sources[tgt] = kept
+            _sync_paralyzed(tgt)
 
     cheb = lambda a, b: max(abs(a["x"] - b["x"]), abs(a["y"] - b["y"]))
     fireball_raw = None
@@ -168,6 +234,16 @@ def audit(path: Path) -> None:
                     check("attacks vs paralyzed/unconscious have advantage", adv, where, f"{tgt} {sorted(tconds)} sources={e.get('advantage_sources')}")
                     if melee and e["hit"]:
                         check("melee hit vs paralyzed/unconscious within 5 ft is a crit", e["crit"], where, f"{tgt} {sorted(tconds)}")
+                elif tgt in conc_freed and "paralyzed" not in tconds:
+                    # Concentration (or the end-of-turn save) already ended Hold Person. An attack that
+                    # still cites target_paralyzed means the paralysis outlived that end.
+                    still = "target_paralyzed" in (e.get("advantage_sources") or [])
+                    check(
+                        "Hold Person paralysis ends when concentration ends",
+                        not still,
+                        where,
+                        f"{tgt} still treated as paralyzed after concentration ended",
+                    )
                 if not nat20 and e.get("crit"):
                     check("non-20 crit only vs paralyzed/unconscious in melee", bool(tconds & {"paralyzed", "unconscious"}) and melee, where, f"{tgt} {sorted(tconds)}")
                 last_attack = e
@@ -299,6 +375,10 @@ def audit(path: Path) -> None:
                     par = any(x["type"] == "condition_applied" and x["target_id"] == tgt and x["condition"] == "paralyzed" for x in evs[idx + 1: idx + 3])
                     immune_par = "undead" in str(cs[tgt].get("source_id", "")) or tgt.startswith(("ghoul", "ghast", "skeleton"))
                     check("failed Claw save -> paralyzed (success -> not)", par == (not e["success"] and not immune_par), where, f"{tgt} success={e['success']} paralyzed={par}")
+                if e.get("reason") == "end_turn_save_paralyzed" and e.get("success"):
+                    while any(src["kind"] == "concentration" for src in par_sources.get(tgt, [])):
+                        _drop_paralysis(tgt, "save_succeeded")
+                    conc_freed.add(tgt)
 
             if ty == "action_disengage":
                 disengaged[e["actor_id"]] = True
@@ -328,11 +408,21 @@ def audit(path: Path) -> None:
 
             if ty == "condition_applied":
                 tgt = e["target_id"]
-                conds[tgt].add(e["condition"])
                 if e["condition"] == "paralyzed":
-                    pending_par_end[tgt] = 1
+                    src = _paralysis_source(evs, idx)
+                    par_sources.setdefault(tgt, []).append(src)
+                    conds[tgt].add("paralyzed")
+                    # Only the Claw rider uses "ends at the end of the target's next turn".
+                    # Hold Person repeats a save instead, and also ends when concentration ends.
+                    if src["kind"] == "claw":
+                        pending_par_end[tgt] = 1
+                else:
+                    conds[tgt].add(e["condition"])
             if ty == "condition_ended":
-                conds[e["target_id"]].discard(e["condition"])
+                if e["condition"] == "paralyzed":
+                    _drop_paralysis(e["target_id"], e.get("reason"))
+                else:
+                    conds[e["target_id"]].discard(e["condition"])
             if ty == "pc_unconscious":
                 conds[e["combatant_id"]].add("unconscious")
             if ty == "pc_stabilized":
@@ -341,6 +431,10 @@ def audit(path: Path) -> None:
                 conc[e["actor_id"]] = e["spell"]
             if ty == "concentration_ended":
                 conc[e["actor_id"]] = None
+                # Damage-triggered CON save failure, incapacitation, death, and a new concentration
+                # spell all emit this event. Hold Person paralysis ends with it even when the trace
+                # has no condition_ended (the engine clears those conditions inside _drop_concentration).
+                _end_concentration_paralysis(e["actor_id"], e.get("spell"))
             if ty == "spell_cast" and e["spell"] == "mage-armor":
                 for tid in e.get("target_ids") or [e["actor_id"]]:
                     if not cs[tid].get("wearing_armor"):

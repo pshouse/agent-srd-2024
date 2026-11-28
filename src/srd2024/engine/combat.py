@@ -27,6 +27,80 @@ from .store import RulesStore, strip_prefix
 
 ABILITY_KEYS: tuple[str, ...] = ("str", "dex", "con", "int", "wis", "cha")
 
+# SRD 5.2 spells that name a creature type. Hold Person: "Choose a Humanoid".
+# A target is legal only when its type is known and listed. Unknown types fail closed
+# (the cast is refused): a missing stat block, a blank creature_type, or a monster id
+# this engine cannot resolve is not treated as a legal target.
+# Player characters are Humanoid. Character creation only builds Humanoids, and a PC
+# combatant does not store a monster creature_type, so kind "pc" is Humanoid rather
+# than unknown. This table is the runtime check; it is not copied onto combatant state,
+# so traces that never cast these spells replay unchanged.
+SPELL_TARGET_CREATURE_TYPES: dict[str, frozenset[str]] = {
+    "hold-person": frozenset({"humanoid"}),
+}
+
+
+def _required_creature_types(spell_slug: str, spell: dict[str, Any] | None) -> frozenset[str] | None:
+    """Creature types `spell_slug` may target, or None when it may target any creature.
+
+    A `target_creature_types` list on the spell record wins. Otherwise `SPELL_TARGET_CREATURE_TYPES`.
+    """
+    if isinstance(spell, dict):
+        raw = spell.get("target_creature_types")
+        if isinstance(raw, (list, tuple, set)) and raw:
+            types = frozenset(str(x).strip().lower() for x in raw if str(x).strip())
+            if types:
+                return types
+    return SPELL_TARGET_CREATURE_TYPES.get(strip_prefix(spell_slug))
+
+
+def creature_type_of(combatant: dict[str, Any], rules: RulesStore) -> str | None:
+    """Return this combatant's creature type in lowercase, or None when it is unknown.
+
+    Unknown fails closed for type-restricted spells (see `SPELL_TARGET_CREATURE_TYPES`):
+    the cast is refused rather than allowed. Resolution order:
+
+    1. A non-empty `creature_type` already on the combatant.
+    2. Player characters (`kind == "pc"`) are Humanoid. This engine's character builder
+       only produces Humanoids, and PC combatants do not carry a monster creature type.
+    3. Monsters are looked up by `source_id` in the rules store.
+    4. A missing record or a blank `creature_type` is unknown (`None`).
+    """
+    explicit = combatant.get("creature_type")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip().lower()
+    if str(combatant.get("kind") or "") == "pc":
+        return "humanoid"
+    source = str(combatant.get("source_id") or "").strip()
+    if not source:
+        return None
+    rec = rules.get_monster(source)
+    if not isinstance(rec, dict):
+        return None
+    raw = rec.get("creature_type")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    return raw.strip().lower()
+
+
+def spell_target_allowed(
+    spell_slug: str,
+    spell: dict[str, Any] | None,
+    combatant: dict[str, Any],
+    rules: RulesStore,
+) -> bool:
+    """Whether `combatant` is a legal target of `spell_slug`.
+
+    Spells with no creature-type restriction always return True. Restricted spells
+    return True only when `creature_type_of` is known and listed. Unknown types
+    return False (fail closed).
+    """
+    allowed = _required_creature_types(spell_slug, spell)
+    if not allowed:
+        return True
+    kind = creature_type_of(combatant, rules)
+    return kind is not None and kind in allowed
+
 SIZE_RANK: dict[str, int] = {
     "tiny": 0,
     "small": 1,
@@ -2694,6 +2768,24 @@ def step(
         for tid in target_ids:
             if tid not in s["combatants"]:
                 return _invalid(copy.deepcopy(state), f"Unknown spell target '{tid}'.", rules)
+
+        # Creature-type restrictions (Hold Person: Humanoid). Unknown types fail closed.
+        # Same as the other target checks: a refusal returns the caller's original state,
+        # so every driver is rejected the same way as any other illegal intent.
+        allowed_types = _required_creature_types(spell_slug, spell)
+        if allowed_types and target_ids:
+            spell_name = str(spell.get("name") or spell_slug)
+            need = " or ".join(part.title() for part in sorted(allowed_types))
+            for tid in target_ids:
+                target = s["combatants"][tid]
+                kind = creature_type_of(target, rules)
+                if kind is None or kind not in allowed_types:
+                    shown = "unknown; unknown creature types are refused" if kind is None else kind
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"{spell_name} requires a {need} target ({target.get('name') or tid} is {shown}).",
+                        rules,
+                    )
 
         # Default self-targeting for self buff/reaction spells like shield/mage-armor/false-life/misty-step.
         if not target_ids and str(spell.get("range_kind") or "").lower() == "self":

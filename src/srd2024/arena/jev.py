@@ -20,7 +20,7 @@ import json
 import os
 from typing import Any
 
-from srd2024.engine.combat import distance_ft
+from srd2024.engine.combat import distance_ft, spell_target_allowed
 from srd2024.engine.store import RulesStore
 
 from .agents import (
@@ -46,8 +46,6 @@ from .agents import (
 
 MAX_CANDIDATES = 80  # Choice allows 255; keep requests small and the option list readable.
 QUESTION_ID = "next_action"
-# Spells that only work on some creature types. The engine doesn't check this yet, so the driver does.
-SPELL_TARGET_TYPES = {"hold-person": {"humanoid"}}
 
 INSTRUCTIONS = (
     "You choose the next action for the active player character (state.self) in a 5e 2024 (SRD 5.2) combat. "
@@ -69,11 +67,6 @@ def _ally_label(a: dict[str, Any], self_pos: dict[str, int]) -> str:
         f"{a.get('name', a['id'])} ({a['id']}, {distance_ft(self_pos, a['position'])} ft away, "
         f"{a.get('hp', '?')}/{a.get('hp_max', '?')} HP)"
     )
-
-
-def _creature_type(e: dict[str, Any], rules: RulesStore) -> str:
-    rec = rules.get_monster(str(e.get("source_id") or "")) if e.get("source_id") else None
-    return str((rec or {}).get("creature_type") or "").lower()
 
 
 def _conditions(me: dict[str, Any]) -> dict[str, set[str]]:
@@ -220,8 +213,9 @@ def enumerate_candidates(observation: dict[str, Any], rules: RulesStore) -> list
             add(f"cast {slug} on {'+'.join(ids)}", f"{head} on {', '.join(ids)}.{conc}", {**base, "target_ids": ids})
             continue
         in_range = [e for e in enemies if distance_ft(pos, e["position"]) <= rng]
-        if slug in SPELL_TARGET_TYPES:
-            in_range = [e for e in in_range if _creature_type(e, rules) in SPELL_TARGET_TYPES[slug]]
+        # Hold Person (and any other type-restricted spell) is refused by the engine unless the
+        # target's creature type is known and allowed. Keep those casts out of the Choice list.
+        in_range = [e for e in in_range if spell_target_allowed(slug, rec, e, rules)]
         for e in in_range:
             add(
                 f"cast {slug} on {e['id']}",
