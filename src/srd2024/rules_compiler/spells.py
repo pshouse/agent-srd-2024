@@ -209,6 +209,18 @@ _TRUE_NARRATIVE_SPELLS: frozenset[str] = frozenset(
 
 # Spells that have real combat/save/condition mechanics but also significant non-numeric
 # behavioral/social/world riders, so they should honestly be `partial` (never `full`).
+# Smites are applied by the engine as on-hit riders (#6); every other auto_apply spell with damage isn't (#166).
+_ENGINE_ON_HIT_RIDERS: frozenset[str] = frozenset({"divine-smite", "shining-smite"})
+_UNAPPLIED_DAMAGE_REASON: dict[str, str] = {
+    "divine-favor": "per_hit_rider_damage_not_applied",
+    "hunters-mark": "per_hit_rider_damage_not_applied",
+    "hex": "per_hit_rider_damage_not_applied",
+    "fire-shield": "retaliatory_damage_not_applied",
+    "spike-growth": "zone_movement_damage_not_applied",
+    "dimension-door": "conditional_damage_not_applied",
+    "power-word-kill": "conditional_damage_not_applied",
+}
+
 _FORCE_PARTIAL_REASON: dict[str, str] = {
     "banishment": "extradimensional_exile_and_native_plane_rules",
     "befuddlement": "spellcasting_block_and_30_day_repeat_save",
@@ -1248,6 +1260,9 @@ def _compile_spell(rec: dict[str, Any]) -> dict[str, Any]:
 
     if secondary_damage_dropped:
         unmodeled.append("secondary_or_delayed_damage_clause")
+    # auto_apply damage isn't applied on cast (the engine reports spell_damage_unresolved), so never grade it full.
+    if base["resolution"] == "auto_apply" and damage_list and slug not in _ENGINE_ON_HIT_RIDERS:
+        unmodeled.append(_UNAPPLIED_DAMAGE_REASON.get(slug, "damage_not_applied_on_cast"))
     if action_type == "long" and not healing:
         unmodeled.append("non_combat_casting_time")
     if save_obj and not damage_list and not conds_applied and not healing:
