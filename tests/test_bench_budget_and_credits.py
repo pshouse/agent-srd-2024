@@ -425,7 +425,8 @@ class TestBenchBudget(unittest.TestCase):
 class TestBudgetPieces(unittest.TestCase):
     def test_prices_and_costs(self) -> None:
         self.assertEqual(contender_price("heuristic-tactical"), (0.0, 0.0))
-        self.assertEqual(contender_price("anthropic:claude-opus-5-5"), (0.0, 0.0))  # Claude Max login
+        self.assertEqual(contender_price("claude-code:claude-opus-5-5"), (0.0, 0.0))  # claude.ai Max login
+        self.assertIsNone(contender_price("anthropic:claude-opus-5-5"))  # Messages API bills API credits
         self.assertEqual(contender_price("xai:grok-4.7"), (2.0, 6.0))
         self.assertIsNone(contender_price("xai:grok-9"))
         self.assertEqual(contender_price("xai:grok-9", {"grok-9": (1.0, 2.0)}), (1.0, 2.0))

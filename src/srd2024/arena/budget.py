@@ -20,9 +20,10 @@ the cap. Every read takes a shared lock, and every write an exclusive lock plus 
 the ledger is missing, has no header, has a cap that doesn't match, or has a corrupt, truncated or negative line.
 A reservation that is never settled (a crashed process) stays counted at its full amount.
 
-Prices are USD per million tokens (list prices, so cached-input discounts make real spend a little lower). Claude
-(`anthropic:`) runs on the Claude Max CLI login in this project and is priced at 0. Pass `--price MODEL=IN/OUT`
-to bench it on a metered key.
+Prices are USD per million tokens (list prices, so cached-input discounts make real spend a little lower). Claude through
+the Claude Code CLI on a claude.ai Pro/Max login (`claude-code:`) is priced at 0. `anthropic:` calls the Messages API,
+which bills API credits even with an `ant` sign-in (its Console org pays), so it has no default price: pass
+`--price MODEL=IN/OUT` to bench it under a cap.
 """
 
 from __future__ import annotations
@@ -47,7 +48,9 @@ PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
     "jev-latest": (0.042, 0.0),
 }
 OFFLINE_SPECS = frozenset({"random", "greedy", "heuristic-tactical", "human", "replay"})
-SUBSCRIPTION_PREFIXES = frozenset({"anthropic"})
+# Only the Claude Code CLI on a claude.ai login is subscription-billed. `anthropic:` is the Messages API and bills API
+# credits (an `ant` sign-in bills its Console org), so a budgeted bench needs --price for it.
+SUBSCRIPTION_PREFIXES = frozenset({"claude-code"})
 # A request's input can't be more tokens than its UTF-8 JSON body has bytes (a token always covers at least one byte).
 # Real tokenizers average ~4 bytes a token, so this over-estimates input about 4x on purpose.
 

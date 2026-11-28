@@ -176,9 +176,13 @@ bin/srd-arena bench ... --budget-usd 150 --budget-ledger runs/ledger.jsonl      
   worst case. No call is ever charged more than its worst case, and no match more than its reservation.
 - The ledger fails closed. A missing, corrupt or truncated file, a negative amount or a different cap stops paid work.
 - Prices come from `src/srd2024/arena/budget.py`; override them with `--price MODEL=IN/OUT` (USD per million tokens).
+- Claude: `claude-code:<model>` (e.g. `claude-code:claude-opus-5-5`) runs each decision through the Claude Code CLI
+  (`claude -p`, no tools, no MCP, no settings) on a claude.ai Pro/Max login, priced at 0. It refuses API-key and
+  Console logins. `anthropic:<model>` calls the Messages API, which bills API credits even with an `ant` sign-in, so
+  under a cap it needs `--price`.
 
 A contender stops cleanly, with its finished matches kept and listed under "Stopped Contenders", if:
-- its provider reports no credits or quota (HTTP 402, or a quota or billing error), or
+- its provider reports no credits or quota (HTTP 402, or a quota or billing error), or a Claude subscription limit, or
 - its API key is missing, or
 - it fails three decisions in a row even after retries (429, 5xx and timeouts are retried with backoff), or
 - the budget can't cover its next match.
