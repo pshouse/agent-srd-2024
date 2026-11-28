@@ -1951,8 +1951,13 @@ def _maybe_reactive_shield(
     target_ac: int,
     rules: RulesStore,
     tracker: _StepTracker,
+    *,
+    trigger: str = "hit_by_attack",
 ) -> int | None:
     """Cast Shield as a Reaction when an attack roll hits and +5 AC would make it miss (SRD 5.2 Shield).
+
+    With `trigger="targeted_by_magic_missile"` (#33), the other trigger in the SRD 5.2 text, the hit/miss
+    test is skipped: Shield negates every Magic Missile dart, so it is always worth casting.
 
     Requires Shield prepared, a free Reaction, a level-1+ slot, and no Shield already up. A natural 20 still hits,
     so Shield isn't wasted on it. Returns the new AC when Shield is cast (the caller re-checks the hit), else None.
@@ -1961,13 +1966,14 @@ def _maybe_reactive_shield(
     sc = target.get("spellcasting")
     if not isinstance(sc, dict) or "shield" not in (sc.get("prepared_spells") or []):
         return None
-    if d20.get("nat20") or any(e.get("kind") == "shield" for e in target.get("active_effects", [])):
+    mm_trigger = trigger == "targeted_by_magic_missile"
+    if (not mm_trigger and d20.get("nat20")) or any(e.get("kind") == "shield" for e in target.get("active_effects", [])):
         return None
     if not _can_react(target, rules):
         return None
     spell = rules.get_spell("shield") or {}
     bonus = next((int(b.get("value", 5)) for b in (spell.get("buffs") or []) if b.get("kind") == "ac_bonus"), 5)
-    if total_to_hit >= target_ac + bonus:
+    if not mm_trigger and total_to_hit >= target_ac + bonus:
         return None  # Shield wouldn't turn this hit into a miss
     slots = sc.setdefault("slots", {})
     slot_level = next((lvl for lvl in sorted(int(k) for k, v in slots.items() if int(v) > 0) if lvl >= 1), None)
@@ -1999,7 +2005,7 @@ def _maybe_reactive_shield(
         slot_level=slot_level,
         target_ids=[target_id],
         as_reaction=True,
-        trigger="hit_by_attack",
+        trigger=trigger,
         trigger_source_id=attacker_id,
         coverage=str(spell.get("coverage") or "full"),
         unmodeled_clauses=list((spell.get("provenance") or {}).get("unmodeled_clauses") or []),
@@ -2881,6 +2887,15 @@ def step(
             num_proj = proj_base + upcast * proj_per_lvl
             if not target_ids:
                 return _invalid(copy.deepcopy(state), f"Spell '{spell_slug}' requires at least one target.", rules)
+
+            # Being targeted by Magic Missile is a Shield trigger (#33): the target may react before the darts land.
+            if spell_slug == "magic-missile":
+                for tid in dict.fromkeys(target_ids):
+                    t = s["combatants"][tid]
+                    if t.get("side") != actor.get("side") and not _has_active_shield(t, spell_slug):
+                        _maybe_reactive_shield(
+                                s, tid, actor_id, {}, 0, 0, rules, tracker, trigger="targeted_by_magic_missile"
+                        )
 
             pre_auto_hooks = len(tracker.hooks)
             dmg_by_target: dict[str, int] = {}
