@@ -25,6 +25,7 @@ import random
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -3810,6 +3811,119 @@ class AnthropicDriver(BaseLLMDriver):
         })
 
 
+class ClaudeCodeDriver(AnthropicDriver):
+    """Claude through the Claude Code CLI (`claude -p`) on the user's claude.ai Pro/Max login (`claude-code:<model>`).
+
+    `anthropic:<model>` calls the Messages API, which bills API credits: with an `ant` sign-in it bills that Console
+    org's prepaid balance, not a Pro/Max subscription. This driver runs every decision as a one-shot `claude -p` with
+    the arena's system prompt, no tools, no MCP servers and no settings sources, so it draws on the subscription.
+    It refuses to start unless `claude auth status` reports a claude.ai login, and strips ANTHROPIC_API_KEY,
+    ANTHROPIC_AUTH_TOKEN and ANTHROPIC_BASE_URL from the child's environment, so it can never fall back to API billing.
+    Claude Code still adds two short context blocks (the account email and an environment summary); nothing else.
+    """
+
+    PROVIDER_PREFIX = "claude-code"
+    CLI_URL = "https://api.anthropic.com/v1/messages"  # informational: requests go through the CLI, not this URL
+    _STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL")
+    _LIMIT_MARKERS = ("usage limit", "limit reached", "credit balance", "out of extra usage", "billing")
+    _RETRYABLE_MARKERS = ("overloaded", "rate limit", "timed out", "timeout", "internal server error", "api error")
+
+    def __init__(
+        self,
+        model: str,
+        *,
+        effort: str = "high",
+        cli_path: str | None = None,
+        runner: Callable[..., Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        kwargs.setdefault("timeout_s", 300.0)
+        kwargs.pop("http_transport", None)
+        super().__init__(model, **kwargs)
+        self.effort = str(effort)
+        self._cli_path = cli_path
+        self._runner: Callable[..., Any] = runner or subprocess.run
+        self._login_checked = False
+        self._transport = self._cli_transport
+
+    def _cli(self) -> str:
+        path = self._cli_path or shutil.which("claude")
+        if not path:
+            raise ProviderUnavailable("unavailable", "The Claude Code CLI (`claude`) is not on PATH.")
+        return path
+
+    def _child_env(self) -> dict[str, str]:
+        return {k: v for k, v in os.environ.items() if k not in self._STRIPPED_ENV}
+
+    def _check_login(self) -> None:
+        if self._login_checked:
+            return
+        try:
+            proc = self._runner([self._cli(), "auth", "status"], capture_output=True, text=True, timeout=30,
+                                check=False, env=self._child_env())
+            status = json.loads(proc.stdout or "{}")
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            status = {}
+        if not isinstance(status, dict) or not status.get("loggedIn") or status.get("authMethod") != "claude.ai":
+            raise ProviderUnavailable(
+                "unavailable",
+                "claude-code: contenders need a claude.ai (Pro/Max) login in the Claude Code CLI; run `claude auth login`. "
+                "API-key and Console logins are refused so the bench never bills API credits.",
+            )
+        self._login_checked = True
+
+    def _build_request(
+        self, system_prompt: str, user_prompt: str
+    ) -> tuple[str, dict[str, str], dict[str, Any]]:
+        payload = {
+            "model": self.model,
+            "max_tokens": max(self.max_tokens, self.MIN_MAX_TOKENS),
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": user_prompt}],
+        }
+        return self.CLI_URL, {}, payload
+
+    def _cli_transport(self, url: str, headers: dict[str, str], payload: dict[str, Any], timeout_s: float) -> dict[str, Any]:
+        self._check_login()
+        argv = [
+            self._cli(), "-p", "--model", self.model, "--effort", self.effort, "--tools", "", "--strict-mcp-config",
+            "--setting-sources", "", "--no-session-persistence", "--output-format", "json",
+            "--system-prompt", str(payload["system"]),
+        ]
+        user_text = str(payload["messages"][0]["content"])
+        with tempfile.TemporaryDirectory(prefix="srd-claude-code-") as cwd:  # no project CLAUDE.md or settings
+            try:
+                proc = self._runner(argv, input=user_text, capture_output=True, text=True, timeout=timeout_s,
+                                    check=False, cwd=cwd, env=self._child_env())
+            except subprocess.TimeoutExpired:
+                raise RetryableLLMError("claude-code: the CLI timed out.", billed=False) from None
+        try:
+            out = json.loads(proc.stdout or "")
+        except ValueError:
+            out = None
+        if not isinstance(out, dict):
+            tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-1:] or ["no output"]
+            raise RetryableLLMError(f"claude-code: CLI exited {proc.returncode} without a JSON result ({tail[0][:200]}).")
+        text = str(out.get("result") or "")
+        if out.get("is_error") or out.get("subtype") not in (None, "success"):
+            low = text.lower()
+            code = out.get("api_error_status")
+            if any(m in low for m in self._LIMIT_MARKERS):
+                raise ProviderUnavailable("out_of_credits", f"claude-code: subscription limit reached ({text[:200]}).")
+            if code in (429, 500, 502, 503, 504, 529) or any(m in low for m in self._RETRYABLE_MARKERS):
+                raise RetryableLLMError(f"claude-code: transient CLI error ({code}: {text[:200]}).")
+            raise RuntimeError(f"claude-code: CLI error ({code}: {text[:200]}).")
+        usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
+        return {
+            "content": [{"type": "text", "text": text}],
+            "stop_reason": out.get("stop_reason"),
+            "usage": {"input_tokens": int(usage.get("input_tokens", 0) or 0)
+                      + int(usage.get("cache_creation_input_tokens", 0) or 0)
+                      + int(usage.get("cache_read_input_tokens", 0) or 0),
+                      "output_tokens": int(usage.get("output_tokens", 0) or 0)},
+        }
+
+
 class GeminiDriver(BaseLLMDriver):
     """Google Gemini `generateContent` API driver."""
 
@@ -3909,7 +4023,8 @@ def create_driver(
     - `"openai-compat:<model>"` (any OpenAI-style endpoint; sends `max_tokens` and `temperature`)
     - `"openai:<model>"` (api.openai.com with current-model rules; `OPENAI_API_KEY`)
     - `"xai:<model>"` (Grok at api.x.ai; `XAI_API_KEY`)
-    - `"anthropic:<model>"`
+    - `"anthropic:<model>"` (Messages API; bills API credits)
+    - `"claude-code:<model>"` (Claude Code CLI on a claude.ai Pro/Max login; no API billing)
     - `"gemini:<model>"`
     - `"typesafe:<model>"` (TypeSafe AI Jev, e.g. `typesafe:jev-1.14.0`; party seat only, see `arena/jev.py`)
 
@@ -4013,6 +4128,8 @@ def create_driver(
                 timeout_s=timeout_s,
                 http_transport=http_transport,
             )
+        if p_low == "claude-code":
+            return ClaudeCodeDriver(model, max_tokens=max_tokens, **({"timeout_s": timeout_s} if timeout_s != 60.0 else {}))
         if p_low == "typesafe":
             from .jev import JevDriver
 
@@ -4040,7 +4157,7 @@ def create_driver(
     raise ValueError(
         f"Unknown driver spec {spec!r}. Expected one of: 'random', 'greedy', "
         "'heuristic-tactical', 'human', 'replay', 'openai-compat:<model>', 'openai:<model>', "
-        "'xai:<model>', 'anthropic:<model>', 'gemini:<model>', 'typesafe:<model>'."
+        "'xai:<model>', 'anthropic:<model>', 'claude-code:<model>', 'gemini:<model>', 'typesafe:<model>'."
     )
 
 
@@ -4048,6 +4165,7 @@ __all__ = [
     "AgentDecision",
     "AgentDriver",
     "AnthropicDriver",
+    "ClaudeCodeDriver",
     "BaseLLMDriver",
     "GeminiDriver",
     "GreedyDriver",
