@@ -70,10 +70,11 @@ class TestMonsterTraits(unittest.TestCase):
             {"id": "dragon", "side": "enemy", "monster": "adult-red-dragon", "position": {"x": 60, "y": 0}},
         ])
         self.assertEqual(st["combatants"]["dragon"]["legendary_resistance_uses"], 3)
-        hold = {"type": "cast_spell", "actor_id": "wiz", "spell": "hold-person", "slot_level": 2, "target_ids": ["dragon"]}
+        # Hold Person only targets Humanoids. Hold Monster is the same WIS save against a Dragon.
+        hold = {"type": "cast_spell", "actor_id": "wiz", "spell": "hold-monster", "slot_level": 5, "target_ids": ["dragon"]}
         for uses_left in (2, 1, 0, None):  # each save rolls a 1 and fails; the first three become successes
             st["combatants"]["wiz"]["turn_resources"]["action"] = True
-            st["combatants"]["wiz"]["spellcasting"]["slots"]["2"] = 3
+            st["combatants"]["wiz"]["spellcasting"]["slots"]["5"] = 3
             st["combatants"]["wiz"]["concentration"] = None
             res = self._ok(step(st, hold, self.rules, roll_overrides=[1]))
             sv = _evs(res, "saving_throw")[0]

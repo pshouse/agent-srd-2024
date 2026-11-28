@@ -968,7 +968,9 @@ class TestSpellsConcentrationAndRevival(unittest.TestCase):
             [
                 {"id": "clr-1", "side": "party", "statblock": self.cleric, "position": {"x": 0, "y": 0}},
                 {"id": "pc-1", "side": "party", "statblock": self.fighter, "position": {"x": 5, "y": 0}},
-                {"id": "gob-1", "side": "enemy", "monster": "goblin-warrior", "position": {"x": 10, "y": 0}},
+                # Bandit is a Humanoid, so Hold Person is a legal concentration spell here.
+                # (Goblin Warrior is Fey; Hold Person cannot target it.)
+                {"id": "gob-1", "side": "enemy", "monster": "bandit", "position": {"x": 10, "y": 0}},
             ],
         )
         r_bless = step(
@@ -997,7 +999,7 @@ class TestSpellsConcentrationAndRevival(unittest.TestCase):
             r_t3["state"],
             {"type": "cast_spell", "actor_id": "clr-1", "spell": "hold-person", "slot_level": 2, "target_ids": ["gob-1"]},
             self.rules,
-            roll_overrides=[2],  # goblin fails WIS save -> paralyzed
+            roll_overrides=[2],  # bandit fails WIS save -> paralyzed
         )
         self.assertEqual(r_hp["status"], "ok")
         self.assertEqual(r_hp["state"]["combatants"]["clr-1"]["concentration"]["spell"], "hold-person")
