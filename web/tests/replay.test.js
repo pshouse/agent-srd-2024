@@ -325,10 +325,13 @@ test("replay routes, deep links, and hostile ids", () => {
 test("the replay view renders trace text without innerHTML and loads lazily", () => {
   const view = readFileSync(new URL("../lib/replay-view.js", import.meta.url), "utf8");
   const model = readFileSync(new URL("../lib/replay-model.js", import.meta.url), "utf8");
-  for (const source of [view, model]) {
+  const board = readFileSync(new URL("../lib/board-view.js", import.meta.url), "utf8");
+  for (const source of [view, model, board]) {
     assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/);
   }
-  assert.match(view, /createElementNS\(SVG_NS/);
+  // The grid, roster, and log DOM is shared with the local tabletop through board-view.js.
+  assert.match(view, /from "\.\/board-view\.js"/);
+  assert.match(board, /createElementNS\(SVG_NS/);
   assert.match(view, /new FileReader\(\)/);
   const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
   assert.match(app, /import\("\.\/lib\/replay-view\.js"\)/);

@@ -1,0 +1,321 @@
+/**
+ * Pure state, menu, and click logic for the local tabletop served by
+ * `bin/srd-web`. No DOM; every function here runs in Node tests.
+ *
+ * The server is the authority: the browser only proposes an action, and
+ * the engine accepts or rejects it. These helpers fail closed: a response
+ * that does not match the expected shape renders no board and no actions.
+ * All strings from the server are untrusted (they include LLM table talk)
+ * and are only ever rendered with textContent.
+ */
+
+import { tokenLabels } from "../lib/replay-model.js";
+
+export const STATUSES = new Set(["ready", "running", "awaiting_input", "finished", "paused", "error"]);
+export const CATEGORIES = ["attack", "spell", "move", "tactical", "turn"];
+export const CATEGORY_TITLES = { attack: "Attacks", spell: "Spells", move: "Movement", tactical: "Actions", turn: "Turn" };
+const TOKEN_RE = /^[A-Za-z0-9_-]{20,128}$/;
+const MAX_ITEMS = 400;
+const MAX_UNITS = 200;
+const COORD = 100000;
+/** Board padding around the furthest token, and the most extra board drawn for movement. */
+const PAD_FT = 10;
+const MOVE_VIEW_CAP_FT = 60;
+
+const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const isInt = (v) => Number.isInteger(v);
+const isStr = (v) => typeof v === "string";
+const isPos = (p) => isObj(p) && isInt(p.x) && isInt(p.y) && Math.abs(p.x) <= COORD && Math.abs(p.y) <= COORD;
+const strList = (v) => Array.isArray(v) && v.every(isStr);
+const snap = (v) => Math.floor(v / 5) * 5;
+
+/**
+ * Read the launch token from `#token=...`. The fragment is never sent to
+ * the server, and the page removes it from the address bar after reading.
+ * @param {string} hash
+ * @returns {string | null}
+ */
+export function readToken(hash) {
+  const m = /^#token=([^&]*)$/.exec(String(hash || ""));
+  return m && TOKEN_RE.test(m[1]) ? m[1] : null;
+}
+
+/**
+ * Validate one `/api/state` payload. Anything unexpected is an error, and
+ * the page then shows the errors instead of a board or menu.
+ * @param {unknown} raw
+ * @returns {{ ok: true, errors: [], state: object } | { ok: false, errors: string[], state: null }}
+ */
+export function validateState(raw) {
+  const errors = [];
+  const fail = (msg) => {
+    errors.push(msg);
+    return { ok: false, errors, state: null };
+  };
+  if (!isObj(raw)) return fail("The server reply is not a JSON object.");
+  if (!STATUSES.has(raw.status)) return fail(`Unknown session status ${JSON.stringify(String(raw.status)).slice(0, 40)}.`);
+  if (!isObj(raw.features) || !["nl", "save", "out_trace", "resume"].every((k) => typeof raw.features[k] === "boolean")) {
+    errors.push("features is malformed.");
+  }
+  if (!Array.isArray(raw.log) || !raw.log.every((l) => isObj(l) && isInt(l.seq) && isStr(l.text))) errors.push("log is malformed.");
+  if (!isInt(raw.log_next)) errors.push("log_next must be an integer.");
+  if (raw.decision !== null && !isInt(raw.decision)) errors.push("decision must be an integer or null.");
+  const menu = checkMenu(raw.menu);
+  errors.push(...menu);
+  if (raw.view !== null) errors.push(...checkView(raw.view));
+  if (raw.status === "awaiting_input" && (raw.view === null || raw.decision === null || !raw.menu.length)) {
+    errors.push("The server is waiting for input but sent no menu.");
+  }
+  for (const key of ["error", "notice", "pause_reason"]) {
+    if (raw[key] !== null && raw[key] !== undefined && !isStr(raw[key])) errors.push(`${key} must be a string or null.`);
+  }
+  if (raw.result !== null && raw.result !== undefined && !isObj(raw.result)) errors.push("result must be an object or null.");
+  if (errors.length) return { ok: false, errors: errors.slice(0, 12), state: null };
+  return { ok: true, errors: [], state: raw };
+}
+
+function checkMenu(menu) {
+  if (!Array.isArray(menu)) return ["menu must be a list."];
+  if (menu.length > MAX_ITEMS) return ["menu is too long."];
+  const out = [];
+  menu.forEach((m, i) => {
+    const ok =
+      isObj(m) && m.index === i + 1 && CATEGORIES.includes(m.category) && isStr(m.label) && isStr(m.summary) &&
+      isObj(m.intent) && isStr(m.intent.type) && isObj(m.meta);
+    if (!ok) out.push(`menu item ${i + 1} is malformed.`);
+  });
+  return out.slice(0, 4);
+}
+
+function checkView(view) {
+  if (!isObj(view)) return ["view must be an object."];
+  const out = [];
+  const me = view.self;
+  if (!isObj(me) || !isStr(me.id) || !isStr(me.name) || !isPos(me.position) || !isInt(me.hp) || !isInt(me.hp_max) ||
+    !isInt(me.ac) || !isInt(me.movement_remaining_ft) || !isInt(me.speed_ft) || !strList(me.conditions) || !isObj(me.resources)) {
+    out.push("view.self is malformed.");
+  }
+  if (!isInt(view.round)) out.push("view.round must be an integer.");
+  if (!Array.isArray(view.allies) || !Array.isArray(view.enemies)) return [...out, "view.allies and view.enemies must be lists."];
+  if (view.allies.length + view.enemies.length > MAX_UNITS) out.push("Too many combatants.");
+  for (const a of view.allies) {
+    if (!isObj(a) || !isStr(a.id) || !isStr(a.name) || !isPos(a.position) || !isInt(a.hp) || !isInt(a.hp_max) || !isInt(a.ac) ||
+      typeof a.alive !== "boolean" || !strList(a.conditions)) {
+      out.push("an ally entry is malformed.");
+      break;
+    }
+  }
+  for (const e of view.enemies) {
+    // Opponents carry a public HP band only. Exact HP or AC here means the payload is wrong, so refuse it.
+    if (!isObj(e) || !isStr(e.id) || !isStr(e.name) || !isPos(e.position) || typeof e.alive !== "boolean" || !isStr(e.hp_band) ||
+      !strList(e.conditions) || "hp" in e || "hp_max" in e || "ac" in e) {
+      out.push("an opponent entry is malformed.");
+      break;
+    }
+  }
+  if (!Array.isArray(view.table_talk) || !Array.isArray(view.recent_events)) out.push("view talk and events must be lists.");
+  return out;
+}
+
+/**
+ * Units and roster for board-view.js from the active seat's view.
+ * Opponents get `hpMax: null` and `ac: null`, so the shared painter shows
+ * their public band instead of numbers.
+ * @param {object} view a validated view
+ */
+export function boardModel(view) {
+  const me = view.self;
+  const mySide = me.side === "enemy" ? "enemy" : "party";
+  const theirSide = mySide === "party" ? "enemy" : "party";
+  const rows = [
+    { id: me.id, name: me.name, side: mySide, hpMax: me.hp_max, ac: me.ac, unit: unitOf(me, me.position, me.hp, true) },
+    ...view.allies.map((a) => ({ id: a.id, name: a.name, side: mySide, hpMax: a.hp_max, ac: a.ac, unit: unitOf(a, a.position, a.hp, a.alive) })),
+    ...view.enemies.map((e) => ({ id: e.id, name: e.name, side: theirSide, hpMax: null, ac: null, unit: { ...unitOf(e, e.position, 0, e.alive), hpBand: e.hp_band } })),
+  ];
+  const labels = tokenLabels(rows.map((r) => r.name));
+  const roster = new Map(rows.map((r, i) => [r.id, { id: r.id, name: r.name, side: r.side, hpMax: r.hpMax, ac: r.ac, label: labels[i] }]));
+  const frame = { activeId: me.id, units: rows.map((r) => r.unit) };
+  return { roster, frame, bounds: boardBoundsFor(view) };
+}
+
+function unitOf(row, pos, hp, alive) {
+  const ds = isObj(row.death_saves) ? row.death_saves : {};
+  return {
+    id: row.id,
+    x: pos.x,
+    y: pos.y,
+    hp,
+    alive,
+    conditions: [...row.conditions].sort(),
+    concentration: isStr(row.concentration) ? row.concentration : null,
+    effects: strList(row.effects) ? [...row.effects].sort() : [],
+    deathSaves: { successes: isInt(ds.successes) ? ds.successes : 0, failures: isInt(ds.failures) ? ds.failures : 0 },
+  };
+}
+
+/**
+ * Board extent: every token plus padding, plus the active combatant's
+ * movement (capped) so reachable squares are visible and clickable.
+ */
+export function boardBoundsFor(view) {
+  const pts = [view.self.position, ...view.allies.map((a) => a.position), ...view.enemies.map((e) => e.position)];
+  const reach = Math.min(MOVE_VIEW_CAP_FT, Math.max(0, view.self.movement_remaining_ft));
+  let minX = Math.min(...pts.map((p) => p.x)) - PAD_FT;
+  let minY = Math.min(...pts.map((p) => p.y)) - PAD_FT;
+  let maxX = Math.max(...pts.map((p) => p.x)) + PAD_FT;
+  let maxY = Math.max(...pts.map((p) => p.y)) + PAD_FT;
+  minX = Math.min(minX, view.self.position.x - reach);
+  minY = Math.min(minY, view.self.position.y - reach);
+  maxX = Math.max(maxX, view.self.position.x + reach);
+  maxY = Math.max(maxY, view.self.position.y + reach);
+  const x = snap(minX);
+  const y = snap(minY);
+  return { x, y, w: snap(maxX) + 5 - x, h: snap(maxY) + 5 - y };
+}
+
+/** 5e grid distance in feet (Chebyshev, 5 ft per square). */
+export function distanceFt(a, b) {
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+/**
+ * Squares the active combatant could walk to with its remaining movement,
+ * inside the board, not counting occupied squares. This is a hint for the
+ * highlight; the engine still validates every move.
+ */
+export function reachableSquares(view, bounds) {
+  const me = view.self;
+  if (!me.resources || me.speed_ft <= 0) return [];
+  const cost = me.conditions.includes("prone") ? 2 : 1;
+  const budget = me.movement_remaining_ft;
+  if (budget < 5 * cost) return [];
+  const taken = occupiedSquares(view);
+  const out = [];
+  for (let x = bounds.x; x < bounds.x + bounds.w; x += 5) {
+    for (let y = bounds.y; y < bounds.y + bounds.h; y += 5) {
+      const d = distanceFt(me.position, { x, y });
+      if (d === 0 || d * cost > budget || taken.has(`${x},${y}`)) continue;
+      out.push({ x, y });
+    }
+  }
+  return out;
+}
+
+function occupiedSquares(view) {
+  const taken = new Set();
+  for (const u of [view.self, ...view.allies, ...view.enemies]) {
+    if (u.alive === false) continue;
+    taken.add(`${snap(u.position.x)},${snap(u.position.y)}`);
+  }
+  return taken;
+}
+
+/** Snap a board point in feet to its 5-ft square. */
+export function squareAt(x, y) {
+  return { x: snap(x), y: snap(y) };
+}
+
+/** Menu items that act on one combatant (attack, spell, help, heal). */
+export function itemsTargeting(menu, id) {
+  return menu.filter((m) => {
+    const it = m.intent;
+    if (it.type === "end_turn" || it.type === "move" || it.type === "reroll") return false;
+    if (it.target_id === id) return true;
+    return Array.isArray(it.target_ids) && it.target_ids.includes(id);
+  });
+}
+
+/**
+ * What a click on a square means. Returns one of
+ * - `{ type: "move", body }` for a reachable empty square,
+ * - `{ type: "targets", id, name, items }` for a combatant with legal actions on it,
+ * - `{ type: "none", reason }` otherwise (nothing is sent).
+ * @param {object} view a validated view
+ * @param {object[]} menu a validated menu
+ * @param {{ x: number, y: number }} sq
+ * @param {{ x: number, y: number }[]} reachable
+ */
+export function clickAction(view, menu, sq, reachable) {
+  if (!menu.length) return { type: "none", reason: "It is not your turn." };
+  const here = [view.self, ...view.allies, ...view.enemies].filter(
+    (u) => u.alive !== false && snap(u.position.x) === sq.x && snap(u.position.y) === sq.y,
+  );
+  if (here.length) {
+    for (const u of here) {
+      const items = itemsTargeting(menu, u.id);
+      if (items.length) return { type: "targets", id: u.id, name: u.name, items };
+    }
+    if (here.some((u) => u.id === view.self.id)) return { type: "none", reason: "That is your square." };
+    return { type: "none", reason: `No legal action targets ${here[0].name} right now.` };
+  }
+  if (reachable.some((r) => r.x === sq.x && r.y === sq.y)) {
+    return { type: "move", body: { kind: "move", x: sq.x, y: sq.y } };
+  }
+  return { type: "none", reason: `(${sq.x}, ${sq.y}) is out of your movement this turn.` };
+}
+
+/** Menu grouped by category, in a fixed order. */
+export function groupMenu(menu) {
+  return CATEGORIES.map((category) => ({ category, title: CATEGORY_TITLES[category], items: menu.filter((m) => m.category === category) })).filter(
+    (g) => g.items.length,
+  );
+}
+
+/** Request body for a menu item. */
+export function menuBody(item, decision) {
+  return { kind: "menu", index: item.index, decision };
+}
+
+/**
+ * Move body from the typed coordinates of the keyboard form, or an error.
+ * @returns {{ ok: true, body: object } | { ok: false, error: string }}
+ */
+export function moveBodyFromInput(xText, yText, decision) {
+  const x = Number(String(xText).trim());
+  const y = Number(String(yText).trim());
+  if (!Number.isInteger(x) || !Number.isInteger(y) || String(xText).trim() === "" || String(yText).trim() === "") {
+    return { ok: false, error: "Enter whole numbers of feet for x and y." };
+  }
+  if (x % 5 || y % 5) return { ok: false, error: "x and y must be multiples of 5 (one square is 5 ft)." };
+  return { ok: true, body: { kind: "move", x, y, decision } };
+}
+
+/** CSS kind for one line of the session's text stream (the same lines the terminal prints). */
+export function logKind(text) {
+  const t = String(text).trim();
+  if (t.startsWith("! Rejected")) return "violation";
+  if (/^\[[^\]]+ says\]:/.test(t)) return "talk";
+  if (t.startsWith("* ")) return "hook";
+  if (t.startsWith("---") || t.startsWith("===")) return "head";
+  if (t.startsWith("[")) return "sys";
+  return "plain";
+}
+
+/** Lines in `incoming` that are newer than `lastSeq`, so a poll and a POST reply never duplicate. */
+export function newLines(incoming, lastSeq) {
+  return incoming.filter((l) => l.seq > lastSeq).sort((a, b) => a.seq - b.seq);
+}
+
+/** Safe download name from a Content-Disposition header. */
+export function downloadName(header) {
+  const m = /filename="([A-Za-z0-9._-]{1,120})"/.exec(String(header || ""));
+  return m ? m[1] : "srd-web.trace.json";
+}
+
+/** Short human status line. */
+export function statusText(state) {
+  switch (state.status) {
+    case "ready":
+      return "Starting…";
+    case "running":
+      return "AI seats are acting…";
+    case "awaiting_input":
+      return `Your move: ${state.view ? state.view.self.name : ""}`;
+    case "finished":
+      return state.result ? `Match over · ${String(state.result.winner)} wins` : "Match over";
+    case "paused":
+      return state.pause_reason === "save" ? "Paused after save" : "Session ended";
+    default:
+      return "Session error";
+  }
+}
