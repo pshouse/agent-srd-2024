@@ -225,5 +225,101 @@ class TestHoldPersonParalysisAudit(unittest.TestCase):
         self.assertRegex(bad.stdout, r"FAIL\s+\d+ checks\s+[1-9]\d* bad\s+paralysis ends at end of target's next turn")
 
 
+def _sheet(cid: str, side: str, x: int) -> dict:
+    return {
+        "id": cid,
+        "side": side,
+        "hp": 30,
+        "hp_max": 30,
+        "ac": 12,
+        "position": {"x": x, "y": 0},
+        "saves": {"str": 0, "dex": 1, "con": 2, "int": 3, "wis": 1, "cha": 0},
+    }
+
+
+def _magic_missile_shield_trace(*, actor_id: str, trigger: str | None, as_reaction: bool) -> dict:
+    """#71 event shape, built here so the auditor test does not need that engine change merged.
+
+    The missile caster's action emits spell_cast magic-missile, then the target's Shield
+    (`trigger` `targeted_by_magic_missile`, `as_reaction`, `trigger_source_id` = the caster),
+    then one `spell_blocked` per dart (`reason` `shield`).
+    """
+    shield: dict = {
+        "type": "spell_cast",
+        "reaction": True,
+        "actor_id": "wiz",
+        "spell": "shield",
+        "slot_level": 1,
+        "target_ids": ["wiz"],
+        "as_reaction": as_reaction,
+        "trigger_source_id": "mage",
+        "coverage": "full",
+        "unmodeled_clauses": [],
+    }
+    if trigger is not None:
+        shield["trigger"] = trigger
+    events = [
+        {"type": "spell_cast", "actor_id": "mage", "spell": "magic-missile", "slot_level": 1, "target_ids": ["wiz"]},
+        shield,
+        {"type": "spell_blocked", "actor_id": "mage", "target_id": "wiz", "spell": "magic-missile", "reason": "shield"},
+        {"type": "spell_blocked", "actor_id": "mage", "target_id": "wiz", "spell": "magic-missile", "reason": "shield"},
+        {"type": "spell_blocked", "actor_id": "mage", "target_id": "wiz", "spell": "magic-missile", "reason": "shield"},
+    ]
+    return {
+        "initial_state": {
+            "combatants": {"wiz": _sheet("wiz", "party", 0), "mage": _sheet("mage", "enemy", 30)},
+            "turn_order": ["mage", "wiz"],
+        },
+        "actions": [{
+            "seq": 1,
+            "actor_id": actor_id,
+            "intent": {"type": "cast_spell", "actor_id": actor_id, "spell": "magic-missile", "slot_level": 1, "target_ids": ["wiz"]},
+            "events": events,
+        }],
+    }
+
+
+class TestShieldMagicMissileAudit(unittest.TestCase):
+    """Shield vs Magic Missile (#71's event shape) is legal; an own-turn or untriggered Shield is not."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.tmp = tempfile.TemporaryDirectory()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.tmp.cleanup()
+
+    def _write(self, name: str, trace: dict) -> Path:
+        path = Path(self.tmp.name) / name
+        path.write_text(json.dumps(trace))
+        return path
+
+    def test_magic_missile_triggered_shield_is_legal(self) -> None:
+        trace = _magic_missile_shield_trace(actor_id="mage", trigger="targeted_by_magic_missile", as_reaction=True)
+        res = _audit(self._write("mm-shield.json", trace))
+        self.assertEqual(res.returncode, 0, res.stdout[-2000:])
+        for rule in (
+            "Shield is a reaction to being hit (never on the caster's own action)",
+            "Shield only when +5 AC turns the hit into a miss",
+        ):
+            line = _rule_line(res.stdout, rule)
+            self.assertIsNotNone(line, res.stdout)
+            self.assertIn("ok", line)
+            self.assertIn("0 bad", line)
+            self.assertNotIn(" 0 checks", line)
+
+    def test_own_turn_and_untriggered_shield_are_flagged(self) -> None:
+        own = _magic_missile_shield_trace(actor_id="wiz", trigger="targeted_by_magic_missile", as_reaction=True)
+        res = _audit(self._write("own-turn.json", own))
+        self.assertEqual(res.returncode, 1, res.stdout[-2000:])
+        self.assertRegex(res.stdout, r"FAIL\s+\d+ checks\s+[1-9]\d* bad\s+Shield is a reaction to being hit")
+
+        untriggered = _magic_missile_shield_trace(actor_id="mage", trigger=None, as_reaction=False)
+        res = _audit(self._write("untriggered.json", untriggered))
+        self.assertEqual(res.returncode, 1, res.stdout[-2000:])
+        self.assertRegex(res.stdout, r"FAIL\s+\d+ checks\s+[1-9]\d* bad\s+Shield is a reaction to being hit")
+
+
 if __name__ == "__main__":
     unittest.main()

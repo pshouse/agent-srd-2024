@@ -9,8 +9,10 @@ Usage:
     bin/srd-arena run crypt-of-ghouls --seed 8 --out-trace /tmp/crypt-8.json
     python3 scripts/audit_arena_trace.py /tmp/crypt-*.json
 
-Exit code 1 if any rule has a violation. Reactions are checked: Opportunity Attacks (#38) and Shield's trigger (#33,
-#41). Monster traits (#39): Stench saves, Legendary Resistance, Undead Fortitude and Parry are checked.
+Exit code 1 if any rule has a violation. Reactions are checked: Opportunity Attacks (#38) and Shield's triggers (#33,
+#41): an attack hit that +5 AC would turn into a miss, or being targeted by Magic Missile (Shield is cast before
+the darts, and each dart is `spell_blocked`). An own-turn Shield, or a Shield with neither trigger, is a violation.
+Monster traits (#39): Stench saves, Legendary Resistance, Undead Fortitude and Parry are checked.
 
 Condition durations are keyed by source. Ghoul Claw paralysis ("ends at the end of the target's next turn") is
 only checked for a Claw rider. Hold Person paralysis is a concentration condition: it ends when the caster's
@@ -441,15 +443,41 @@ def audit(path: Path) -> None:
                         base_ac[tid] = max(base_ac[tid], 13 + mod(tid, "dex"))
             if ty == "spell_cast" and e["spell"] == "shield":
                 caster = e["actor_id"]
+                trigger = e.get("trigger")
+                # #71: Shield before Magic Missile. The cast is on the missile-caster's action, with
+                # trigger "targeted_by_magic_missile", then one spell_blocked per dart (reason "shield").
                 nxt = next((x for x in evs[idx + 1:] if x["type"] in ("attack_roll", "spell_attack_roll") and x["target_id"] == caster), None)
+                mm_blocked = [
+                    x for x in evs[idx + 1:]
+                    if x["type"] == "spell_blocked" and x.get("target_id") == caster
+                    and x.get("spell") == "magic-missile" and x.get("reason") == "shield"
+                    and x.get("actor_id") == e.get("trigger_source_id")
+                ]
+                own_turn = a["actor_id"] == caster
+                hit_trigger = (
+                    bool(e.get("as_reaction")) and trigger == "hit_by_attack" and not own_turn and nxt is not None
+                )
+                mm_trigger = (
+                    bool(e.get("as_reaction")) and trigger == "targeted_by_magic_missile" and not own_turn
+                    and e.get("trigger_source_id") == a["actor_id"] and bool(mm_blocked)
+                )
                 check("Shield is a reaction to being hit (never on the caster's own action)",
-                      bool(e.get("as_reaction")) and e.get("trigger") == "hit_by_attack" and a["actor_id"] != caster and nxt is not None,
-                      where, f"{caster} cast Shield in {a['actor_id']}'s action, trigger={e.get('trigger')}")
-                if nxt is not None:
+                      hit_trigger or mm_trigger,
+                      where, f"{caster} cast Shield in {a['actor_id']}'s action, trigger={trigger}")
+                if trigger == "hit_by_attack" and nxt is not None:
                     check("Shield only when +5 AC turns the hit into a miss",
                           not nxt.get("nat20") and base_ac[caster] <= nxt["total"] < base_ac[caster] + 5 and not nxt["hit"]
                           and nxt["target_ac"] == base_ac[caster] + 5,
                           where, f"{caster}: total {nxt['total']} vs base AC {base_ac[caster]}, hit={nxt['hit']}")
+                elif trigger == "targeted_by_magic_missile":
+                    # No attack roll and no +5 test: the darts are stopped, so none of them deal damage.
+                    landed = any(
+                        x["type"] == "damage_applied" and x.get("target_id") == caster and x.get("source_id") == a["actor_id"]
+                        for x in evs[idx + 1:]
+                    )
+                    check("Shield only when +5 AC turns the hit into a miss",
+                          bool(mm_blocked) and not landed and not own_turn,
+                          where, f"{caster}: Magic Missile blocked={len(mm_blocked)} landed={landed}")
                 check("Shield needs a free reaction", reaction[caster], where, caster)
                 reaction[caster] = False
                 shield_on[caster] = True
