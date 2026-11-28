@@ -238,6 +238,60 @@ class TestMagicInitiateCombat(unittest.TestCase):
         self.assertEqual(r["status"], "invalid_intent")
         self.assertIn("no free casts", r["error"])
 
+    # #105 MF1: two Magic Initiate picks (different lists) may name the same level 1 spell. Each pick's free cast
+    # must be usable, and legal_actions must offer exactly what step() accepts.
+    _MI_DRUID_HW = {"feat": "magic-initiate", "list": "druid", "ability": "wis",
+                    "cantrips": ["druidcraft", "produce-flame"], "spell": "healing-word"}
+
+    def _double_hw(self, base: dict[str, Any], **overrides: Any) -> dict[str, Any]:
+        spec = copy.deepcopy(base)
+        spec.update(overrides)
+        spec["extra_origin_feat"] = "magic-initiate"  # Human Versatile: second pick
+        spec["feat_spells"] = [copy.deepcopy(_MI_CLERIC), copy.deepcopy(self._MI_DRUID_HW)]
+        res = compile_character(spec, self.rules)
+        self.assertTrue(res["valid"], res["errors"])
+        return res["statblock"]
+
+    def _free(self, st: dict[str, Any]) -> dict[str, int]:
+        return {b["list"]: b["free_casts"]["healing-word"] for b in st["combatants"]["aldric"]["feat_spellcasting"]}
+
+    def _hw_offered(self, st: dict[str, Any]) -> bool:
+        return "healing-word" in compute_legal_actions(st, self.rules)["spells"]
+
+    def test_same_spell_from_two_picks_caster_uses_both_free_casts_then_a_slot(self) -> None:
+        st = self._start(self._double_hw(_ALDRIC))  # Paladin: 2 level 1 slots
+        slots = lambda s: int(s["combatants"]["aldric"]["spellcasting"]["slots"]["1"])  # noqa: E731
+        self.assertEqual((self._free(st), slots(st)), ({"cleric": 1, "druid": 1}, 2))
+        expected = [({"cleric": 0, "druid": 1}, 2), ({"cleric": 0, "druid": 0}, 2), ({"cleric": 0, "druid": 0}, 1)]
+        for i, want in enumerate(expected):
+            with self.subTest(cast=i + 1):
+                self.assertTrue(self._hw_offered(st))
+                r = self._cast(st, "healing-word", source="magic-initiate", target_ids=["aldric"])
+                self.assertEqual(r["status"], "ok", r.get("error"))
+                self.assertEqual((self._free(r["state"]), slots(r["state"])), want)
+                st = self._next_own_turn(r["state"])
+
+    def test_same_spell_from_two_picks_non_caster_gets_two_casts_and_legal_actions_agree(self) -> None:
+        sb = self._double_hw(
+            _SPEC_BRAM_L1, background="acolyte", background_asi={"wis": 2, "int": 1}, origin_feat="magic-initiate",
+            skill_proficiencies=["insight", "religion", "athletics", "perception"],
+        )
+        self.assertIsNone(sb["spellcasting"])
+        st = self._start(sb)
+        for i, want in enumerate(({"cleric": 0, "druid": 1}, {"cleric": 0, "druid": 0})):
+            with self.subTest(cast=i + 1):
+                self.assertTrue(self._hw_offered(st))
+                r = self._cast(st, "healing-word", target_ids=["aldric"])  # source inferred: no class spells
+                self.assertEqual(r["status"], "ok", r.get("error"))
+                self.assertEqual(self._free(r["state"]), want)
+                st = self._next_own_turn(r["state"])
+        self.assertFalse(self._hw_offered(st), "no free casts and no slots: not offered")
+        self.assertEqual(self._cast(st, "healing-word", target_ids=["aldric"])["status"], "invalid_intent")
+
+    def test_carryover_is_keyed_by_list(self) -> None:
+        st = self._start(self._double_hw(_ALDRIC), feat_free_casts={"druid": {"healing-word": 0}})
+        self.assertEqual(self._free(st), {"cleric": 1, "druid": 0})
+
     def test_states_without_feat_spells_keep_their_shape(self) -> None:
         res = compile_character(copy.deepcopy(_ALDRIC), self.rules)
         st = self._start(res["statblock"])
@@ -246,11 +300,11 @@ class TestMagicInitiateCombat(unittest.TestCase):
     def test_free_casts_carry_over_between_rooms(self) -> None:
         party = [{"id": "aldric", "name": "Aldric", "statblock": self.sb}]
         co = init_party_carryover(party, self.rules)
-        self.assertEqual(co["aldric"]["feat_free_casts"], [{"healing-word": 1}])
+        self.assertEqual(co["aldric"]["feat_free_casts"], {"cleric": {"healing-word": 1}})
         st = self._start()
         st = self._cast(st, "healing-word", source="magic-initiate", target_ids=["aldric"])["state"]
         co = extract_party_carryover(st, co)
-        self.assertEqual(co["aldric"]["feat_free_casts"], [{"healing-word": 0}])
+        self.assertEqual(co["aldric"]["feat_free_casts"], {"cleric": {"healing-word": 0}})
         dungeon = {"id": "d", "name": "D", "tier": 1, "party_level": 1, "party": party,
                    "rooms": [{"id": "r1", "name": "R1", "max_rounds": 5, "party_spawns": {"aldric": {"x": 0, "y": 0}},
                               "enemies": [{"id": "gob", "monster": "goblin-warrior", "position": {"x": 30, "y": 0}}]}]}

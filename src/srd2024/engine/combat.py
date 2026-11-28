@@ -221,27 +221,41 @@ def _feat_block_spells(block: dict[str, Any]) -> list[str]:
     return [strip_prefix(str(x)) for x in list(block.get("cantrips") or []) + list(block.get("spells") or [])]
 
 
+def _has_free_cast(block: dict[str, Any], spell_slug: str) -> bool:
+    return int((block.get("free_casts") or {}).get(spell_slug, 0)) > 0
+
+
 def _feat_spell_block(
-    combatant: dict[str, Any], spell_slug: str, raw_source: Any
+    combatant: dict[str, Any], spell_slug: str, raw_source: Any, *, wants_free_cast: bool = False
 ) -> tuple[dict[str, Any] | None, str | None]:
     """The feat spellcasting block a `cast_spell` uses (#8), or an error.
 
-    With `source: "magic-initiate"` the spell must come from a Magic Initiate pick. Without a source, a spell the
-    class already knows is a class cast, and one only a feat block has is cast from that feat.
+    `wants_free_cast` (a levelled spell cast with no `slot_level`): any block that knows the spell and still has
+    its free cast is used, so two Magic Initiate picks naming the same spell each give their own free cast (#105
+    MF1). Otherwise, with `source: "magic-initiate"` the spell must come from a Magic Initiate pick (the first
+    block that knows it); without a source, a spell the class knows is a class cast and one only a feat block
+    has is cast from that feat.
     """
     blocks = _feat_spell_blocks(combatant)
+    source: str | None = None
     if raw_source is not None and str(raw_source).strip():
         source = strip_prefix(str(raw_source)).strip().lower()
         if source not in FEAT_SPELL_SOURCES:
             return None, f"Unknown spell source '{raw_source}' (supported: {sorted(FEAT_SPELL_SOURCES)})."
-        for b in blocks:
-            if str(b.get("feat") or "") == source and spell_slug in _feat_block_spells(b):
+    matching = [
+        b for b in blocks
+        if spell_slug in _feat_block_spells(b) and (source is None or str(b.get("feat") or "") == source)
+    ]
+    if wants_free_cast:
+        for b in matching:
+            if _has_free_cast(b, spell_slug):
                 return b, None
-        return None, f"{combatant.get('id')} did not learn '{spell_slug}' from {source}."
-    if blocks and not _class_knows_spell(combatant, spell_slug):
-        for b in blocks:
-            if spell_slug in _feat_block_spells(b):
-                return b, None
+    if source is not None:
+        if not matching:
+            return None, f"{combatant.get('id')} did not learn '{spell_slug}' from {source}."
+        return matching[0], None
+    if matching and not _class_knows_spell(combatant, spell_slug):
+        return matching[0], None
     return None, None
 
 
@@ -1599,9 +1613,11 @@ def _build_pc_combatant(entry: dict[str, Any], *, state_shape_version: int = STA
     feat_sc = [copy.deepcopy(b) for b in (sb.get("feat_spellcasting") or []) if isinstance(b, dict)]
     if feat_sc:
         # Carryover between rooms (M6.3B): free casts only come back on a Long Rest.
+        # Keyed by the block's spell list, which is unique per character (#105 MF1), not by position.
         raw_free = entry.get("feat_free_casts")
-        if isinstance(raw_free, list):
-            for b, left in zip(feat_sc, raw_free):
+        if isinstance(raw_free, dict):
+            for b in feat_sc:
+                left = raw_free.get(str(b.get("list") or ""))
                 if isinstance(left, dict):
                     cap = b.get("free_casts") or {}
                     b["free_casts"] = {k: max(0, min(int(cap[k]), int(left.get(k, cap[k])))) for k in cap}
@@ -2855,7 +2871,7 @@ def compute_legal_actions(state: dict[str, Any], rules: RulesStore) -> dict[str,
                 if sp_rec is None:
                     continue
                 sp_lvl = int(sp_rec.get("level", 0))
-                free_now = sp_lvl > 0 and sp_slug in free_ready and not _class_knows_spell(actor, sp_slug)
+                free_now = sp_lvl > 0 and sp_slug in free_ready  # cast with no slot_level spends it (#105 MF1)
                 if sp_lvl > 0 and not free_now and not any(s >= sp_lvl for s in avail_slots):
                     continue
                 if sp_lvl > 0 and not free_now and res.get("slot_spent_this_turn"):
@@ -3837,7 +3853,12 @@ def step(
         sc = actor.get("spellcasting")
         # #8: Magic Initiate spells are cast with the feat's ability, DC and attack bonus. `source` picks the feat
         # explicitly; without it, a spell the class doesn't know but a feat block does is cast from the feat.
-        feat_block, feat_err = _feat_spell_block(actor, spell_slug, intent.get("source"))
+        feat_block, feat_err = _feat_spell_block(
+            actor,
+            spell_slug,
+            intent.get("source"),
+            wants_free_cast=int(spell.get("level", 0)) >= 1 and intent.get("slot_level") is None,
+        )
         if feat_err:
             return _invalid(copy.deepcopy(state), feat_err, rules)
         if feat_block is None and not isinstance(sc, dict):

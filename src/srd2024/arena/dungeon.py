@@ -734,12 +734,18 @@ def init_party_carryover(
     return carryover
 
 
-def _feat_free_casts_of(holder: dict[str, Any]) -> list[dict[str, int]] | None:
-    """Magic Initiate free casts per feat block (#8); they recharge on a Long Rest only, so they carry over."""
+def _feat_free_casts_of(holder: dict[str, Any]) -> dict[str, dict[str, int]] | None:
+    """Magic Initiate free casts by spell list (#8); they recharge on a Long Rest only, so they carry over.
+
+    Keyed by the block's list, which is unique per character (a repeated Magic Initiate needs another list).
+    """
     blocks = [b for b in (holder.get("feat_spellcasting") or []) if isinstance(b, dict)]
     if not blocks:
         return None
-    return [{str(k): max(0, int(v)) for k, v in (b.get("free_casts") or {}).items()} for b in blocks]
+    return {
+        str(b.get("list") or ""): {str(k): max(0, int(v)) for k, v in (b.get("free_casts") or {}).items()}
+        for b in blocks
+    }
 
 
 def _init_party_carryover_from_initial_state(
