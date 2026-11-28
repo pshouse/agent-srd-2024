@@ -4708,6 +4708,7 @@
         "id": "spells:dimension-door",
         "name": "Dimension Door",
         "unmodeled_clauses": [
+          "conditional_damage_not_applied",
           "forced_movement_or_terrain"
         ]
       },
@@ -4759,10 +4760,12 @@
         ]
       },
       {
-        "coverage": "full",
+        "coverage": "partial",
         "id": "spells:divine-favor",
         "name": "Divine Favor",
-        "unmodeled_clauses": []
+        "unmodeled_clauses": [
+          "per_hit_rider_damage_not_applied"
+        ]
       },
       {
         "coverage": "full",
@@ -5001,6 +5004,7 @@
         "id": "spells:fire-shield",
         "name": "Fire Shield",
         "unmodeled_clauses": [
+          "retaliatory_damage_not_applied",
           "retaliatory_melee_damage_and_warm_chill_choice"
         ]
       },
@@ -5320,7 +5324,7 @@
         "id": "spells:hex",
         "name": "Hex",
         "unmodeled_clauses": [
-          "concentration_sustained_damage_prose"
+          "per_hit_rider_damage_not_applied"
         ]
       },
       {
@@ -5356,7 +5360,7 @@
         "id": "spells:hunters-mark",
         "name": "Hunter's Mark",
         "unmodeled_clauses": [
-          "concentration_sustained_damage_prose"
+          "per_hit_rider_damage_not_applied"
         ]
       },
       {
@@ -5851,6 +5855,7 @@
         "id": "spells:power-word-kill",
         "name": "Power Word Kill",
         "unmodeled_clauses": [
+          "conditional_damage_not_applied",
           "hp_threshold_100_instant_death"
         ]
       },
@@ -6269,7 +6274,8 @@
         "id": "spells:spike-growth",
         "name": "Spike Growth",
         "unmodeled_clauses": [
-          "persistent_zone_or_wall"
+          "persistent_zone_or_wall",
+          "zone_movement_damage_not_applied"
         ]
       },
       {
@@ -6725,9 +6731,9 @@
       },
       "spells": {
         "executable_pct": 63.4,
-        "full": 78,
+        "full": 77,
         "narrative": 124,
-        "partial": 137,
+        "partial": 138,
         "total": 339
       },
       "weapon_masteries": {
@@ -6749,9 +6755,9 @@
       "traits": 68
     },
     "executable_pct": 76.0,
-    "full": 301,
+    "full": 300,
     "narrative": 212,
-    "partial": 372,
+    "partial": 373,
     "total_compiled": 885
   }
 }
