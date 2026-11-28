@@ -53,6 +53,10 @@ _FALLBACK_MONK_UNARMORED_MOVEMENT: dict[int, int] = {
     20: 30,
 }
 
+# Magic Initiate (SRD 5.2 Origin feat, #8): pick a list, 2 cantrips and 1 level 1 spell from it, and the ability.
+MAGIC_INITIATE_LISTS: tuple[str, ...] = ("cleric", "druid", "wizard")
+MAGIC_INITIATE_ABILITIES: tuple[str, ...] = ("int", "wis", "cha")
+
 _EXTRA_ATTACK_CLASSES: frozenset[str] = frozenset(
     {"barbarian", "fighter", "monk", "paladin", "ranger"}
 )
@@ -309,6 +313,148 @@ def _extract_level_slots(spellcasting_block: dict[str, Any] | None) -> dict[str,
             if cnt > 0:
                 slots[str(lvl)] = cnt
     return dict(sorted(slots.items(), key=lambda kv: int(kv[0])))
+
+
+def _validate_feat_spells(
+    raw: Any,
+    chosen_feats: list[str],
+    rules: RulesStore,
+    errors: list[dict[str, str]],
+    warnings: list[dict[str, str]],
+    *,
+    background_list: str | None = None,
+) -> list[dict[str, Any]]:
+    """Validate `feat_spells` (Magic Initiate picks, #8) and return the valid entries.
+
+    Each entry is `{"feat": "magic-initiate", "list": "cleric"|"druid"|"wizard", "ability": "int"|"wis"|"cha",
+    "cantrips": [2 cantrips], "spell": "<level 1 spell>"}`, all on the chosen list. There is at most one entry per
+    Magic Initiate pick (origin feat, Versatile extra origin feat, or an ASI feat), each with a different list.
+    A background that grants the feat names its list (Acolyte: Cleric, Sage: Wizard), so one entry must use it.
+    """
+    mi_picks = chosen_feats.count("magic-initiate")
+    entries: list[Any]
+    if raw is None:
+        entries = []
+    elif isinstance(raw, list):
+        entries = raw
+    else:
+        errors.append(_issue("invalid_feat_spells", "feat_spells", "'feat_spells' must be a list of objects."))
+        entries = []
+
+    out: list[dict[str, Any]] = []
+    used_lists: set[str] = set()
+    mi_entries = 0
+    for idx, entry in enumerate(entries):
+        path = f"feat_spells[{idx}]"
+        if not isinstance(entry, dict):
+            errors.append(_issue("invalid_feat_spells", path, "Each feat_spells entry must be a JSON object."))
+            continue
+        feat = strip_prefix(str(entry.get("feat") or ""))
+        if feat != "magic-initiate":
+            errors.append(
+                _issue("unsupported_feat_spells", f"{path}.feat", f"Feat '{feat or '?'}' does not grant chosen spells.")
+            )
+            continue
+        mi_entries += 1
+        if mi_entries > mi_picks:
+            errors.append(
+                _issue(
+                    "feat_spells_without_feat",
+                    path,
+                    f"feat_spells entry {idx} needs a Magic Initiate pick (origin_feat, extra_origin_feat or "
+                    f"asi_choices); the character has {mi_picks}.",
+                )
+            )
+            continue
+        ok = True
+        sp_list = strip_prefix(str(entry.get("list") or "")).lower()
+        if sp_list not in MAGIC_INITIATE_LISTS:
+            errors.append(
+                _issue(
+                    "feat_spell_invalid_list",
+                    f"{path}.list",
+                    f"Magic Initiate list must be one of {list(MAGIC_INITIATE_LISTS)}, got '{sp_list}'.",
+                )
+            )
+            ok = False
+        elif sp_list in used_lists:
+            errors.append(
+                _issue(
+                    "feat_spell_duplicate_list",
+                    f"{path}.list",
+                    f"Magic Initiate is repeatable only with a different spell list each time ('{sp_list}' is reused).",
+                )
+            )
+            ok = False
+        ability = strip_prefix(str(entry.get("ability") or "")).lower()
+        if ability not in MAGIC_INITIATE_ABILITIES:
+            errors.append(
+                _issue(
+                    "feat_spell_invalid_ability",
+                    f"{path}.ability",
+                    f"Magic Initiate ability must be one of {list(MAGIC_INITIATE_ABILITIES)}, got '{ability}'.",
+                )
+            )
+            ok = False
+
+        raw_cantrips = entry.get("cantrips")
+        cantrips = [strip_prefix(str(c)) for c in raw_cantrips] if isinstance(raw_cantrips, list) else []
+        raw_spell = entry.get("spell")
+        spell = strip_prefix(str(raw_spell)) if isinstance(raw_spell, str) and raw_spell else ""
+        if len(cantrips) != 2 or len(set(cantrips)) != 2 or not spell:
+            errors.append(
+                _issue(
+                    "feat_spell_count",
+                    path,
+                    "Magic Initiate grants exactly 2 different cantrips ('cantrips') and 1 level 1 spell ('spell').",
+                )
+            )
+            ok = False
+        for key, slug, want_lvl in [(f"{path}.cantrips[{i}]", c, 0) for i, c in enumerate(cantrips)] + (
+            [(f"{path}.spell", spell, 1)] if spell else []
+        ):
+            rec = rules.get_spell(slug)
+            if rec is None:
+                errors.append(_issue("unknown_spell", key, f"Unknown spell '{slug}'."))
+                ok = False
+                continue
+            if int(rec.get("level", -1)) != want_lvl:
+                kind = "a cantrip" if want_lvl == 0 else "a level 1 spell"
+                errors.append(
+                    _issue("feat_spell_count", key, f"'{slug}' is level {rec.get('level')}, not {kind}.")
+                )
+                ok = False
+                continue
+            sp_classes = {_extract_slug(c) for c in (rec.get("classes") or [])}
+            if sp_list in MAGIC_INITIATE_LISTS and sp_list not in sp_classes:
+                errors.append(
+                    _issue("feat_spell_not_on_list", key, f"'{slug}' is not on the {sp_list} spell list.")
+                )
+                ok = False
+        if sp_list in MAGIC_INITIATE_LISTS:
+            used_lists.add(sp_list)
+        if ok:
+            out.append({"feat": "magic-initiate", "list": sp_list, "ability": ability, "cantrips": cantrips, "spell": spell})
+
+    if background_list and mi_entries and background_list not in used_lists:
+        errors.append(
+            _issue(
+                "feat_spell_background_list",
+                "feat_spells",
+                f"The background grants Magic Initiate ({background_list.title()}), so one feat_spells entry must "
+                f"use the {background_list} list.",
+            )
+        )
+    if mi_entries < mi_picks:
+        warnings.append(
+            _issue(
+                "feat_spells_unselected",
+                "feat_spells",
+                f"Magic Initiate is taken {mi_picks}x but only {mi_entries} feat_spells entries are given; "
+                "its cantrips and level 1 spell do nothing until they are chosen.",
+            )
+        )
+    return out
 
 
 def compile_character(spec: dict[str, Any], rules: RulesStore) -> dict[str, Any]:
@@ -1246,6 +1392,15 @@ def compile_character(spec: dict[str, Any], rules: RulesStore) -> dict[str, Any]
                 )
             )
 
+    # Magic Initiate feat spells (#8). They are chosen per feat pick, are separate from the class's
+    # cantrips/prepared spells, and don't count toward the class limits.
+    bg_mi_list = None
+    if origin_feat_slug == "magic-initiate" and bg_default_feat == "magic-initiate" and bg_rec:
+        bg_mi_list = str(bg_rec.get("feat_note") or "").strip().lower() or None
+    validated_feat_spells = _validate_feat_spells(
+        spec.get("feat_spells"), chosen_feats, rules, errors, warnings, background_list=bg_mi_list
+    )
+
     # ------------------------------------------------------------------
     # Fatal entity check before deriving statblock
     # ------------------------------------------------------------------
@@ -1525,6 +1680,23 @@ def compile_character(spec: dict[str, Any], rules: RulesStore) -> dict[str, Any]
             "prepared_spells": validated_prepared,
         }
 
+    # Feat spellcasting (#8): DC and attack bonus come from the feat's ability, not the class's.
+    feat_spellcasting_out: list[dict[str, Any]] = []
+    for fs in validated_feat_spells:
+        f_mod = mods[fs["ability"]]
+        feat_spellcasting_out.append(
+            {
+                "feat": fs["feat"],
+                "list": fs["list"],
+                "ability": fs["ability"],
+                "save_dc": 8 + pb + f_mod,
+                "attack_bonus": pb + f_mod,
+                "cantrips": list(fs["cantrips"]),
+                "spells": [fs["spell"]],
+                "free_casts": {fs["spell"]: 1},
+            }
+        )
+
     # Class Resources Max (M6.3A — derived deterministically from class, level, and SRD class_specific).
     level_cs = level_rec.get("class_specific") if (level_rec and isinstance(level_rec.get("class_specific"), dict)) else {}
     class_resources_max: dict[str, dict[str, Any]] = {}
@@ -1589,6 +1761,7 @@ def compile_character(spec: dict[str, Any], rules: RulesStore) -> dict[str, Any]
         "class_resources_max": class_resources_max,
         "weapon_profiles": weapon_profiles,
         "spellcasting": spellcasting_out,
+        "feat_spellcasting": feat_spellcasting_out,
     }
 
     is_valid = len(errors) == 0

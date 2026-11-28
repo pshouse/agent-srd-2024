@@ -728,7 +728,24 @@ def init_party_carryover(
             "death_saves": {"successes": 0, "failures": 0},
             "conditions": [],
         }
+        free = _feat_free_casts_of(sb)
+        if free is not None:
+            carryover[cid]["feat_free_casts"] = free
     return carryover
+
+
+def _feat_free_casts_of(holder: dict[str, Any]) -> dict[str, dict[str, int]] | None:
+    """Magic Initiate free casts by spell list (#8); they recharge on a Long Rest only, so they carry over.
+
+    Keyed by the block's list, which is unique per character (a repeated Magic Initiate needs another list).
+    """
+    blocks = [b for b in (holder.get("feat_spellcasting") or []) if isinstance(b, dict)]
+    if not blocks:
+        return None
+    return {
+        str(b.get("list") or ""): {str(k): max(0, int(v)) for k, v in (b.get("free_casts") or {}).items()}
+        for b in blocks
+    }
 
 
 def _init_party_carryover_from_initial_state(
@@ -797,6 +814,9 @@ def _init_party_carryover_from_initial_state(
             "death_saves": copy.deepcopy(c.get("death_saves") or {"successes": 0, "failures": 0}),
             "conditions": copy.deepcopy(c.get("conditions") or []),
         }
+        free = _feat_free_casts_of(c)
+        if free is not None:
+            carryover[cid]["feat_free_casts"] = free
     return carryover
 
 
@@ -881,6 +901,9 @@ def extract_party_carryover(
                 "remaining": max(0, int(hd.get("remaining", co["hit_dice"]["remaining"]))),
             }
 
+        free = _feat_free_casts_of(comb)
+        if free is not None:
+            co["feat_free_casts"] = free
         co["heroic_inspiration"] = bool(comb.get("heroic_inspiration", co.get("heroic_inspiration", False)))
         co["exhaustion_level"] = int(comb.get("exhaustion_level", co.get("exhaustion_level", 0)))
         co["conditions"] = _extract_persistent_conditions(
@@ -932,6 +955,8 @@ def build_room_scenario(
         }
         if co.get("slots"):
             comb_entry["slots"] = copy.deepcopy(co["slots"])
+        if co.get("feat_free_casts") is not None:
+            comb_entry["feat_free_casts"] = copy.deepcopy(co["feat_free_casts"])
 
         combatants.append(comb_entry)
         party_ids.append(cid)

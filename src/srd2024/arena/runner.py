@@ -238,6 +238,8 @@ def build_observation(
         "slots_max": copy.deepcopy(actor.get("slots_max") or {}),
         "class_resources": copy.deepcopy(actor.get("class_resources") or {}),
     }
+    if actor.get("feat_spellcasting"):  # #8: Magic Initiate spells, DC and free casts (own seat only)
+        self_view["feat_spellcasting"] = copy.deepcopy(actor["feat_spellcasting"])
 
     # Determine actor melee reach for `in_reach_enemies`
     max_reach = 5

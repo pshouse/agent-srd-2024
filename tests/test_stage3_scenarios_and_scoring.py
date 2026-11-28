@@ -344,7 +344,10 @@ class TestStage3BuiltinScenarios(unittest.TestCase):
         for pc_name, res in compiled_pc_results:
             self.assertTrue(res["valid"], f"PC {pc_name} failed compile_character: {res['errors']}")
             self.assertEqual(res["errors"], [], f"PC {pc_name} had errors: {res['errors']}")
-            self.assertEqual(res["warnings"], [], f"PC {pc_name} had warnings: {res['warnings']}")
+            # #8: built-in PCs with Magic Initiate have no feat_spells picks yet (picking them would change bench
+            # play), so that one warning is expected; anything else is not.
+            other = [w for w in res["warnings"] if w["code"] != "feat_spells_unselected"]
+            self.assertEqual(other, [], f"PC {pc_name} had warnings: {res['warnings']}")
 
 
 class TestStage3CustomScenarioLoading(unittest.TestCase):
