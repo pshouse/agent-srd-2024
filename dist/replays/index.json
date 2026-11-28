@@ -90,6 +90,24 @@
       "source": "examples/sessions/2026-11-27-goblin-nl-1.trace.json",
       "winner": "party",
       "writeup": "examples/sessions/2026-11-27-goblin-nl-1.md"
+    },
+    {
+      "actions": 84,
+      "bytes": 261539,
+      "composite_score": 92.77,
+      "digest": "26489bdc2d89e5563f5f5bed431b3e0320ff8c2d6d9814cdca62bb6d90f73b0d",
+      "enemy_driver": "heuristic-tactical",
+      "file": "2026-11-27-wyrm-web-1.trace.json",
+      "id": "2026-11-27-wyrm-web-1",
+      "party_driver": "heuristic-tactical + human",
+      "rounds": 5,
+      "scenario_id": "wyrmling-lair",
+      "scenario_name": "Wyrmling Lair",
+      "seed": 598,
+      "sha256": "6a6af332de55b4375ac41f3ab9d70174563e36d2da125c63aadcae361c8244d9",
+      "source": "examples/sessions/2026-11-27-wyrm-web-1.trace.json",
+      "winner": "party",
+      "writeup": "examples/sessions/2026-11-27-wyrm-web-1.md"
     }
   ],
   "schema_version": "1",
