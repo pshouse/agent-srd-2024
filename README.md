@@ -246,6 +246,19 @@ Play any 5e 2024 (SRD 5.2) scenario directly in the terminal with an ASCII 5-ft 
 ./bin/srd-arena replay /tmp/resumed-trace.json
 ```
 
+#### Local browser tabletop (`bin/srd-web`)
+
+The same table in a browser: a clickable 5-ft grid (click a square to move, a combatant to target it), the legal action menu, a status sidebar, the combat log, Save / Quit / Export buttons, and an order box when `--nl-driver` is set. It takes the same flags as `play` and runs the same session loop, so traces have the same format and pass `srd-arena replay`.
+
+```bash
+./bin/srd-web goblin-ambush --as pc-bram --seed 42 --save /tmp/ckpt.json --out-trace /tmp/web-trace.json
+# srd-web: ... Open this URL (it carries this launch's token):
+# http://127.0.0.1:41237/#token=...
+./bin/srd-arena replay /tmp/web-trace.json
+```
+
+It is local-only: it binds `127.0.0.1` (any other `--host` is refused), every API call needs the per-launch token from the URL fragment, the Host and Origin must be `127.0.0.1:<port>` or `localhost:<port>`, POSTs are small JSON bodies validated against the legal menu, and the `--save` / `--out-trace` paths are fixed at launch with the CLI's `--force` overwrite rule. The page lives in `web/tabletop/` and is not on the GitHub Pages allowlist.
+
 ### 2. Deterministic Simulation Testing (`bin/srd-dst`) & AST Mutation Testing (`bin/srd-mutate`)
 
 ```bash

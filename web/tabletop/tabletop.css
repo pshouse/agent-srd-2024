@@ -1,0 +1,37 @@
+/* Local tabletop (bin/srd-web). Layered on ../styles.css; no inline styles anywhere. */
+.tt [hidden]{display:none!important}
+.tt{padding-top:16px}
+.tt-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:12px}
+.tt-head h1{font-size:var(--fs-lg);margin:0 0 6px}
+.tt-tools .btn[hidden]{display:none}
+.tt-st-awaiting_input{background:var(--warn-bg);color:var(--warn)}
+.tt-st-error{background:var(--danger-bg);color:var(--danger)}
+.tt-st-finished{background:var(--ok-bg);color:var(--ok)}
+.tt-svg{cursor:crosshair}
+.tt-reach rect{fill:var(--primary-soft);stroke:var(--primary);stroke-width:.08;opacity:.7}
+.tt-pick{fill:none;stroke:var(--primary);stroke-width:.4;stroke-dasharray:.6 .3}
+.tt-sw-reach{background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary)}
+.tt-click{min-height:1.4em}
+.tt-targets{display:grid;gap:8px;margin:8px 0}
+.tt-reroll{align-items:center;justify-content:space-between;flex-wrap:wrap}
+.tt-menu{display:grid;gap:12px}
+.tt-group{display:grid;gap:6px}
+.tt-group h3{font-size:var(--fs-sm);color:var(--text-2);margin:0}
+.tt-item{justify-content:flex-start;white-space:normal;text-align:left;min-height:36px;padding:6px 12px;line-height:1.3}
+.tt-item:disabled,.tt .btn:disabled{opacity:.5;cursor:not-allowed}
+.tt-n{font:700 var(--fs-xs)/1 var(--mono);color:var(--text-2);min-width:1.6em}
+.tt-item.cat-attack{border-left:4px solid var(--mon)}
+.tt-item.cat-spell{border-left:4px solid var(--spell)}
+.tt-item.cat-move{border-left:4px solid var(--primary)}
+.tt-move,.tt-say,.tt-nl{margin-top:12px}
+.tt-num{width:6em;min-height:36px;padding:0 8px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);color:var(--text)}
+.tt-text{flex:1 1 240px;min-width:0;min-height:40px;padding:0 10px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);color:var(--text)}
+.tt-me{display:grid;gap:6px}
+.tt-stats{margin:0;font:600 var(--fs-sm)/1.4 var(--mono)}
+.tt-retry{color:var(--danger)}
+.tt-talk{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:var(--fs-sm)}
+.tt-log{max-height:60vh;padding:8px 12px}
+.tt-l{margin:2px 0;font-size:var(--fs-sm);white-space:pre-wrap;overflow-wrap:anywhere}
+.tt-l.k-head{font-weight:700;margin-top:8px}
+.tt-l.k-violation{color:var(--danger);font-weight:600}
+.tt-l.k-sys{color:var(--text-2);font-family:var(--mono);font-size:var(--fs-xs)}
