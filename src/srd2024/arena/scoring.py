@@ -106,33 +106,58 @@ _CAST_HITS_OPPONENT: frozenset[str] = frozenset(
 _CAST_HELPS_ALLY: frozenset[str] = frozenset({"healing_applied", "temp_hp_applied", "teleported", "condition_ended"})
 
 
+def _ally_event_changed_something(ev: dict[str, Any], prior_temp_hp: dict[str, int]) -> bool:
+    """Healing, temp HP and teleports count only when they changed the target (#77 MF1)."""
+    etype = str(ev.get("type") or "")
+    if etype == "healing_applied":
+        return bool(ev.get("revived")) or int(ev.get("hp_after") or 0) > int(ev.get("hp_before") or 0)
+    if etype == "temp_hp_applied":
+        tid = str(ev.get("target_id") or "")
+        return int(ev.get("temp_hp_after") or 0) > int(prior_temp_hp.get(tid, 0))
+    if etype == "teleported":
+        return ev.get("from_pos") != ev.get("to_pos")
+    return True
+
+
 def _effects_before_each_action(
     init_combatants: dict[str, dict[str, Any]], actions: list[dict[str, Any]]
-) -> list[dict[str, set[str]]]:
-    """Active effect kinds per combatant just before each action, replayed from `state_diff.effect_changes`."""
-    current: dict[str, set[str]] = {
+) -> list[dict[str, Any]]:
+    """What each combatant had just before each action: active effect kinds and temp HP.
+
+    Effects are replayed from `state_diff.effect_changes`. Temp HP is replayed from events, because the state
+    diff doesn't record it: `temp_hp_applied` sets it and `damage_applied` spends `temp_hp_absorbed`.
+    """
+    effects: dict[str, set[str]] = {
         cid: {str(e.get("kind")) for e in (c.get("active_effects") or []) if isinstance(e, dict) and e.get("kind")}
         for cid, c in init_combatants.items()
     }
-    out: list[dict[str, set[str]]] = []
+    temp_hp: dict[str, int] = {cid: int(c.get("temp_hp") or 0) for cid, c in init_combatants.items()}
+    out: list[dict[str, Any]] = []
     for a in actions:
-        out.append({cid: set(kinds) for cid, kinds in current.items()})
+        out.append({"effects": {cid: set(k) for cid, k in effects.items()}, "temp_hp": dict(temp_hp)})
         for ec in ((a.get("state_diff") or {}).get("effect_changes") or []):
             cid = str(ec.get("id") or "")
-            kinds = current.setdefault(cid, set())
+            kinds = effects.setdefault(cid, set())
             kinds.difference_update(str(k) for k in ec.get("removed") or [])
             kinds.update(str(k) for k in ec.get("added") or [])
+        for ev in a.get("events") or []:
+            tid = str(ev.get("target_id") or "")
+            if ev.get("type") == "temp_hp_applied" and ev.get("temp_hp_after") is not None:
+                temp_hp[tid] = int(ev["temp_hp_after"])
+            elif ev.get("type") == "damage_applied" and ev.get("temp_hp_absorbed"):
+                temp_hp[tid] = max(0, temp_hp.get(tid, 0) - int(ev["temp_hp_absorbed"]))
     return out
 
 
 def _cast_had_effect(
-    action: dict[str, Any], side_ids: set[str], prior_effects: dict[str, set[str]]
+    action: dict[str, Any], side_ids: set[str], prior: dict[str, Any]
 ) -> bool:
     """True when a `cast_spell` changed something that matters (#75).
 
     That means a spell attack roll, forced save, damage, condition or Shield block against an opponent; healing,
-    temp HP, a teleport or a removed condition on the caster's side; or an effect kind a same-side target
-    didn't already have (so re-casting Mage Armor doesn't count). Narrative casts, unmodeled damage
+    temp HP, a teleport or a removed condition on the caster's side that actually changed something (HP or temp HP
+    went up, the caster moved); or an effect kind a same-side target didn't already have (so re-casting Mage Armor,
+    healing at full HP, re-casting False Life or Misty Step onto your own square don't count). Narrative casts, unmodeled damage
     (`spell_damage_unresolved`) and duplicate buffs earn nothing. Synthetic transcripts with neither events nor
     a state_diff keep the old credit.
     """
@@ -140,6 +165,8 @@ def _cast_had_effect(
     state_diff = action.get("state_diff")
     if not events and not state_diff:
         return True
+    prior_effects: dict[str, set[str]] = prior.get("effects") or {}
+    prior_temp_hp: dict[str, int] = prior.get("temp_hp") or {}
     for ev in events or []:
         if ev.get("reaction"):
             continue
@@ -150,7 +177,8 @@ def _cast_had_effect(
                 continue
             return True
         if etype in _CAST_HELPS_ALLY and (tid in side_ids or (etype == "teleported" and not tid)):
-            return True
+            if _ally_event_changed_something(ev, prior_temp_hp):
+                return True
     for ec in ((state_diff or {}).get("effect_changes") or []):
         cid = str(ec.get("id") or "")
         if cid in side_ids and any(str(k) not in prior_effects.get(cid, set()) for k in ec.get("added") or []):
