@@ -326,7 +326,7 @@ class TestStage3McpDiscoveryLocksAndParity(unittest.TestCase):
                     self.assertNotIn("error", res_read)
                     res_json = json.loads(res_read["result"]["contents"][0]["text"])
                     res_ids = {s["id"] for s in (res_json if isinstance(res_json, list) else res_json["scenarios"])}
-                    self.assertEqual(res_ids, {"goblin-ambush", "crypt-of-ghouls", "wyrmling-lair"})
+                    self.assertEqual(res_ids, {"goblin-ambush", "crypt-of-ghouls", "wyrmling-lair", "ruined-keep"})
 
                     rc, stderr = mcp.close()
                     self.assertEqual(rc, 0, f"{label} stderr={stderr}")

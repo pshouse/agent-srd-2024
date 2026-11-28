@@ -34,7 +34,12 @@ from srd2024.engine.combat import (
     compute_legal_actions,
     distance_ft,
     grid_square,
+    has_line_of_sight,
+    in_bounds,
+    is_wall,
+    reachable_grid_costs,
     step,
+    terrain_sets,
 )
 from srd2024.engine.store import RulesStore, strip_prefix
 
@@ -65,6 +70,7 @@ _DEFAULT_SCENARIO_POOL: tuple[str, ...] = (
     "goblin-ambush",
     "crypt-of-ghouls",
     "wyrmling-lair",
+    "ruined-keep",
     "procedural",
     "procedural",
 )
@@ -324,6 +330,20 @@ def check_state_invariants(
                 f"dead_with_positive_hp:{cid}: combatant has alive == False with hp={hp} > 0"
             )
 
+        # Battlefield bounds & impassable wall invariants (M6.1 / M6.2).
+        pos = comb.get("position")
+        if isinstance(pos, dict) and _is_strict_int(pos.get("x")) and _is_strict_int(pos.get("y")):
+            bounds = state.get("bounds")
+            if isinstance(bounds, dict) and not in_bounds(pos, bounds):
+                violations.append(
+                    f"combatant_out_of_bounds:{cid}: position ({pos['x']}, {pos['y']}) outside bounds {bounds}"
+                )
+            terrain = state.get("terrain")
+            if isinstance(terrain, dict) and is_wall(pos, terrain):
+                violations.append(
+                    f"combatant_on_wall:{cid}: position ({pos['x']}, {pos['y']}) is on an impassable wall"
+                )
+
     # Space occupancy (#53): no two living non-Tiny creatures share a 5-ft square.
     squares: dict[tuple[int, int], str] = {}
     for cid in sorted(combatants.keys()):
@@ -576,7 +596,7 @@ def build_procedural_scenario(seed: int, rules: RulesStore) -> dict[str, Any]:
             entry["conditions"] = [rng.choice(_SAFE_INITIAL_CONDITIONS)]
         combatants.append(entry)
 
-    return {
+    out: dict[str, Any] = {
         "id": f"procedural-seed-{seed}",
         "name": f"Procedural Skirmish (seed {seed})",
         "description": "Procedurally generated 5e 2024 (SRD 5.2) DST skirmish.",
@@ -589,6 +609,29 @@ def build_procedural_scenario(seed: int, rules: RulesStore) -> dict[str, Any]:
         "enemy_ids": enemy_ids,
         "source": "procedural",
     }
+    # Include bounded rooms + terrain on ~50% of procedural seeds to exercise M6.1/M6.2 invariants!
+    if rng.random() < 0.5:
+        out["bounds"] = {"min_x": -5, "min_y": -5, "max_x": 35, "max_y": 25}
+        occupied = {(int(c["position"]["x"]), int(c["position"]["y"])) for c in combatants}
+        candidates = [
+            (x, y)
+            for x in range(0, 30, 5)
+            for y in range(0, 25, 5)
+            if (x, y) not in occupied
+        ]
+        rng.shuffle(candidates)
+        walls = [[x, y] for x, y in sorted(candidates[:3])]
+        difficult = [[x, y] for x, y in sorted(candidates[3:6])]
+        cover = [
+            {"x": x, "y": y, "kind": "three_quarters" if i == 0 else "half"}
+            for i, (x, y) in enumerate(sorted(candidates[6:9]))
+        ]
+        out["terrain"] = {
+            "walls": walls,
+            "difficult_terrain": difficult,
+            "cover": cover,
+        }
+    return out
 
 
 # ----------------------------------------------------------------------
@@ -683,27 +726,41 @@ def generate_random_legal_intent(
     eff_speed = _effective_speed(actor, rules)
     rem_move = min(int(actor.get("movement_remaining_ft", 0)), eff_speed) if eff_speed > 0 else 0
     direct_conds = _direct_condition_set(actor)
+    bounds = state.get("bounds") if isinstance(state.get("bounds"), dict) else None
+    terrain = state.get("terrain") if isinstance(state.get("terrain"), dict) else None
     if eff_speed > 0 and rem_move >= 5:
         if "prone" in direct_conds and rem_move >= eff_speed // 2:
             candidates.append({"type": "move", "actor_id": active_id, "stand_up": True})
         elif enemies:
-            tgt = rng.choice(enemies)
             cur_x = int(actor["position"]["x"])
             cur_y = int(actor["position"]["y"])
-            tx = int(tgt["position"]["x"])
-            ty = int(tgt["position"]["y"])
-            step_ft = 5 if "prone" not in direct_conds else 5
-            max_step = rem_move // 2 if "prone" in direct_conds else rem_move
-            if max_step >= 5:
-                move_ft = min(max_step, rng.choice([5, 10, 15]))
-                dx = tx - cur_x
-                dy = ty - cur_y
-                nx = cur_x + (min(move_ft, dx) if dx > 0 else max(-move_ft, dx))
-                ny = cur_y + (min(move_ft, dy) if dy > 0 else max(-move_ft, dy))
-                if (nx, ny) != (cur_x, cur_y):
-                    candidates.append(
-                        {"type": "move", "actor_id": active_id, "to": {"x": nx, "y": ny}}
-                    )
+            if bounds is not None or terrain is not None:
+                reach_map = reachable_grid_costs(
+                    actor["position"],
+                    min(rem_move, 20),
+                    bounds,
+                    terrain,
+                    is_prone="prone" in direct_conds,
+                )
+                valid_dests = sorted(xy for xy in reach_map.keys() if xy != (cur_x, cur_y))
+                if valid_dests:
+                    nx, ny = rng.choice(valid_dests)
+                    candidates.append({"type": "move", "actor_id": active_id, "to": {"x": nx, "y": ny}})
+            else:
+                tgt = rng.choice(enemies)
+                tx = int(tgt["position"]["x"])
+                ty = int(tgt["position"]["y"])
+                max_step = rem_move // 2 if "prone" in direct_conds else rem_move
+                if max_step >= 5:
+                    move_ft = min(max_step, rng.choice([5, 10, 15]))
+                    dx = tx - cur_x
+                    dy = ty - cur_y
+                    nx = cur_x + (min(move_ft, dx) if dx > 0 else max(-move_ft, dx))
+                    ny = cur_y + (min(move_ft, dy) if dy > 0 else max(-move_ft, dy))
+                    if (nx, ny) != (cur_x, cur_y):
+                        candidates.append(
+                            {"type": "move", "actor_id": active_id, "to": {"x": nx, "y": ny}}
+                        )
 
     # 2. Attacks (PC weapons incl. two-handed / offhand / cleave, or monster actions).
     if enemies and (res.get("action") or int(res.get("attacks_remaining", 0)) > 0):
@@ -970,6 +1027,20 @@ def generate_adversarial_intent(
         nc = rng.choice(non_casters)
         payloads.append({"type": "cast_spell", "actor_id": nc, "spell": "shield", "as_reaction": True})
 
+    # Adversarial out-of-bounds and wall move/teleport attempts (M6.1 / M6.2).
+    st_bounds = state.get("bounds")
+    if isinstance(st_bounds, dict):
+        oob = {"x": int(st_bounds["max_x"]) + 5, "y": int(st_bounds["min_y"]) - 5}
+        payloads.append({"type": "move", "actor_id": active_id, "to": oob})
+        payloads.append({"type": "cast_spell", "actor_id": active_id, "spell": "misty-step", "destination": oob})
+    st_terrain = state.get("terrain")
+    if isinstance(st_terrain, dict) and st_terrain.get("walls"):
+        wx, wy = st_terrain["walls"][0]
+        payloads.append({"type": "move", "actor_id": active_id, "to": {"x": int(wx), "y": int(wy)}})
+        payloads.append(
+            {"type": "cast_spell", "actor_id": active_id, "spell": "misty-step", "destination": {"x": int(wx), "y": int(wy)}}
+        )
+
     return rng.choice(payloads)
 
 
@@ -995,12 +1066,16 @@ def _execute_single_pass(
     else:
         compiled = load_scenario(scenario_key, rules)
 
-    start_intent = {
+    start_intent: dict[str, Any] = {
         "type": "start_encounter",
         "encounter_id": compiled["id"],
         "seed": int(seed),
         "combatants": copy.deepcopy(compiled["combatants"]),
     }
+    if compiled.get("bounds") is not None:
+        start_intent["bounds"] = copy.deepcopy(compiled["bounds"])
+    if compiled.get("terrain") is not None:
+        start_intent["terrain"] = copy.deepcopy(compiled["terrain"])
 
     failures: list[dict[str, Any]] = []
     all_events: list[list[dict[str, Any]]] = []

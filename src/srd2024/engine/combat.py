@@ -19,6 +19,8 @@ Implements:
 from __future__ import annotations
 
 import copy
+from fractions import Fraction
+import heapq
 import re
 from typing import Any
 
@@ -218,6 +220,463 @@ def _parse_point(raw: Any) -> dict[str, int] | None:
     if x is None or y is None:
         return None
     return {"x": x, "y": y}
+
+
+# ----------------------------------------------------------------------
+# Battlefield Bounds, Tactical Terrain, Pathfinding, LoS & Cover (M6.1/M6.2)
+# ----------------------------------------------------------------------
+
+COVER_BONUSES: dict[str, int] = {
+    "half": 2,
+    "three_quarters": 5,
+}
+
+_COVER_LABELS: dict[str, str] = {
+    "half": "half cover",
+    "three_quarters": "three-quarters cover",
+}
+
+# Spells that explicitly ignore Half Cover and Three-Quarters Cover (SRD 5.2 RAW).
+COVER_IGNORING_SPELLS: frozenset[str] = frozenset({"sacred-flame"})
+
+_AOE_SHAPES: frozenset[str] = frozenset(
+    {"sphere", "cone", "cube", "cylinder", "line", "emanation", "radius"}
+)
+
+
+def _spell_aoe_info(spell_slug: str, spell: dict[str, Any]) -> dict[str, Any] | None:
+    """Return AoE metadata dict if `spell` is an Area of Effect spell, else None."""
+    targeting = spell.get("targeting")
+    if isinstance(targeting, dict):
+        aoe = targeting.get("aoe")
+        if isinstance(aoe, dict):
+            shape = str(aoe.get("shape") or "").strip().lower()
+            if shape in _AOE_SHAPES or aoe.get("radius_ft") or aoe.get("radius"):
+                return aoe
+        if str(targeting.get("mode") or "").strip().lower() == "aoe":
+            return aoe if isinstance(aoe, dict) else {"shape": "sphere"}
+    top_aoe = spell.get("aoe")
+    if isinstance(top_aoe, dict):
+        shape = str(top_aoe.get("shape") or "").strip().lower()
+        if shape in _AOE_SHAPES or top_aoe.get("radius_ft") or top_aoe.get("radius"):
+            return top_aoe
+    if spell_slug in SELF_LINE_SPELLS:
+        return {"shape": "line"}
+    return None
+
+
+def _parse_grid_pair(raw: Any, label: str) -> tuple[int, int]:
+    """Parse a 5-ft aligned `[x, y]` list/tuple or `{"x": x, "y": y}` dict."""
+    if isinstance(raw, (list, tuple)) and len(raw) == 2:
+        x = _parse_int(raw[0], allow_str=False)
+        y = _parse_int(raw[1], allow_str=False)
+    elif isinstance(raw, dict) and "x" in raw and "y" in raw:
+        x = _parse_int(raw["x"], allow_str=False)
+        y = _parse_int(raw["y"], allow_str=False)
+    else:
+        raise ValueError(f"{label} entry must be [x, y] or {{x, y}} with integer coordinates.")
+    if x is None or y is None:
+        raise ValueError(f"{label} coordinates must be integers (not booleans).")
+    if x % 5 != 0 or y % 5 != 0:
+        raise ValueError(f"{label} coordinates ({x}, {y}) must be 5-ft aligned.")
+    return (x, y)
+
+
+def validate_bounds(raw: Any) -> dict[str, int] | None:
+    """Validate and normalize optional battlefield bounds `{min_x, min_y, max_x, max_y}`."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("Battlefield 'bounds' must be an object with min_x, min_y, max_x, max_y.")
+    req = ("min_x", "min_y", "max_x", "max_y")
+    out: dict[str, int] = {}
+    for k in req:
+        if k not in raw:
+            raise ValueError(f"Battlefield 'bounds' is missing required key '{k}'.")
+        v = _parse_int(raw[k], allow_str=False)
+        if v is None:
+            raise ValueError(f"Battlefield 'bounds.{k}' must be an integer.")
+        if v % 5 != 0:
+            raise ValueError(f"Battlefield 'bounds.{k}' ({v}) must be 5-ft aligned.")
+        out[k] = v
+    if out["min_x"] > out["max_x"]:
+        raise ValueError(f"Battlefield 'bounds.min_x' ({out['min_x']}) exceeds max_x ({out['max_x']}).")
+    if out["min_y"] > out["max_y"]:
+        raise ValueError(f"Battlefield 'bounds.min_y' ({out['min_y']}) exceeds max_y ({out['max_y']}).")
+    return out
+
+
+def validate_terrain(raw: Any) -> dict[str, Any] | None:
+    """Validate and normalize optional tactical terrain `{walls, difficult_terrain, cover}`."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("Battlefield 'terrain' must be an object.")
+
+    walls_set: set[tuple[int, int]] = set()
+    raw_walls = raw.get("walls")
+    if raw_walls is not None:
+        if not isinstance(raw_walls, list):
+            raise ValueError("terrain.walls must be a list of [x, y] squares.")
+        for item in raw_walls:
+            walls_set.add(_parse_grid_pair(item, "terrain.walls"))
+
+    diff_set: set[tuple[int, int]] = set()
+    raw_diff = raw.get("difficult_terrain")
+    if raw_diff is not None:
+        if not isinstance(raw_diff, list):
+            raise ValueError("terrain.difficult_terrain must be a list of [x, y] squares.")
+        for item in raw_diff:
+            diff_set.add(_parse_grid_pair(item, "terrain.difficult_terrain"))
+
+    cover_map: dict[tuple[int, int], str] = {}
+    raw_cover = raw.get("cover")
+    if raw_cover is not None:
+        if not isinstance(raw_cover, list):
+            raise ValueError("terrain.cover must be a list of {x, y, kind} entries.")
+        for item in raw_cover:
+            if not isinstance(item, dict):
+                raise ValueError("terrain.cover entry must be an object with x, y, kind.")
+            xy = _parse_grid_pair(item, "terrain.cover")
+            kind = str(item.get("kind") or "").strip().lower()
+            if kind not in COVER_BONUSES:
+                raise ValueError(
+                    f"terrain.cover kind '{item.get('kind')}' must be 'half' or 'three_quarters'."
+                )
+            prev = cover_map.get(xy)
+            if prev is None or COVER_BONUSES[kind] > COVER_BONUSES[prev]:
+                cover_map[xy] = kind
+
+    return {
+        "walls": [[x, y] for x, y in sorted(walls_set)],
+        "difficult_terrain": [[x, y] for x, y in sorted(diff_set)],
+        "cover": [{"x": x, "y": y, "kind": k} for (x, y), k in sorted(cover_map.items())],
+    }
+
+
+def in_bounds(pos: dict[str, int], bounds: dict[str, int] | None) -> bool:
+    """Return True if `pos` lies inside inclusive `bounds` (or if `bounds` is None)."""
+    if not isinstance(bounds, dict):
+        return True
+    x = int(pos["x"])
+    y = int(pos["y"])
+    return (
+        int(bounds["min_x"]) <= x <= int(bounds["max_x"])
+        and int(bounds["min_y"]) <= y <= int(bounds["max_y"])
+    )
+
+
+def terrain_sets(
+    terrain: dict[str, Any] | None,
+) -> tuple[set[tuple[int, int]], set[tuple[int, int]], dict[tuple[int, int], str]]:
+    """Unpack normalized terrain dict into fast `(walls, difficult, cover_map)` lookups."""
+    if not isinstance(terrain, dict):
+        return set(), set(), {}
+    walls: set[tuple[int, int]] = set()
+    for w in terrain.get("walls") or []:
+        if isinstance(w, (list, tuple)) and len(w) == 2:
+            walls.add((int(w[0]), int(w[1])))
+        elif isinstance(w, dict) and "x" in w and "y" in w:
+            walls.add((int(w["x"]), int(w["y"])))
+    diff: set[tuple[int, int]] = set()
+    for d in terrain.get("difficult_terrain") or []:
+        if isinstance(d, (list, tuple)) and len(d) == 2:
+            diff.add((int(d[0]), int(d[1])))
+        elif isinstance(d, dict) and "x" in d and "y" in d:
+            diff.add((int(d["x"]), int(d["y"])))
+    cover: dict[tuple[int, int], str] = {}
+    for c in terrain.get("cover") or []:
+        if isinstance(c, dict) and "x" in c and "y" in c:
+            kind = str(c.get("kind") or "").strip().lower()
+            if kind in COVER_BONUSES:
+                xy = (int(c["x"]), int(c["y"]))
+                prev = cover.get(xy)
+                if prev is None or COVER_BONUSES[kind] > COVER_BONUSES[prev]:
+                    cover[xy] = kind
+    return walls, diff, cover
+
+
+def is_wall(pos: dict[str, int], terrain: dict[str, Any] | None) -> bool:
+    """Return True if `pos` is an impassable wall tile."""
+    if not isinstance(terrain, dict) or not terrain.get("walls"):
+        return False
+    walls, _, _ = terrain_sets(terrain)
+    return (int(pos["x"]), int(pos["y"])) in walls
+
+
+def _ray_intermediate_cells(
+    origin: dict[str, int],
+    target: dict[str, int],
+) -> tuple[list[tuple[int, int]], list[tuple[tuple[int, int], tuple[int, int]]]]:
+    """Exact rational grid-raycast from cell center `origin` to cell center `target`.
+
+    Returns `(interior_cells, corner_pairs)` in feet coordinates `(x, y)`:
+    - `interior_cells`: 5-ft cells (excluding origin and target) whose interior is crossed
+      by the center-to-center line segment.
+    - `corner_pairs`: pairs of diagonally flanking 5-ft cells meeting at a grid vertex that
+      the ray passes directly through (so two adjacent diagonal walls block the gap).
+    """
+    ax = int(origin["x"]) // 5
+    ay = int(origin["y"]) // 5
+    bx = int(target["x"]) // 5
+    by = int(target["y"]) // 5
+    if (ax, ay) == (bx, by):
+        return [], []
+
+    # Scale grid by 2 so cell (cx, cy) spans [2*cx, 2*cx+2] x [2*cy, 2*cy+2]
+    # and cell centers are exact integers (2*cx+1, 2*cy+1).
+    p0x = 2 * ax + 1
+    p0y = 2 * ay + 1
+    dx = 2 * (bx - ax)
+    dy = 2 * (by - ay)
+
+    x_lo, x_hi = (ax, bx) if ax <= bx else (bx, ax)
+    y_lo, y_hi = (ay, by) if ay <= by else (by, ay)
+
+    interior: list[tuple[int, int]] = []
+    corner_hits: dict[Fraction, list[tuple[int, int]]] = {}
+
+    for cx in range(x_lo, x_hi + 1):
+        for cy in range(y_lo, y_hi + 1):
+            if (cx, cy) == (ax, ay) or (cx, cy) == (bx, by):
+                continue
+
+            if dx == 0:
+                if cx != ax:
+                    continue
+                t_xmin, t_xmax = Fraction(0), Fraction(1)
+            else:
+                tx1 = Fraction(2 * cx - p0x, dx)
+                tx2 = Fraction(2 * cx + 2 - p0x, dx)
+                t_xmin, t_xmax = (tx1, tx2) if tx1 <= tx2 else (tx2, tx1)
+
+            if dy == 0:
+                if cy != ay:
+                    continue
+                t_ymin, t_ymax = Fraction(0), Fraction(1)
+            else:
+                ty1 = Fraction(2 * cy - p0y, dy)
+                ty2 = Fraction(2 * cy + 2 - p0y, dy)
+                t_ymin, t_ymax = (ty1, ty2) if ty1 <= ty2 else (ty2, ty1)
+
+            t_enter = max(Fraction(0), t_xmin, t_ymin)
+            t_exit = min(Fraction(1), t_xmax, t_ymax)
+            if t_enter < t_exit:
+                interior.append((cx * 5, cy * 5))
+            elif t_enter == t_exit and Fraction(0) < t_enter < Fraction(1):
+                corner_hits.setdefault(t_enter, []).append((cx * 5, cy * 5))
+
+    corner_pairs: list[tuple[tuple[int, int], tuple[int, int]]] = []
+    for t_key in sorted(corner_hits.keys()):
+        cells = corner_hits[t_key]
+        if len(cells) >= 2:
+            for i in range(len(cells)):
+                for j in range(i + 1, len(cells)):
+                    corner_pairs.append((cells[i], cells[j]))
+
+    return interior, corner_pairs
+
+
+def has_line_of_sight(
+    origin: dict[str, int],
+    target: dict[str, int],
+    terrain: dict[str, Any] | None,
+) -> bool:
+    """Return True if no wall blocks Line of Sight between `origin` and `target`."""
+    if not isinstance(terrain, dict) or not terrain.get("walls"):
+        return True
+    walls, _, _ = terrain_sets(terrain)
+    if not walls:
+        return True
+    interior, corner_pairs = _ray_intermediate_cells(origin, target)
+    for cell in interior:
+        if cell in walls:
+            return False
+    for c1, c2 in corner_pairs:
+        if c1 in walls and c2 in walls:
+            return False
+    return True
+
+
+def compute_cover(
+    origin: dict[str, int],
+    target: dict[str, int],
+    terrain: dict[str, Any] | None,
+) -> tuple[str | None, int]:
+    """Return `(cover_kind, bonus)` between `origin` and `target`.
+
+    Returns `("three_quarters", 5)`, `("half", 2)`, or `(None, 0)`, taking the
+    highest cover bonus among all cover squares crossed by the center-to-center ray.
+    """
+    if not isinstance(terrain, dict) or not terrain.get("cover"):
+        return None, 0
+    _, _, cover_map = terrain_sets(terrain)
+    if not cover_map:
+        return None, 0
+
+    interior, corner_pairs = _ray_intermediate_cells(origin, target)
+    best_kind: str | None = None
+    best_bonus = 0
+
+    for cell in interior:
+        kind = cover_map.get(cell)
+        if kind and COVER_BONUSES[kind] > best_bonus:
+            best_kind = kind
+            best_bonus = COVER_BONUSES[kind]
+
+    for c1, c2 in corner_pairs:
+        k1 = cover_map.get(c1)
+        k2 = cover_map.get(c2)
+        if k1 and k2:
+            # Passing directly between two cover tiles grants the lower of the two (or both if equal).
+            b = min(COVER_BONUSES[k1], COVER_BONUSES[k2])
+            if b > best_bonus:
+                best_bonus = b
+                best_kind = k1 if COVER_BONUSES[k1] == b else k2
+
+    return best_kind, best_bonus
+
+
+def movement_path_cost(
+    start: dict[str, int],
+    dest: dict[str, int],
+    bounds: dict[str, int] | None,
+    terrain: dict[str, Any] | None,
+    *,
+    is_prone: bool = False,
+    max_cost: int | None = None,
+) -> tuple[int | None, str | None]:
+    """Compute exact shortest 5-ft grid movement cost respecting bounds, walls, and difficult terrain.
+
+    Returns `(cost_ft, error_reason)`:
+    - `(cost, None)` if a valid path exists (caller still compares `cost` against remaining movement).
+    - `(None, error_msg)` if destination is out of bounds, on a wall, or completely blocked by walls.
+    """
+    sx, sy = int(start["x"]), int(start["y"])
+    dx, dy = int(dest["x"]), int(dest["y"])
+
+    if not in_bounds(dest, bounds):
+        return (
+            None,
+            f"Destination ({dx}, {dy}) is outside battlefield bounds "
+            f"[x: {bounds['min_x']}..{bounds['max_x']}, y: {bounds['min_y']}..{bounds['max_y']}].",
+        )
+
+    walls, difficult, _ = terrain_sets(terrain)
+    if (dx, dy) in walls:
+        return None, f"Destination ({dx}, {dy}) is blocked by a wall."
+
+    if (sx, sy) == (dx, dy):
+        return 0, None
+
+    # Fast path when no walls and no difficult terrain: rectangular bounds are convex.
+    if not walls and not difficult:
+        dist = distance_ft(start, dest)
+        cost = dist * 2 if is_prone else dist
+        return cost, None
+
+    if sx % 5 != 0 or sy % 5 != 0 or dx % 5 != 0 or dy % 5 != 0:
+        return None, f"Destination ({dx}, {dy}) must be aligned to the 5-ft grid."
+
+    # Determine deterministic search box (bounded by battlefield bounds when set).
+    if isinstance(bounds, dict):
+        box_min_x, box_max_x = int(bounds["min_x"]), int(bounds["max_x"])
+        box_min_y, box_max_y = int(bounds["min_y"]), int(bounds["max_y"])
+    else:
+        pad = 60
+        box_min_x = min(sx, dx) - pad
+        box_max_x = max(sx, dx) + pad
+        box_min_y = min(sy, dy) - pad
+        box_max_y = max(sy, dy) + pad
+
+    search_cap = max(int(max_cost) if max_cost is not None else 0, 240)
+    dist_map: dict[tuple[int, int], int] = {(sx, sy): 0}
+    heap: list[tuple[int, int, int]] = [(0, sx, sy)]
+
+    while heap:
+        cur_cost, cx, cy = heapq.heappop(heap)
+        if (cx, cy) == (dx, dy):
+            return cur_cost, None
+        if cur_cost > dist_map.get((cx, cy), search_cap + 1):
+            continue
+        if cur_cost >= search_cap:
+            continue
+
+        for step_x in (-5, 0, 5):
+            for step_y in (-5, 0, 5):
+                if step_x == 0 and step_y == 0:
+                    continue
+                nx, ny = cx + step_x, cy + step_y
+                if nx < box_min_x or nx > box_max_x or ny < box_min_y or ny > box_max_y:
+                    continue
+                if (nx, ny) in walls:
+                    continue
+                # Disallow cutting diagonally across a wall corner or squeezing through diagonal walls.
+                if step_x != 0 and step_y != 0:
+                    if (cx + step_x, cy) in walls or (cx, cy + step_y) in walls:
+                        continue
+                step_mult = 1 + (1 if is_prone else 0) + (1 if (nx, ny) in difficult else 0)
+                nxt_cost = cur_cost + 5 * step_mult
+                if nxt_cost > search_cap:
+                    continue
+                if nxt_cost < dist_map.get((nx, ny), search_cap + 1):
+                    dist_map[(nx, ny)] = nxt_cost
+                    heapq.heappush(heap, (nxt_cost, nx, ny))
+
+    return None, f"Path to ({dx}, {dy}) is blocked by a wall."
+
+
+def reachable_grid_costs(
+    start: dict[str, int],
+    max_move_ft: int,
+    bounds: dict[str, int] | None,
+    terrain: dict[str, Any] | None,
+    *,
+    is_prone: bool = False,
+) -> dict[tuple[int, int], int]:
+    """Return `{ (x, y): min_cost_ft }` for all 5-ft grid squares reachable within `max_move_ft`."""
+    sx, sy = int(start["x"]), int(start["y"])
+    budget = max(0, int(max_move_ft))
+    if budget < 5:
+        return {(sx, sy): 0}
+
+    walls, difficult, _ = terrain_sets(terrain)
+    if isinstance(bounds, dict):
+        box_min_x, box_max_x = int(bounds["min_x"]), int(bounds["max_x"])
+        box_min_y, box_max_y = int(bounds["min_y"]), int(bounds["max_y"])
+    else:
+        span = (budget // 5) * 5
+        box_min_x, box_max_x = sx - span, sx + span
+        box_min_y, box_max_y = sy - span, sy + span
+
+    dist_map: dict[tuple[int, int], int] = {(sx, sy): 0}
+    heap: list[tuple[int, int, int]] = [(0, sx, sy)]
+
+    while heap:
+        cur_cost, cx, cy = heapq.heappop(heap)
+        if cur_cost > dist_map.get((cx, cy), budget + 1):
+            continue
+        for step_x in (-5, 0, 5):
+            for step_y in (-5, 0, 5):
+                if step_x == 0 and step_y == 0:
+                    continue
+                nx, ny = cx + step_x, cy + step_y
+                if nx < box_min_x or nx > box_max_x or ny < box_min_y or ny > box_max_y:
+                    continue
+                if (nx, ny) in walls:
+                    continue
+                if step_x != 0 and step_y != 0:
+                    if (cx + step_x, cy) in walls or (cx, cy + step_y) in walls:
+                        continue
+                step_mult = 1 + (1 if is_prone else 0) + (1 if (nx, ny) in difficult else 0)
+                nxt_cost = cur_cost + 5 * step_mult
+                if nxt_cost > budget:
+                    continue
+                if nxt_cost < dist_map.get((nx, ny), budget + 1):
+                    dist_map[(nx, ny)] = nxt_cost
+                    heapq.heappush(heap, (nxt_cost, nx, ny))
+
+    return dist_map
 
 
 # ----------------------------------------------------------------------
@@ -638,6 +1097,8 @@ def _roll_save(
     tracker: _StepTracker,
     *,
     reason: str = "save",
+    source_pos: dict[str, int] | None = None,
+    ignore_cover: bool = False,
 ) -> dict[str, Any]:
     target = state["combatants"][target_id]
     ab = strip_prefix(ability)
@@ -685,11 +1146,29 @@ def _roll_save(
     else:
         mode = "normal"
 
+    cover_kind: str | None = None
+    cover_bonus = 0
+    cover_fields: dict[str, Any] = {}
+    if ab == "dex" and source_pos is not None:
+        raw_cover_kind, raw_cover_bonus = compute_cover(source_pos, target["position"], state.get("terrain"))
+        if raw_cover_bonus > 0 and raw_cover_kind:
+            if ignore_cover:
+                cover_kind = "none"
+                cover_bonus = 0
+                cover_fields["cover"] = "none"
+                cover_fields["cover_save_bonus"] = 0
+                cover_fields["cover_ignored"] = True
+            else:
+                cover_kind = raw_cover_kind
+                cover_bonus = raw_cover_bonus
+                cover_fields["cover"] = cover_kind
+                cover_fields["cover_save_bonus"] = cover_bonus
+
     d20 = rng.roll_d20(mode)
     base_mod = int(target["saves"].get(ab, 0))
     exh_pen = -2 * _exhaustion_level(target)
     bb_bonus, bb_details = _roll_bless_bane(target, "save", rng)
-    total = int(d20["chosen"]) + base_mod + exh_pen + bb_bonus
+    total = int(d20["chosen"]) + base_mod + exh_pen + bb_bonus + cover_bonus
     success = total >= int(dc)
 
     ev = tracker.emit(
@@ -707,6 +1186,7 @@ def _roll_save(
         total=total,
         success=success,
         reason=reason,
+        **cover_fields,
     )
     _maybe_legendary_resistance(target_id, target, ev, tracker)
     return ev
@@ -1349,7 +1829,8 @@ def _resolve_single_weapon_attack(
     exh_pen = -2 * _exhaustion_level(attacker)
     bb_bonus, bb_details = _roll_bless_bane(attacker, "attack", rng)
     total_to_hit = int(d20["chosen"]) + atk_bonus + exh_pen + bb_bonus
-    target_ac = _effective_ac(target)
+    cover_kind, cover_bonus = compute_cover(attacker["position"], target["position"], state.get("terrain"))
+    target_ac = _effective_ac(target) + cover_bonus
 
     if d20["nat1"]:
         hit = False
@@ -1375,6 +1856,11 @@ def _resolve_single_weapon_attack(
     if hit and not crit and dist <= 5 and _has_modifier_flag(target, "auto_crit_within_5ft", rules):
         crit = True
 
+    cover_fields: dict[str, Any] = {}
+    if cover_bonus > 0 and cover_kind:
+        cover_fields["cover"] = cover_kind
+        cover_fields["cover_ac_bonus"] = cover_bonus
+
     tracker.emit(
         "attack_roll",
         actor_id=attacker_id,
@@ -1394,16 +1880,18 @@ def _resolve_single_weapon_attack(
         target_ac=target_ac,
         hit=hit,
         crit=crit,
+        **cover_fields,
     )
 
     mastery = weapon.get("mastery") if (use_mastery and weapon.get("mastery_active")) else None
     atk_ab = str(weapon.get("attack_ability") or "str")
     atk_ab_mod = int(attacker["ability_mods"].get(atk_ab, 0))
     dmg_type = str(weapon.get("damage_type") or "bludgeoning")
+    cover_txt = f" [{_COVER_LABELS[cover_kind]} +{cover_bonus} AC]" if (cover_bonus > 0 and cover_kind) else ""
 
     if not hit:
         tracker.hook(
-            f"{attacker['name']} misses {target['name']} with {weapon['name']} ({total_to_hit} vs AC {target_ac})."
+            f"{attacker['name']} misses {target['name']} with {weapon['name']} ({total_to_hit} vs AC {target_ac}{cover_txt})."
         )
         # Graze mastery on miss!
         if mastery == "graze":
@@ -1463,7 +1951,7 @@ def _resolve_single_weapon_attack(
     tracker.hooks.insert(
         hit_hook_idx,
         f"{attacker['name']} hits {target['name']} with {weapon['name']}{crit_txt} "
-        f"({total_to_hit} vs AC {target_ac}) for {eff_dmg} {dmg_type} damage.",
+        f"({total_to_hit} vs AC {target_ac}{cover_txt}) for {eff_dmg} {dmg_type} damage.",
     )
     # A smite (#6) can follow a melee hit on the attacker's own turn. Recorded only for casters who know one,
     # so nobody else's state changes. Cleared when turn_resources reset at the start of the next turn.
@@ -1484,35 +1972,80 @@ def _resolve_single_weapon_attack(
             if sx == 0 and sy == 0:
                 sx = 1
             old_pos = copy.deepcopy(target["position"])
-            # Push moves the target "up to 10 feet": stop short rather than end in an occupied space (#53).
-            push_ft = 0
+            # Push moves the target "up to 10 feet": stop cleanly at bounds/walls AND
+            # never end in another living non-Tiny creature's space (#53, M6.1/M6.2).
+            cur_x, cur_y = int(old_pos["x"]), int(old_pos["y"])
+            bounds = state.get("bounds")
+            terrain = state.get("terrain")
+            walls, _, _ = terrain_sets(terrain)
+            stopped_by: str | None = None
+            reachable_steps: list[dict[str, int]] = []
+            for _ in range(2):
+                nx, ny = cur_x + sx * 5, cur_y + sy * 5
+                cand = {"x": nx, "y": ny}
+                if not in_bounds(cand, bounds):
+                    stopped_by = "bounds"
+                    break
+                if (nx, ny) in walls:
+                    stopped_by = "wall"
+                    break
+                if sx != 0 and sy != 0 and ((cur_x + sx * 5, cur_y) in walls or (cur_x, cur_y + sy * 5) in walls):
+                    stopped_by = "wall"
+                    break
+                reachable_steps.append(cand)
+                cur_x, cur_y = nx, ny
+
+            new_pos = copy.deepcopy(old_pos)
             blocked_by: str | None = None
-            for step_ft in (10, 5):
-                cand = {"x": old_pos["x"] + sx * step_ft, "y": old_pos["y"] + sy * step_ft}
+            for cand in reversed(reachable_steps):
                 occupant = square_occupant(state, target_id, cand)
                 if occupant is None:
-                    push_ft = step_ft
+                    new_pos = cand
                     break
                 if blocked_by is None:
                     blocked_by = occupant
-            target["position"] = {"x": old_pos["x"] + sx * push_ft, "y": old_pos["y"] + sy * push_ft}
+
+            actual_dist = distance_ft(old_pos, new_pos)
+            target["position"] = new_pos
             push_event: dict[str, Any] = {
                 "mastery": "push",
                 "actor_id": attacker_id,
                 "target_id": target_id,
                 "from_pos": old_pos,
                 "to_pos": copy.deepcopy(target["position"]),
-                "distance_ft": push_ft,
+                "distance_ft": actual_dist,
             }
-            if push_ft < 10:
+            if stopped_by is not None:
+                push_event["stopped_by"] = stopped_by
+            if blocked_by is not None and actual_dist < 10:
                 push_event["blocked_by"] = blocked_by
             tracker.emit("mastery_triggered", **push_event)
-            if push_ft == 10:
-                tracker.hook(f"Push mastery shoves {target['name']} 10 ft away to ({target['position']['x']}, {target['position']['y']}).")
-            elif push_ft:
-                tracker.hook(f"Push mastery shoves {target['name']} only 5 ft, to ({target['position']['x']}, {target['position']['y']}); the next square is occupied.")
+            if actual_dist == 10:
+                tracker.hook(
+                    f"Push mastery shoves {target['name']} 10 ft away to ({target['position']['x']}, {target['position']['y']})."
+                )
+            elif blocked_by is not None and stopped_by is None:
+                if actual_dist > 0:
+                    tracker.hook(
+                        f"Push mastery shoves {target['name']} only {actual_dist} ft, to "
+                        f"({target['position']['x']}, {target['position']['y']}); the next square is occupied."
+                    )
+                else:
+                    tracker.hook(
+                        f"Push mastery can't move {target['name']}: the squares behind it are occupied."
+                    )
+            elif actual_dist > 0:
+                reason = f"{stopped_by} and an occupied square" if blocked_by is not None else str(stopped_by)
+                tracker.hook(
+                    f"Push mastery shoves {target['name']} {actual_dist} ft to ({target['position']['x']}, {target['position']['y']}) "
+                    f"(stopped by {reason})."
+                )
             else:
-                tracker.hook(f"Push mastery can't move {target['name']}: the squares behind it are occupied.")
+                reason = f"{stopped_by} and an occupied square" if blocked_by is not None else str(stopped_by)
+                tracker.hook(
+                    f"Push mastery tries to shove {target['name']}, but {target['name']} is stopped by {reason} at "
+                    f"({target['position']['x']}, {target['position']['y']})."
+                )
         else:
             tracker.emit(
                 "mastery_skipped",
@@ -1737,6 +2270,10 @@ def _resolve_monster_action(
     dmg_parts_ir = action.get("damage_parts") or []
 
     if not is_attack and isinstance(save_block, dict):
+        terrain = state.get("terrain")
+        for tid in target_ids:
+            if not has_line_of_sight(actor["position"], state["combatants"][tid]["position"], terrain):
+                return False, f"No line of sight to '{tid}' for '{act_name}': blocked by a wall."
         save_ab = strip_prefix(save_block.get("ability") or "dex")
         save_dc = int(save_block.get("dc") or 10)
         on_success = str(save_block.get("on_success") or "none").lower()
@@ -1760,7 +2297,17 @@ def _resolve_monster_action(
         )
 
         for tid in target_ids:
-            save_ev = _roll_save(state, tid, save_ab, save_dc, rules, rng, tracker, reason=act_name)
+            save_ev = _roll_save(
+                state,
+                tid,
+                save_ab,
+                save_dc,
+                rules,
+                rng,
+                tracker,
+                reason=act_name,
+                source_pos=actor["position"],
+            )
             save_idx = len(tracker.hooks)  # this target's save line goes before any 0-HP / concentration lines
             took: int | None = None
             if rolled_parts:
@@ -1788,9 +2335,12 @@ def _resolve_monster_action(
                         save_dc=save_dc,
                     ):
                         applied_conds.append(c_slug.replace("-", " ").title())
+            cov_save = save_ev.get("cover_save_bonus")
+            cov_kind = save_ev.get("cover")
+            cov_note = f" [{_COVER_LABELS[cov_kind]} +{cov_save} DEX save]" if (cov_save and cov_kind in _COVER_LABELS) else ""
             line = (
                 f"{state['combatants'][tid]['name']} {'saves' if save_ev['success'] else 'fails'} "
-                f"against {actor['name']}'s {act_name} (DC {save_dc})"
+                f"against {actor['name']}'s {act_name} (DC {save_dc}{cov_note})"
             )
             if took is not None:
                 line += f" and takes {took} damage"
@@ -1817,6 +2367,9 @@ def _resolve_monster_action(
         if dist > reach_ft:
             return False, f"Target '{tid}' is out of reach ({dist} ft > {reach_ft} ft)."
 
+    if not has_line_of_sight(actor["position"], target["position"], state.get("terrain")):
+        return False, f"No line of sight to '{tid}': blocked by a wall."
+
     mode, adv_src, disadv_src, consume = _gather_attack_roll_mode(
         state,
         actor,
@@ -1835,7 +2388,8 @@ def _resolve_monster_action(
     exh_pen = -2 * _exhaustion_level(actor)
     bb_bonus, bb_details = _roll_bless_bane(actor, "attack", rng)
     total_to_hit = int(d20["chosen"]) + atk_bonus + exh_pen + bb_bonus
-    target_ac = _effective_ac(target)
+    cover_kind, cover_bonus = compute_cover(actor["position"], target["position"], state.get("terrain"))
+    target_ac = _effective_ac(target) + cover_bonus
 
     if d20["nat1"]:
         hit = False
@@ -1860,6 +2414,11 @@ def _resolve_monster_action(
     if hit and not crit and dist <= 5 and _has_modifier_flag(target, "auto_crit_within_5ft", rules):
         crit = True
 
+    cover_fields: dict[str, Any] = {}
+    if cover_bonus > 0 and cover_kind:
+        cover_fields["cover"] = cover_kind
+        cover_fields["cover_ac_bonus"] = cover_bonus
+
     tracker.emit(
         "attack_roll",
         actor_id=actor_id,
@@ -1879,10 +2438,13 @@ def _resolve_monster_action(
         target_ac=target_ac,
         hit=hit,
         crit=crit,
+        **cover_fields,
     )
 
+    cover_txt = f" [{_COVER_LABELS[cover_kind]} +{cover_bonus} AC]" if (cover_bonus > 0 and cover_kind) else ""
+
     if not hit:
-        tracker.hook(f"{actor['name']} misses {target['name']} with {act_name} ({total_to_hit} vs AC {target_ac}).")
+        tracker.hook(f"{actor['name']} misses {target['name']} with {act_name} ({total_to_hit} vs AC {target_ac}{cover_txt}).")
         return True, None
 
     dmg_to_apply: list[dict[str, Any]] = []
@@ -1912,7 +2474,7 @@ def _resolve_monster_action(
     tracker.hooks.insert(
         hit_hook_idx,
         f"{actor['name']} hits {target['name']} with {act_name}{' (CRITICAL HIT!)' if crit else ''} "
-        f"({total_to_hit} vs AC {target_ac}) for {eff_dmg} damage.",
+        f"({total_to_hit} vs AC {target_ac}{cover_txt}) for {eff_dmg} damage.",
     )
 
     # Rider saves & conditions (e.g., Ghoul Claw CON DC 10 -> paralyzed, Wolf Bite -> prone).
@@ -2370,6 +2932,12 @@ def step(
         if not isinstance(raw_combatants, list) or not raw_combatants:
             return _invalid({}, "start_encounter requires a non-empty 'combatants' list.", rules)
 
+        try:
+            bounds = validate_bounds(intent.get("bounds"))
+            terrain = validate_terrain(intent.get("terrain"))
+        except ValueError as exc:
+            return _invalid(safe_start, str(exc), rules)
+
         rng = DeterministicRNG(seed=seed, draw_index=0, roll_overrides=roll_overrides)
         tracker = _StepTracker(None)
         combatants: dict[str, dict[str, Any]] = {}
@@ -2390,6 +2958,22 @@ def step(
                     return _invalid({}, f"Combatant '{cid}' must provide either 'statblock' or 'monster'.", rules)
             except ValueError as exc:
                 return _invalid({}, str(exc), rules)
+
+            if not in_bounds(comb["position"], bounds):
+                pos = comb["position"]
+                return _invalid(
+                    safe_start,
+                    f"Combatant '{cid}' initial position ({pos['x']}, {pos['y']}) is outside battlefield bounds "
+                    f"[x: {bounds['min_x']}..{bounds['max_x']}, y: {bounds['min_y']}..{bounds['max_y']}].",
+                    rules,
+                )
+            if is_wall(comb["position"], terrain):
+                pos = comb["position"]
+                return _invalid(
+                    safe_start,
+                    f"Combatant '{cid}' initial position ({pos['x']}, {pos['y']}) is on an impassable wall.",
+                    rules,
+                )
 
             # Optional initial conditions on start_encounter.
             for init_cond in entry.get("conditions") or []:
@@ -2443,6 +3027,10 @@ def step(
             "pending_reroll": None,
             "combatants": combatants,
         }
+        if bounds is not None:
+            new_state["bounds"] = bounds
+        if terrain is not None:
+            new_state["terrain"] = terrain
 
         # Check exhaustion 6 on start.
         for cid in turn_order:
@@ -2556,6 +3144,25 @@ def step(
 
         dist = distance_ft(actor["position"], to_pos)
         if dist > 0:
+            # Battlefield bounds & wall / terrain pathfinding enforcement (M6.1 / M6.2).
+            bounds = s.get("bounds")
+            terrain = s.get("terrain")
+            is_prone = "prone" in _effective_conditions(actor, rules)
+            move_cost, path_err = movement_path_cost(
+                actor["position"],
+                to_pos,
+                bounds,
+                terrain,
+                is_prone=is_prone,
+                max_cost=rem,
+            )
+            if path_err is not None or move_cost is None:
+                return _invalid(
+                    copy.deepcopy(state),
+                    path_err or f"Destination ({to_pos['x']}, {to_pos['y']}) is unreachable.",
+                    rules,
+                )
+
             # Frightened: cannot willingly move closer to fear source.
             if "frightened" in _effective_conditions(actor, rules):
                 for fe in _condition_entries_for(actor, "frightened"):
@@ -2569,13 +3176,11 @@ def step(
                                 rules,
                             )
 
-            # Crawling while Prone costs double movement.
-            is_prone = "prone" in _effective_conditions(actor, rules)
-            move_cost = dist * 2 if is_prone else dist
             if move_cost > rem:
+                extra_txt = "difficult terrain" if move_cost > (dist * 2 if is_prone else dist) else ("crawling" if is_prone else "walking")
                 return _invalid(
                     copy.deepcopy(state),
-                    f"Insufficient movement: need {move_cost} ft ({'crawling' if is_prone else 'walking'}), have {rem} ft.",
+                    f"Insufficient movement: need {move_cost} ft ({extra_txt}), have {rem} ft.",
                     rules,
                 )
             old_pos = copy.deepcopy(actor["position"])
@@ -2743,6 +3348,13 @@ def step(
             max_throw = int(throw_range.get("long_ft") or throw_range.get("normal_ft") or 0) if isinstance(throw_range, dict) else 0
             if dist > reach_ft and dist > max_throw:
                 return _invalid(copy.deepcopy(state), f"Target '{tid}' out of reach ({dist} ft > {reach_ft} ft).", rules)
+
+        if not has_line_of_sight(actor["position"], target["position"], s.get("terrain")):
+            return _invalid(
+                copy.deepcopy(state),
+                f"No line of sight to '{tid}': blocked by a wall.",
+                rules,
+            )
 
         offhand = bool(intent.get("offhand", False))
         use_mastery = bool(intent.get("use_mastery", True))
@@ -3019,6 +3631,101 @@ def step(
                         rules,
                     )
 
+        # AoE origin resolution & Line of Sight checks (M6.2 / MF2):
+        # - Non-AoE targeted spells require LoS from caster to every target.
+        # - AoE spells measure LoS and Cover from the AoE point of origin (caster for Self-originated AoEs,
+        #   or explicit origin/target_point/point or primary in-LoS target for ranged-point AoEs).
+        #   Targets behind total cover (wall) from the AoE origin are dropped individually without
+        #   refusing the spell or refunding the slot when a valid point/target exists.
+        terrain = s.get("terrain")
+        aoe_info = _spell_aoe_info(spell_slug, spell)
+        aoe_shape = str(aoe_info.get("shape") or "").strip().lower() if isinstance(aoe_info, dict) else ""
+        is_self_origin_aoe = bool(
+            aoe_info is not None
+            and (
+                self_range
+                or aoe_shape in ("cone", "emanation")
+                or spell_slug in ("thunderwave", "burning-hands", "spirit-guardians")
+            )
+        )
+        aoe_origin: dict[str, int] | None = None
+        explicit_aoe_origin = False
+        blocked_aoe_targets: list[str] = []
+
+        if aoe_info is not None:
+            if is_self_origin_aoe:
+                aoe_origin = copy.deepcopy(actor["position"])
+            else:
+                raw_origin = intent.get("origin")
+                if raw_origin is None:
+                    raw_origin = intent.get("target_point")
+                if raw_origin is None:
+                    raw_origin = intent.get("point")
+                if raw_origin is not None:
+                    parsed_origin = _parse_point(raw_origin)
+                    if parsed_origin is None:
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"Spell '{spell_slug}' AoE origin must be {{x, y}} with integer coordinates.",
+                            rules,
+                        )
+                    if not in_bounds(parsed_origin, s.get("bounds")):
+                        b = s["bounds"]
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"AoE origin ({parsed_origin['x']}, {parsed_origin['y']}) for '{spell_slug}' is outside battlefield bounds "
+                            f"[x: {b['min_x']}..{b['max_x']}, y: {b['min_y']}..{b['max_y']}].",
+                            rules,
+                        )
+                    if is_wall(parsed_origin, terrain):
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"AoE origin ({parsed_origin['x']}, {parsed_origin['y']}) for '{spell_slug}' is blocked by a wall.",
+                            rules,
+                        )
+                    if parsed_origin != actor["position"] and not has_line_of_sight(actor["position"], parsed_origin, terrain):
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"No line of sight to AoE origin ({parsed_origin['x']}, {parsed_origin['y']}) for '{spell_slug}': blocked by a wall.",
+                            rules,
+                        )
+                    aoe_origin = parsed_origin
+                    explicit_aoe_origin = True
+                elif target_ids:
+                    for tid in target_ids:
+                        t_pos = s["combatants"][tid]["position"]
+                        if tid == actor_id or has_line_of_sight(actor["position"], t_pos, terrain):
+                            aoe_origin = copy.deepcopy(t_pos)
+                            break
+                    if aoe_origin is None:
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"No line of sight to any target for '{spell_slug}': blocked by a wall.",
+                            rules,
+                        )
+
+            if terrain and aoe_origin is not None and target_ids:
+                kept_targets: list[str] = []
+                for tid in target_ids:
+                    t_pos = s["combatants"][tid]["position"]
+                    if has_line_of_sight(aoe_origin, t_pos, terrain):
+                        kept_targets.append(tid)
+                    else:
+                        blocked_aoe_targets.append(tid)
+                target_ids = kept_targets
+        else:
+            if terrain and target_ids:
+                for tid in target_ids:
+                    if tid == actor_id:
+                        continue
+                    t_pos = s["combatants"][tid]["position"]
+                    if not has_line_of_sight(actor["position"], t_pos, terrain):
+                        return _invalid(
+                            copy.deepcopy(state),
+                            f"No line of sight to '{tid}' for '{spell_slug}': blocked by a wall.",
+                            rules,
+                        )
+
         # Concentration handling (drop previous concentration first!).
         is_conc = bool(spell.get("concentration", False))
         if is_conc:
@@ -3072,6 +3779,10 @@ def step(
                 "narrative_hooks": tracker.hooks,
             }
 
+        spell_cast_extra: dict[str, Any] = {}
+        if aoe_origin is not None and (explicit_aoe_origin or terrain is not None):
+            spell_cast_extra["aoe_origin"] = copy.deepcopy(aoe_origin)
+
         tracker.emit(
             "spell_cast",
             actor_id=actor_id,
@@ -3080,9 +3791,22 @@ def step(
             target_ids=target_ids,
             coverage=coverage,
             unmodeled_clauses=unmodeled,
+            **spell_cast_extra,
         )
 
         spell_name = str(spell.get("name") or spell_slug)
+
+        for b_tid in blocked_aoe_targets:
+            b_name = s["combatants"][b_tid]["name"]
+            tracker.emit(
+                "spell_target_blocked",
+                actor_id=actor_id,
+                target_id=b_tid,
+                spell=spell_slug,
+                reason="total_cover",
+                origin=copy.deepcopy(aoe_origin),
+            )
+            tracker.hook(f"{b_name} has total cover from {spell_name} and is unaffected.")
 
         # 1. Teleport (Misty Step).
         buffs = list(spell.get("buffs") or [])
@@ -3101,6 +3825,26 @@ def step(
                     return _invalid(
                         copy.deepcopy(state),
                         f"Teleport destination exceeds {max_d} ft for '{spell_slug}'.",
+                        rules,
+                    )
+                bounds = s.get("bounds")
+                if not in_bounds(to_pos, bounds):
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"Teleport destination ({to_pos['x']}, {to_pos['y']}) is outside battlefield bounds "
+                        f"[x: {bounds['min_x']}..{bounds['max_x']}, y: {bounds['min_y']}..{bounds['max_y']}].",
+                        rules,
+                    )
+                if is_wall(to_pos, s.get("terrain")):
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"Teleport destination ({to_pos['x']}, {to_pos['y']}) is blocked by a wall.",
+                        rules,
+                    )
+                if not has_line_of_sight(actor["position"], to_pos, s.get("terrain")):
+                    return _invalid(
+                        copy.deepcopy(state),
+                        f"Teleport destination ({to_pos['x']}, {to_pos['y']}) for '{spell_slug}' has no line of sight: blocked by a wall.",
                         rules,
                     )
                 blocker_id = square_occupant(s, actor_id, to_pos)
@@ -3245,10 +3989,11 @@ def step(
 
         # A Self-origin spell with no one else to affect (#67, #81 MF1): legal, and nothing to roll.
         elif resolution in ("attack", "save") and castable_without_target and not target_ids:
-            if harmful_self_area:
-                tracker.hook(f"{actor['name']} casts {spell_name}; no other creature is in its area.")
-            else:
-                tracker.hook(f"{actor['name']} casts {spell_name}; it has no other creature to affect yet.")
+            if not blocked_aoe_targets:
+                if harmful_self_area:
+                    tracker.hook(f"{actor['name']} casts {spell_name}; no other creature is in its area.")
+                else:
+                    tracker.hook(f"{actor['name']} casts {spell_name}; it has no other creature to affect yet.")
 
         # 5. Spell attack resolution (`fire-bolt`, `scorching-ray`, `eldritch-blast`, `guiding-bolt`, `ray-of-frost`, etc.).
         elif resolution == "attack":
@@ -3286,7 +4031,8 @@ def step(
                 exh_pen = -2 * _exhaustion_level(actor)
                 bb_bonus, bb_details = _roll_bless_bane(actor, "attack", rng)
                 total_to_hit = int(d20["chosen"]) + spell_atk + exh_pen + bb_bonus
-                t_ac = _effective_ac(t)
+                cover_kind, cover_bonus = compute_cover(actor["position"], t["position"], s.get("terrain"))
+                t_ac = _effective_ac(t) + cover_bonus
 
                 if d20["nat1"]:
                     hit, crit = False, False
@@ -3304,6 +4050,11 @@ def step(
                 if hit and not crit and dist <= 5 and _has_modifier_flag(t, "auto_crit_within_5ft", rules):
                     crit = True
 
+                cover_fields: dict[str, Any] = {}
+                if cover_bonus > 0 and cover_kind:
+                    cover_fields["cover"] = cover_kind
+                    cover_fields["cover_ac_bonus"] = cover_bonus
+
                 tracker.emit(
                     "spell_attack_roll",
                     actor_id=actor_id,
@@ -3319,11 +4070,14 @@ def step(
                     target_ac=t_ac,
                     hit=hit,
                     crit=crit,
+                    **cover_fields,
                 )
+
+                cover_txt = f" [{_COVER_LABELS[cover_kind]} +{cover_bonus} AC]" if (cover_bonus > 0 and cover_kind) else ""
 
                 if not hit:
                     tracker.hook(
-                        f"{actor['name']} misses {t['name']} with {spell_name} ({total_to_hit} vs AC {t_ac})."
+                        f"{actor['name']} misses {t['name']} with {spell_name} ({total_to_hit} vs AC {t_ac}{cover_txt})."
                     )
                     continue
 
@@ -3350,12 +4104,12 @@ def step(
                         tracker.hooks.insert(
                             pre_hit_hooks,
                             f"{actor['name']} hits {t['name']} with {spell_name} "
-                            f"({total_to_hit} vs AC {t_ac}){crit_txt} for {eff_dmg} {dtype_txt} damage.",
+                            f"({total_to_hit} vs AC {t_ac}{cover_txt}){crit_txt} for {eff_dmg} {dtype_txt} damage.",
                         )
                     else:
                         tracker.hook(
                             f"{actor['name']} hits {t['name']} with {spell_name} "
-                            f"({total_to_hit} vs AC {t_ac}){crit_txt}."
+                            f"({total_to_hit} vs AC {t_ac}{cover_txt}){crit_txt}."
                         )
 
                     # On-hit buffs/effects (e.g., guiding-bolt next_attack_advantage, ray-of-frost slow).
@@ -3425,28 +4179,51 @@ def step(
         # 6. Saving throw spells (`fireball`, `lightning-bolt`, `sacred-flame`, `hold-person`, `bane`, `vicious-mockery`).
         elif resolution == "save":
             if not target_ids:
-                return _invalid(copy.deepcopy(state), f"Spell '{spell_slug}' requires at least one target.", rules)
+                if not (blocked_aoe_targets or explicit_aoe_origin):
+                    return _invalid(copy.deepcopy(state), f"Spell '{spell_slug}' requires at least one target.", rules)
             save_ir = spell.get("save") or {}
             save_ab = strip_prefix(save_ir.get("ability") or "dex")
             on_success = str(save_ir.get("on_success") or "none").lower()
+            save_source_pos = aoe_origin if aoe_origin is not None else actor["position"]
+            ignore_cov = spell_slug in COVER_IGNORING_SPELLS
 
             # Roll damage once across AoE targets.
             rolled_parts: list[dict[str, Any]] = []
-            for d_idx, d in enumerate(dmg_list):
-                base_d = str(d["dice"])
-                if spell_level == 0:
-                    eff_d = _cantrip_scaled_dice(base_d, scaling, caster_level)
-                elif d_idx == 0 and upcast > 0 and scaling.get("slot_damage_per_level"):
-                    eff_d = scale_dice_expr(base_d, scaling["slot_damage_per_level"], upcast)
-                else:
-                    eff_d = base_d
-                res_d = rng.roll_dice_expr(eff_d, crit=False)
-                amt = max(0, int(res_d["total"]) + (spell_mod if d.get("add_spell_mod") else 0))
-                rolled_parts.append({"amount": amt, "type": strip_prefix(d["type"]), "dice": eff_d, "rolls": res_d["rolls"]})
+            if target_ids:
+                for d_idx, d in enumerate(dmg_list):
+                    base_d = str(d["dice"])
+                    if spell_level == 0:
+                        eff_d = _cantrip_scaled_dice(base_d, scaling, caster_level)
+                    elif d_idx == 0 and upcast > 0 and scaling.get("slot_damage_per_level"):
+                        eff_d = scale_dice_expr(base_d, scaling["slot_damage_per_level"], upcast)
+                    else:
+                        eff_d = base_d
+                    res_d = rng.roll_dice_expr(eff_d, crit=False)
+                    amt = max(0, int(res_d["total"]) + (spell_mod if d.get("add_spell_mod") else 0))
+                    rolled_parts.append({"amount": amt, "type": strip_prefix(d["type"]), "dice": eff_d, "rolls": res_d["rolls"]})
 
             for tid in target_ids:
                 t_name = s["combatants"][tid]["name"]
-                save_ev = _roll_save(s, tid, save_ab, spell_dc, rules, rng, tracker, reason=spell_slug)
+                save_ev = _roll_save(
+                    s,
+                    tid,
+                    save_ab,
+                    spell_dc,
+                    rules,
+                    rng,
+                    tracker,
+                    reason=spell_slug,
+                    source_pos=save_source_pos,
+                    ignore_cover=ignore_cov,
+                )
+                cov_save = save_ev.get("cover_save_bonus")
+                cov_kind = save_ev.get("cover")
+                if cov_save and cov_kind in _COVER_LABELS:
+                    cov_note = f" [{_COVER_LABELS[cov_kind]} +{cov_save} DEX save]"
+                elif save_ev.get("cover_ignored"):
+                    cov_note = " [cover ignored]"
+                else:
+                    cov_note = ""
                 save_dmg_hook_emitted = False
                 if rolled_parts:
                     if not save_ev["success"]:
@@ -3461,13 +4238,13 @@ def step(
                         dtype_txt = "/".join(dict.fromkeys(p["type"] for p in adj))
                         tracker.hooks.insert(
                             pre_save_hooks,
-                            f"{actor['name']} casts {spell_name} (DC {spell_dc} {save_ab.upper()}): "
+                            f"{actor['name']} casts {spell_name} (DC {spell_dc} {save_ab.upper()}{cov_note}): "
                             f"{t_name} {'succeeds' if save_ev['success'] else 'fails'} and takes {eff} {dtype_txt} damage.",
                         )
                         save_dmg_hook_emitted = True
                     else:
                         tracker.hook(
-                            f"{actor['name']} casts {spell_name} (DC {spell_dc} {save_ab.upper()}): "
+                            f"{actor['name']} casts {spell_name} (DC {spell_dc} {save_ab.upper()}{cov_note}): "
                             f"{t_name} succeeds and takes no damage."
                         )
                         save_dmg_hook_emitted = True

@@ -182,7 +182,7 @@ def client_view(observation: dict[str, Any]) -> dict[str, Any]:
         return str(c.get("spell")) if isinstance(c, dict) and c.get("spell") else None
 
     slots = _available_slots_map(me) if isinstance(me.get("spellcasting"), dict) else {}
-    return {
+    view: dict[str, Any] = {
         "round": int(observation.get("round", 1)),
         "scenario": {
             "id": str((observation.get("scenario") or {}).get("id") or ""),
@@ -255,6 +255,28 @@ def client_view(observation: dict[str, Any]) -> dict[str, Any]:
         "recent_events": [_sanitize_hook_for_hud(str(h), enemy_names) for h in observation.get("recent_events") or []],
         "retry_feedback": str(observation["retry_feedback"]) if observation.get("retry_feedback") else None,
     }
+    raw_bounds = observation.get("bounds")
+    if isinstance(raw_bounds, dict) and all(k in raw_bounds for k in ("min_x", "min_y", "max_x", "max_y")):
+        view["bounds"] = {
+            "min_x": int(raw_bounds["min_x"]),
+            "min_y": int(raw_bounds["min_y"]),
+            "max_x": int(raw_bounds["max_x"]),
+            "max_y": int(raw_bounds["max_y"]),
+        }
+    raw_terrain = observation.get("terrain")
+    if isinstance(raw_terrain, dict):
+        view["terrain"] = {
+            "walls": [[int(p[0]), int(p[1])] for p in (raw_terrain.get("walls") or []) if isinstance(p, (list, tuple)) and len(p) == 2],
+            "difficult_terrain": [
+                [int(p[0]), int(p[1])] for p in (raw_terrain.get("difficult_terrain") or []) if isinstance(p, (list, tuple)) and len(p) == 2
+            ],
+            "cover": [
+                {"x": int(c["x"]), "y": int(c["y"]), "kind": str(c["kind"])}
+                for c in (raw_terrain.get("cover") or [])
+                if isinstance(c, dict) and "x" in c and "y" in c and str(c.get("kind")) in ("half", "three_quarters")
+            ],
+        }
+    return view
 
 
 def _menu_for_client(menu: list[dict[str, Any]]) -> list[dict[str, Any]]:

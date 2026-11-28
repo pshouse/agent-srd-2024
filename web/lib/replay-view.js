@@ -7,7 +7,7 @@
  * setAttribute, and SVG geometry numbers, never as parsed HTML.
  */
 
-import { createBoard, el, logLine, notice, paintBoard, paintRoster } from "./board-view.js";
+import { createBoard, el, logLine, notice, paintBoard, paintRoster, terrainLegendItems } from "./board-view.js";
 import { MAX_LOCAL_BYTES, boardBounds, buildReplay, parseTraceText, validateReplayIndex } from "./replay-model.js";
 import { PLAY_INTERVAL_MS, initialPlayer, keyCommand, reducePlayer, stepLabel, turnStarts } from "./replay-player.js";
 import { replayHash } from "./router.js";
@@ -244,13 +244,14 @@ function mountViewer(stage, replay, source, me, signal, startAt) {
   const pos = el("span", { class: "rp-pos" });
   controls.append(first, prev, play, next, last, el("div", { class: "rp-scrub" }, [slider, pos]));
 
-  const b = boardBounds(replay.frames);
-  const { svg, layer } = createBoard(b);
+  const b = boardBounds(replay.frames, replay.bounds, replay.terrain);
+  const { svg, layer } = createBoard(b, { bounds: replay.bounds, terrain: replay.terrain });
   const board = el("div", { class: "g-canvas" }, [svg]);
   const legend = el("p", { class: "legend" });
   legend.append(
     el("span", {}, [el("i", { class: "rp-sw-party" }), " Party"]),
     el("span", {}, [el("i", { class: "rp-sw-enemy" }), " Enemies"]),
+    ...terrainLegendItems(replay.bounds, replay.terrain),
     el("span", { text: "Dashed square: shared square (count shown)" }),
     el("span", { text: "Gold outline: active turn" }),
   );

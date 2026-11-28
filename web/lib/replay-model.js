@@ -90,6 +90,8 @@ export function validateTrace(trace) {
     fail("initial_state.turn_order must list combatant ids.");
   }
   if (!isInt(init.active_index)) fail("initial_state.active_index must be an integer.");
+  for (const msg of validateBounds(init.bounds)) fail(`initial_state.${msg}`);
+  for (const msg of validateTerrain(init.terrain)) fail(`initial_state.${msg}`);
 
   if (!Array.isArray(trace.actions)) {
     fail("actions must be a list.");
@@ -160,6 +162,53 @@ function checkDiff(diff, ids, at, fail) {
 
 const strList = (v) => Array.isArray(v) && v.every(isStr);
 const isPos = (p) => isObj(p) && isInt(p.x) && isInt(p.y) && Math.abs(p.x) <= LIMITS.coord && Math.abs(p.y) <= LIMITS.coord;
+const COVER_KINDS = new Set(["half", "three_quarters"]);
+
+/**
+ * Validate optional battlefield bounds `{min_x, min_y, max_x, max_y}`.
+ * @param {unknown} raw
+ * @returns {string[]}
+ */
+export function validateBounds(raw) {
+  if (raw == null) return [];
+  if (!isObj(raw)) return ["bounds must be an object."];
+  for (const k of ["min_x", "min_y", "max_x", "max_y"]) {
+    if (!isInt(raw[k]) || Math.abs(raw[k]) > LIMITS.coord || raw[k] % 5 !== 0) {
+      return [`bounds.${k} must be a 5-ft aligned integer.`];
+    }
+  }
+  if (raw.min_x > raw.max_x || raw.min_y > raw.max_y) return ["bounds min must not exceed max."];
+  return [];
+}
+
+/**
+ * Validate optional battlefield terrain `{walls, difficult_terrain, cover}`.
+ * @param {unknown} raw
+ * @returns {string[]}
+ */
+export function validateTerrain(raw) {
+  if (raw == null) return [];
+  if (!isObj(raw)) return ["terrain must be an object."];
+  for (const key of ["walls", "difficult_terrain"]) {
+    if (raw[key] == null) continue;
+    if (!Array.isArray(raw[key])) return [`terrain.${key} must be a list.`];
+    for (const pair of raw[key]) {
+      if (!Array.isArray(pair) || pair.length !== 2 || !isInt(pair[0]) || !isInt(pair[1]) ||
+        Math.abs(pair[0]) > LIMITS.coord || Math.abs(pair[1]) > LIMITS.coord || pair[0] % 5 !== 0 || pair[1] % 5 !== 0) {
+        return [`terrain.${key} entries must be 5-ft aligned [x, y] pairs.`];
+      }
+    }
+  }
+  if (raw.cover != null) {
+    if (!Array.isArray(raw.cover)) return ["terrain.cover must be a list."];
+    for (const c of raw.cover) {
+      if (!isObj(c) || !isPos(c) || c.x % 5 !== 0 || c.y % 5 !== 0 || !COVER_KINDS.has(c.kind)) {
+        return ["terrain.cover entries must be {x, y, kind} with kind 'half' or 'three_quarters'."];
+      }
+    }
+  }
+  return [];
+}
 
 /**
  * Snapshot of one combatant at a step. Arrays are sorted copies.
@@ -282,6 +331,14 @@ export function buildReplay(trace) {
   if (problems.length) return { ok: false, errors: problems.slice(0, LIMITS.errors), replay: null };
   const replay = {
     meta: metaOf(trace),
+    bounds: init.bounds ? { min_x: init.bounds.min_x, min_y: init.bounds.min_y, max_x: init.bounds.max_x, max_y: init.bounds.max_y } : null,
+    terrain: init.terrain
+      ? {
+          walls: (init.terrain.walls || []).map(([x, y]) => [x, y]),
+          difficult_terrain: (init.terrain.difficult_terrain || []).map(([x, y]) => [x, y]),
+          cover: (init.terrain.cover || []).map((c) => ({ x: c.x, y: c.y, kind: c.kind })),
+        }
+      : null,
     roster,
     frames,
     steps: trace.actions.map((action, i) => stepOf(action, i, roster)),
@@ -430,14 +487,20 @@ export function describeEvent(e, nameOf) {
     const what = isStr(e.weapon) ? e.weapon : isStr(e.spell) ? e.spell : isStr(e.action) ? e.action : "attack";
     const result = e.crit ? "critical hit" : e.hit ? "hit" : "miss";
     const bonus = isNum(e.attack_bonus) ? signed(e.attack_bonus) : "";
-    return { kind: "dice", text: `${nameOf(e.actor_id)} → ${nameOf(e.target_id)}, ${what}: d20 [${rolls(e.rolls)}]${mode}${bonus} = ${e.total} vs AC ${show(e.target_ac)} · ${result}` };
+    const cov = isStr(e.cover) && isNum(e.cover_ac_bonus) && e.cover_ac_bonus > 0
+      ? ` [${e.cover.replace("_", "-")} cover +${e.cover_ac_bonus} AC]`
+      : "";
+    return { kind: "dice", text: `${nameOf(e.actor_id)} → ${nameOf(e.target_id)}, ${what}: d20 [${rolls(e.rolls)}]${mode}${bonus} = ${e.total} vs AC ${show(e.target_ac)}${cov} · ${result}` };
   }
   if (e.type === "saving_throw" && isNum(e.total)) {
     const ability = isStr(e.ability) ? e.ability.toUpperCase() : "";
     const result = e.success ? "success" : "fail";
     const mod = isNum(e.modifier) ? signed(e.modifier) : "";
     const auto = e.auto_fail ? " (auto-fail)" : "";
-    return { kind: "dice", text: `${nameOf(e.target_id)} ${ability} save: d20 [${rolls(e.rolls)}]${mod} = ${e.total} vs DC ${show(e.dc)} · ${result}${auto}` };
+    const cov = isStr(e.cover) && isNum(e.cover_save_bonus) && e.cover_save_bonus > 0
+      ? ` [${e.cover.replace("_", "-")} cover +${e.cover_save_bonus}]`
+      : "";
+    return { kind: "dice", text: `${nameOf(e.target_id)} ${ability} save: d20 [${rolls(e.rolls)}]${mod}${cov} = ${e.total} vs DC ${show(e.dc)} · ${result}${auto}` };
   }
   if (e.type === "death_save" && isNum(e.roll)) {
     return { kind: "dice", text: `${nameOf(e.actor_id)} death save: d20 [${e.roll}] · ${isStr(e.outcome) ? e.outcome : "?"} (${show(e.successes)} successes, ${show(e.failures)} failures)` };
@@ -511,11 +574,13 @@ export function validateReplayIndex(raw) {
 }
 
 /**
- * Board extent in feet over every frame, padded by one 5-ft square.
+ * Board extent in feet over every frame (and optional battlefield bounds & terrain), padded by one 5-ft square.
  * @param {Array<{ units: Unit[] }>} frames
+ * @param {{ min_x: number, min_y: number, max_x: number, max_y: number } | null} [battlefieldBounds]
+ * @param {{ walls?: number[][], difficult_terrain?: number[][], cover?: Array<{ x: number, y: number }> } | null} [terrain]
  * @returns {{ x: number, y: number, w: number, h: number }}
  */
-export function boardBounds(frames) {
+export function boardBounds(frames, battlefieldBounds = null, terrain = null) {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -526,6 +591,26 @@ export function boardBounds(frames) {
       minY = Math.min(minY, u.y);
       maxX = Math.max(maxX, u.x);
       maxY = Math.max(maxY, u.y);
+    }
+  }
+  if (battlefieldBounds) {
+    minX = Math.min(minX, battlefieldBounds.min_x);
+    minY = Math.min(minY, battlefieldBounds.min_y);
+    maxX = Math.max(maxX, battlefieldBounds.max_x);
+    maxY = Math.max(maxY, battlefieldBounds.max_y);
+  }
+  if (terrain) {
+    for (const pair of [...(terrain.walls || []), ...(terrain.difficult_terrain || [])]) {
+      minX = Math.min(minX, pair[0]);
+      minY = Math.min(minY, pair[1]);
+      maxX = Math.max(maxX, pair[0]);
+      maxY = Math.max(maxY, pair[1]);
+    }
+    for (const c of terrain.cover || []) {
+      minX = Math.min(minX, c.x);
+      minY = Math.min(minY, c.y);
+      maxX = Math.max(maxX, c.x);
+      maxY = Math.max(maxY, c.y);
     }
   }
   if (!Number.isFinite(minX)) return { x: -5, y: -5, w: 15, h: 15 };

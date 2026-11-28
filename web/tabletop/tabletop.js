@@ -8,7 +8,7 @@
  */
 
 import { attributionPieces } from "../lib/attribution.js";
-import { badge, createBoard, el, notice, paintBoard, paintRoster, svgEl } from "../lib/board-view.js";
+import { badge, createBoard, el, notice, paintBoard, paintRoster, svgEl, terrainLegendItems } from "../lib/board-view.js";
 import {
   boardModel,
   clickAction,
@@ -269,7 +269,7 @@ function buildShell() {
     send("/api/nl", { text, decision: state && state.decision });
   }
 
-  return { title, pills, saveBtn, quitBtn, resumeBtn, exportBtn, status, stage, boardBox, clickNote, targets, reroll, menuBox, moveRow, moveBtn, moveX, moveY, sayRow, sayBtn, sayInput, nlRow, nlBtn, nlInput, me, roster, talk, log };
+  return { title, pills, saveBtn, quitBtn, resumeBtn, exportBtn, status, stage, boardBox, legend, clickNote, targets, reroll, menuBox, moveRow, moveBtn, moveX, moveY, sayRow, sayBtn, sayInput, nlRow, nlBtn, nlInput, me, roster, talk, log };
 }
 
 // ---- painting ----------------------------------------------------------------
@@ -310,13 +310,20 @@ function paintBoardAndStatus() {
   const model = boardModel(view);
   const live = state.status === "awaiting_input";
   const reach = live ? reachableSquares(view, model.bounds) : [];
-  const { svg, layer } = createBoard(model.bounds);
+  const { svg, layer } = createBoard(model.bounds, { bounds: model.battlefieldBounds, terrain: model.terrain });
   svg.setAttribute("class", "rp-board tt-svg");
   svg.setAttribute("aria-label", `Tactical grid around ${view.self.name}. Use the action list or the Move form below to act with the keyboard.`);
   const reachLayer = svgEl("g", { class: "tt-reach" });
   for (const sq of reach) reachLayer.append(svgEl("rect", { x: sq.x + 0.2, y: sq.y + 0.2, width: 4.6, height: 4.6, rx: 0.4 }));
   svg.insertBefore(reachLayer, layer);
   paintBoard(layer, model.frame, null, model.roster);
+  ui.legend.replaceChildren(
+    el("span", {}, [el("i", { class: "rp-sw-party" }), " Party"]),
+    el("span", {}, [el("i", { class: "rp-sw-enemy" }), " Enemies"]),
+    el("span", {}, [el("i", { class: "tt-sw-reach" }), " Reachable this turn"]),
+    ...terrainLegendItems(model.battlefieldBounds, model.terrain),
+    el("span", { text: "Click a square to move, or a combatant to target it." }),
+  );
   if (picked) {
     const u = model.frame.units.find((x) => x.id === picked);
     if (u) layer.append(svgEl("rect", { class: "tt-pick", x: Math.floor(u.x / 5) * 5 + 0.1, y: Math.floor(u.y / 5) * 5 + 0.1, width: 4.8, height: 4.8, rx: 0.6 }));

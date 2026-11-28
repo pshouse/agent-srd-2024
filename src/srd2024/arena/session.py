@@ -364,16 +364,17 @@ def run_interactive_session(
         eff_party_agent = party_agent
         eff_enemy_agent = enemy_agent
 
-        start_res = step(
-            None,
-            {
-                "type": "start_encounter",
-                "encounter_id": compiled["id"],
-                "seed": eff_seed,
-                "combatants": copy.deepcopy(compiled["combatants"]),
-            },
-            rules,
-        )
+        start_payload: dict[str, Any] = {
+            "type": "start_encounter",
+            "encounter_id": compiled["id"],
+            "seed": eff_seed,
+            "combatants": copy.deepcopy(compiled["combatants"]),
+        }
+        if compiled.get("bounds") is not None:
+            start_payload["bounds"] = copy.deepcopy(compiled["bounds"])
+        if compiled.get("terrain") is not None:
+            start_payload["terrain"] = copy.deepcopy(compiled["terrain"])
+        start_res = step(None, start_payload, rules)
         if start_res.get("status") != "ok":
             raise ValueError(f"Failed to start encounter '{compiled['id']}': {start_res.get('error')}")
 

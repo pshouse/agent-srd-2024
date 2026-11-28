@@ -23,10 +23,10 @@ from srd2024.arena import (
 from srd2024.engine.combat import step
 from srd2024.engine.store import RulesStore
 
-# Snapshots for STATE_SHAPE_VERSION == 1.
+# Snapshots for STATE_SHAPE_VERSION == 2 (adds optional top-level `bounds` and `terrain` on EncounterState).
 # If EncounterState or combatant serialization fields change, bump STATE_SHAPE_VERSION
 # in src/srd2024/arena/runner.py and update these snapshots deliberately.
-EXPECTED_STATE_SHAPE_VERSION = 1
+EXPECTED_STATE_SHAPE_VERSION = 2
 
 EXPECTED_ENCOUNTER_STATE_KEYS = [
     "active_index",
@@ -39,6 +39,8 @@ EXPECTED_ENCOUNTER_STATE_KEYS = [
     "status",
     "turn_order",
 ]
+
+EXPECTED_BOUNDED_ENCOUNTER_STATE_KEYS = sorted(EXPECTED_ENCOUNTER_STATE_KEYS + ["bounds", "terrain"])
 
 EXPECTED_BASE_COMBATANT_KEYS = [
     "abilities",
@@ -241,26 +243,33 @@ class TestReplayProvenanceAndDrift(unittest.TestCase):
             EXPECTED_STATE_SHAPE_VERSION,
             "STATE_SHAPE_VERSION changed; update EXPECTED_STATE_SHAPE_VERSION and key-set snapshots in this test.",
         )
-        for sid in ("goblin-ambush", "crypt-of-ghouls", "wyrmling-lair"):
+        for sid in ("goblin-ambush", "crypt-of-ghouls", "wyrmling-lair", "ruined-keep"):
             with self.subTest(scenario=sid):
                 sc = load_scenario(sid, self.rules)
-                res = step(
-                    None,
-                    {
-                        "type": "start_encounter",
-                        "encounter_id": sc["id"],
-                        "seed": 1,
-                        "combatants": sc["combatants"],
-                    },
-                    self.rules,
-                )
+                start_payload: dict[str, object] = {
+                    "type": "start_encounter",
+                    "encounter_id": sc["id"],
+                    "seed": 1,
+                    "combatants": sc["combatants"],
+                }
+                if sc.get("bounds") is not None:
+                    start_payload["bounds"] = sc["bounds"]
+                if sc.get("terrain") is not None:
+                    start_payload["terrain"] = sc["terrain"]
+                res = step(None, start_payload, self.rules)
                 self.assertEqual(res["status"], "ok")
                 st = res["state"]
+                expected_keys = (
+                    EXPECTED_BOUNDED_ENCOUNTER_STATE_KEYS
+                    if sid == "ruined-keep"
+                    else EXPECTED_ENCOUNTER_STATE_KEYS
+                )
                 self.assertEqual(
                     sorted(st.keys()),
-                    EXPECTED_ENCOUNTER_STATE_KEYS,
+                    expected_keys,
                     "EncounterState top-level keys changed! Bump STATE_SHAPE_VERSION in "
-                    "src/srd2024/arena/runner.py and update EXPECTED_ENCOUNTER_STATE_KEYS.",
+                    "src/srd2024/arena/runner.py and update EXPECTED_ENCOUNTER_STATE_KEYS / "
+                    "EXPECTED_BOUNDED_ENCOUNTER_STATE_KEYS.",
                 )
                 for cid, comb in st["combatants"].items():
                     actual = set(comb.keys())
